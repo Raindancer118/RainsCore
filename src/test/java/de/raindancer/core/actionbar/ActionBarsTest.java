@@ -277,6 +277,124 @@ class ActionBarsTest {
         }
     }
 
+    // ------------------------------------------------------------------ countdowns
+
+    /**
+     * The thing the action bar is actually for: something that matters only for the second it is on
+     * screen, and that redraws itself while it does.
+     */
+    @Nested
+    @DisplayName("a countdown")
+    class Countdowns {
+
+        private void teleportIn(Duration total) {
+            bars.countdown(ALICE, "tpa", total, ActionBarPriority.NORMAL,
+                    remaining -> Component.text("Teleporting in " + Math.ceilDiv(remaining, 1000)));
+        }
+
+        @Test
+        @DisplayName("shows its first frame at once")
+        void startsImmediately() {
+            teleportIn(Duration.ofSeconds(5));
+            assertThat(shown(ALICE)).isEqualTo("Teleporting in 5");
+        }
+
+        @Test
+        @DisplayName("counts down as the ticks go by, without the caller re-sending it")
+        void countsDown() {
+            teleportIn(Duration.ofSeconds(5));
+
+            advance(Duration.ofSeconds(2));
+            bars.tick();
+            assertThat(shown(ALICE)).isEqualTo("Teleporting in 3");
+
+            advance(Duration.ofSeconds(2));
+            bars.tick();
+            assertThat(shown(ALICE)).isEqualTo("Teleporting in 1");
+        }
+
+        @Test
+        @DisplayName("clears itself when it reaches zero")
+        void endsOnItsOwn() {
+            teleportIn(Duration.ofSeconds(5));
+            advance(Duration.ofSeconds(5));
+            bars.tick();
+
+            assertThat(shown(ALICE)).isEmpty();
+            assertThat(bars.isShowingAnything(ALICE)).isFalse();
+        }
+
+        @Test
+        @DisplayName("can be called off early, which is what /tpcancel needs")
+        void canBeCancelled() {
+            teleportIn(Duration.ofSeconds(5));
+            bars.clear(ALICE, "tpa");
+            assertThat(bars.isShowingAnything(ALICE)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a redraw that has not changed the text is not sent again")
+        void doesNotFlickerBetweenSeconds() {
+            teleportIn(Duration.ofSeconds(5));
+            sink.reset();
+
+            // Two ticks inside the same second: the text is identical both times.
+            advance(Duration.ofMillis(100));
+            bars.tick();
+            advance(Duration.ofMillis(100));
+            bars.tick();
+
+            assertThat(sink.sends)
+                    .as("a countdown redrawn twice in one second must not send twice")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("it loses to a refusal, and comes back when the refusal has gone")
+        void yieldsToSomethingUrgent() {
+            teleportIn(Duration.ofSeconds(10));
+            bars.show(ALICE, "claims", Component.text("You may not build here"),
+                    Duration.ofSeconds(2), ActionBarPriority.HIGH);
+            assertThat(shown(ALICE)).isEqualTo("You may not build here");
+
+            advance(Duration.ofSeconds(3));
+            bars.tick();
+            assertThat(shown(ALICE)).isEqualTo("Teleporting in 7");
+        }
+
+        @Test
+        @DisplayName("a frame that throws costs that frame, not the tick")
+        void survivesABrokenFrame() {
+            bars.countdown(ALICE, "tpa", Duration.ofSeconds(5), ActionBarPriority.NORMAL,
+                    remaining -> {
+                        throw new IllegalStateException("bad template");
+                    });
+            bars.show(BOB, "claims", Component.text("fine"), Duration.ofSeconds(5),
+                    ActionBarPriority.NORMAL);
+
+            bars.tick();
+
+            assertThat(shown(BOB)).isEqualTo("fine");
+            assertThat(bars.isShowingAnything(ALICE))
+                    .as("a countdown that cannot draw itself is dropped rather than left broken")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("no frame builder, no countdown")
+        void refusesANullFrame() {
+            bars.countdown(ALICE, "tpa", Duration.ofSeconds(5), ActionBarPriority.NORMAL, null);
+            assertThat(bars.isShowingAnything(ALICE)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a countdown of no length is over before it starts")
+        void refusesAZeroLength() {
+            teleportIn(Duration.ZERO);
+            assertThat(bars.isShowingAnything(ALICE)).isFalse();
+        }
+    }
+
     // ------------------------------------------------------------------ concurrency
 
     @Test
@@ -311,6 +429,61 @@ class ActionBarsTest {
         }
         assertThat(sink.failures).isEmpty();
         assertThat(bars.isShowingAnything(ALICE)).isTrue();
+    }
+
+    /**
+     * The orphaned-slot race.
+     *
+     * <p>{@code show} takes a {@code Slot} out of the map with {@code computeIfAbsent} and only then
+     * takes its lock. Between those two steps another thread can clear the last message, find the
+     * slot idle and drop it from the map. The first thread then writes into a slot nothing points at
+     * any more: the player is sent the message, so they see it — but {@code tick()} never visits
+     * that slot again, so it is never refreshed and never expires. The message fades after about
+     * three seconds and never comes back, and the manager believes nothing is being shown.
+     *
+     * <p>The invariant that catches it without needing the interleaving to be forced: if the player
+     * has been sent something other than an empty line, the manager must agree that something is
+     * being shown.
+     */
+    @Test
+    @DisplayName("a clear racing a show never leaves a message nothing owns")
+    void neverOrphansASlot() throws Exception {
+        for (int round = 0; round < 2_000; round++) {
+            setUp();
+            bars.show(ALICE, "seed", Component.text("seed"), ActionBars.UNTIL_CLEARED,
+                    ActionBarPriority.LOW);
+
+            CountDownLatch go = new CountDownLatch(1);
+            Thread clearer = new Thread(() -> {
+                awaitQuietly(go);
+                bars.clear(ALICE, "seed");
+            });
+            Thread shower = new Thread(() -> {
+                awaitQuietly(go);
+                bars.show(ALICE, "tpa", Component.text("Teleporting in 3"),
+                        Duration.ofSeconds(5), ActionBarPriority.NORMAL);
+            });
+            clearer.start();
+            shower.start();
+            go.countDown();
+            clearer.join();
+            shower.join();
+
+            String last = shown(ALICE);
+            boolean somethingIsOnScreen = last != null && !last.isEmpty();
+            assertThat(bars.isShowingAnything(ALICE))
+                    .as("round %d: the player was last sent '%s', so the manager has to know about "
+                            + "it — otherwise nothing will ever refresh or expire it", round, last)
+                    .isEqualTo(somethingIsOnScreen);
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // ------------------------------------------------------------------ misuse

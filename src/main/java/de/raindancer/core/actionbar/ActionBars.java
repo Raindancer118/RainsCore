@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongFunction;
 import java.util.function.LongSupplier;
 
 /**
@@ -49,11 +50,37 @@ public final class ActionBars {
 
     private static final LogChannel log = Log.of("actionbar");
 
-    /** One plugin's claim on one player's action bar. */
-    private record Entry(Component text, ActionBarPriority priority, long expiresAt, long shownAt) {
+    /**
+     * How often unchanged text is sent again.
+     *
+     * <p>The client fades an action bar after about three seconds whatever the server intended, so
+     * something meant to stay has to be repeated — but repeating it on every tick is twenty packets
+     * a second per player to say nothing new. Once a second is comfortably inside the fade and costs
+     * a twentieth of that. A change is always sent at once and does not wait for this.
+     */
+    private static final long REFRESH_MILLIS = 1_000L;
+
+    /**
+     * One plugin's claim on one player's action bar.
+     *
+     * <p>The text is a function of how long is left rather than a fixed component, which is what
+     * lets a countdown redraw itself without the caller sending a new message every tick. A fixed
+     * message is the degenerate case: a function that ignores its argument.
+     */
+    private record Entry(LongFunction<Component> frame, ActionBarPriority priority, long expiresAt,
+                         long shownAt) {
+
+        static Entry fixed(Component text, ActionBarPriority priority, long expiresAt, long shownAt) {
+            return new Entry(remaining -> text, priority, expiresAt, shownAt);
+        }
 
         boolean isLiveAt(long now) {
             return expiresAt == 0L || now < expiresAt;
+        }
+
+        /** How long this has left, in milliseconds; {@link Long#MAX_VALUE} when it never expires. */
+        long remainingAt(long now) {
+            return expiresAt == 0L ? Long.MAX_VALUE : Math.max(0L, expiresAt - now);
         }
 
         /** Higher priority first; on a tie the more recent, so an answer replaces an answer. */
@@ -74,8 +101,10 @@ public final class ActionBars {
      */
     private static final class Slot {
         private final Map<String, Entry> byOwner = new LinkedHashMap<>();
-        /** What was last handed to the sink, so an unchanged bar is not sent again. */
+        /** What was last handed to the sink, so an unchanged bar is not sent again at once. */
         private Component onScreen;
+        /** When that happened, so unchanged text is still refreshed before the client fades it. */
+        private long sentAt;
     }
 
     private final ActionBarSink sink;
@@ -127,11 +156,70 @@ public final class ActionBars {
             return;
         }
 
-        Slot slot = slots.computeIfAbsent(player, key -> new Slot());
-        synchronized (slot) {
-            slot.byOwner.put(who, new Entry(message, priority == null
-                    ? ActionBarPriority.NORMAL : priority, expiresAt, now));
-            repaint(player, slot, now);
+        Entry entry = Entry.fixed(message, priority == null
+                ? ActionBarPriority.NORMAL : priority, expiresAt, now);
+        write(player, who, entry, now);
+    }
+
+    /**
+     * Shows something that redraws itself as it runs out: a teleport countdown, a cast bar, the
+     * seconds left before a ghast departs.
+     *
+     * <p>This is what the action bar is for — something that matters only for the second it is on
+     * screen. The caller hands over a way to draw one frame and then forgets about it; there is no
+     * repeating task to cancel and nothing to clean up if the player logs out halfway through.
+     * {@link #clear} calls it off early, which is what {@code /tpcancel} needs.
+     *
+     * @param total how long it runs for; a countdown of no length is over before it starts
+     * @param frame draws one frame, given the milliseconds remaining. Called on every tick, so it
+     *              should be cheap and must not touch the world
+     */
+    public void countdown(UUID player, String owner, Duration total, ActionBarPriority priority,
+                          LongFunction<Component> frame) {
+        if (player == null || frame == null) {
+            return;
+        }
+        String who = owner == null ? "" : owner.trim();
+        if (who.isEmpty()) {
+            log.warn("A countdown for {} was refused: it named no owner.", player);
+            return;
+        }
+        if (total == null || total.isZero() || total.isNegative()) {
+            clear(player, who);
+            return;
+        }
+        long now = clock.getAsLong();
+        write(player, who, new Entry(frame, priority == null
+                ? ActionBarPriority.NORMAL : priority, now + total.toMillis(), now), now);
+    }
+
+    /**
+     * Files one entry against a player, and repaints.
+     *
+     * <h2>Why this retries</h2>
+     * The slot has to come out of the map before its lock can be taken, and in that window another
+     * thread can clear the player's last message, find the slot idle and drop it from the map. A
+     * write into that slot would reach the player — they would see the message — but nothing would
+     * point at the slot any more, so {@link #tick()} would never refresh it and never expire it. The
+     * line would fade after about three seconds and never come back, and this class would believe
+     * nothing was being shown.
+     *
+     * <p>Every removal holds the slot's own lock, so a writer that has the lock and still finds its
+     * slot in the map knows it cannot be removed until the lock is released. Finding a different
+     * slot means it was removed; the loop takes the new one and tries again. A test reproduces the
+     * unguarded version within a handful of rounds.
+     */
+    private void write(UUID player, String owner, Entry entry, long now) {
+        while (true) {
+            Slot slot = slots.computeIfAbsent(player, key -> new Slot());
+            synchronized (slot) {
+                if (slots.get(player) != slot) {
+                    continue;
+                }
+                slot.byOwner.put(owner, entry);
+                repaint(player, slot, now);
+                return;
+            }
         }
     }
 
@@ -140,16 +228,23 @@ public final class ActionBars {
         if (player == null || owner == null) {
             return;
         }
-        Slot slot = slots.get(player);
-        if (slot == null) {
-            return;
-        }
-        synchronized (slot) {
-            if (slot.byOwner.remove(owner.trim()) == null) {
+        while (true) {
+            Slot slot = slots.get(player);
+            if (slot == null) {
                 return;
             }
-            repaint(player, slot, clock.getAsLong());
-            forgetIfIdle(player, slot);
+            synchronized (slot) {
+                if (slots.get(player) != slot) {
+                    // Removed under us; whatever is there now is somebody else's, so look again.
+                    continue;
+                }
+                if (slot.byOwner.remove(owner.trim()) == null) {
+                    return;
+                }
+                repaint(player, slot, clock.getAsLong());
+                forgetIfIdle(player, slot);
+                return;
+            }
         }
     }
 
@@ -177,18 +272,24 @@ public final class ActionBars {
             Slot slot = each.getValue();
             synchronized (slot) {
                 dropExpired(slot, now);
-                Entry winner = winnerOf(slot, now);
-                if (winner == null) {
+                Component wanted = renderWinner(each.getKey(), slot, now);
+                if (wanted == null) {
                     // Cleared once, when the last message went; not on every tick afterwards.
                     if (slot.onScreen != null) {
                         send(each.getKey(), Component.empty());
                         slot.onScreen = null;
+                        slot.sentAt = now;
                     }
                     players.remove();
                     continue;
                 }
-                slot.onScreen = winner.text();
-                send(each.getKey(), winner.text());
+                boolean changed = !wanted.equals(slot.onScreen);
+                boolean stale = now - slot.sentAt >= REFRESH_MILLIS;
+                slot.onScreen = wanted;
+                if (changed || stale) {
+                    slot.sentAt = now;
+                    send(each.getKey(), wanted);
+                }
             }
         }
     }
@@ -215,14 +316,42 @@ public final class ActionBars {
 
     /** Sends the current winner, but only when it differs from what is already on screen. */
     private void repaint(UUID player, Slot slot, long now) {
-        dropExpired(slot, now);
-        Entry winner = winnerOf(slot, now);
-        Component wanted = winner == null ? Component.empty() : winner.text();
+        Component rendered = renderWinner(player, slot, now);
+        Component wanted = rendered == null ? Component.empty() : rendered;
         if (wanted.equals(slot.onScreen)) {
+            // Already on screen. The tick refreshes it before the client fades it; a caller that
+            // repeats itself does not need to send anything.
             return;
         }
-        slot.onScreen = winner == null ? null : wanted;
+        slot.onScreen = rendered;
+        slot.sentAt = now;
         send(player, wanted);
+    }
+
+    /**
+     * Drops what has expired, then draws whatever wins — or null when nothing does.
+     *
+     * <p>A frame that throws costs its own entry and nothing else. A countdown whose template is
+     * broken is dropped rather than left on screen: it cannot draw itself, so it has nothing to
+     * show, and letting it keep winning would block everything beneath it for ever.
+     */
+    private Component renderWinner(UUID player, Slot slot, long now) {
+        dropExpired(slot, now);
+        while (true) {
+            Entry winner = winnerOf(slot, now);
+            if (winner == null) {
+                return null;
+            }
+            try {
+                Component drawn = winner.frame().apply(winner.remainingAt(now));
+                if (drawn != null) {
+                    return drawn;
+                }
+            } catch (RuntimeException broken) {
+                log.warn(broken, "An action bar frame for {} threw and was dropped.", player);
+            }
+            slot.byOwner.values().remove(winner);
+        }
     }
 
     private static void dropExpired(Slot slot, long now) {
