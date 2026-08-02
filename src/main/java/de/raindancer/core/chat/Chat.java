@@ -5,62 +5,64 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
 
 import java.util.Collection;
 
 /**
- * Everything a plugin here says to a player, and the only way it says it.
+ * Everything a plugin here says in chat, and the only way it says it.
  *
  * <h2>Why this exists</h2>
  * There were five of these: {@code Notifier}, claims' {@code Messages}, RRP's {@code Msg}, and a
  * {@code Chrome} class copied three times between homes, TPA and the ghast lines. Each had its own
- * idea of what a prefix was, whether a message went to chat or above the hotbar, and which of them
- * escaped player-supplied text before pasting it into MiniMessage — the last one being a formatting
- * injection waiting to happen, since a home called {@code <red>} was being parsed as markup by two
- * of the five. One implementation, and the plugins go back to deciding *what* to say.
+ * idea of what a prefix was and which of them escaped player-supplied text before pasting it into
+ * MiniMessage — the last being a formatting injection waiting to happen, since a home called
+ * {@code <red>} was being parsed as markup by two of the five.
  *
- * <h2>tell versus say</h2>
- * The distinction is the whole reason this is not one method:
- * <ul>
- *   <li>{@link #tell} is an <em>answer</em> — "You may not build here", "Home set". It concerns
- *       nobody but the player who caused it, it is read once, and it goes above the hotbar when the
- *       server has asked for that, where it appears where the player is already looking and then
- *       leaves on its own.</li>
- *   <li>{@link #say} is something meant to be <em>read</em> — a list, a heading, a page of a manual.
- *       It always goes to chat, because the action bar shows one line for a few seconds and a list
- *       shown that way is a list nobody read.</li>
- * </ul>
- * Getting this wrong is not cosmetic. A list routed through {@code tell} loses every line but the
- * last; an answer routed through {@code say} pushes the conversation off the screen ten times a
- * minute.
+ * <h2>This is chat. The action bar is somewhere else.</h2>
+ * An earlier version of this class routed "personal" messages to the action bar behind a single
+ * server-wide setting, inherited from {@code smpcore.util.Feedback}. That was wrong twice over: one
+ * boolean cannot decide for every message a plugin sends, and most messages do not belong above the
+ * hotbar at all. The rule now is a question the caller answers at the call site — <b>does this still
+ * matter a second later?</b>
+ *
+ * <table border="1">
+ *   <caption>Where a message goes</caption>
+ *   <tr><th>{@link de.raindancer.core.actionbar.ActionBars}</th><th>Here</th></tr>
+ *   <tr><td>A teleport countdown, a cast bar, progress</td>
+ *       <td>"Home set", "Request sent to Bentex_OG"</td></tr>
+ *   <tr><td>Flight commentary while a ghast is in the air</td>
+ *       <td>A refusal the player may want to read twice</td></tr>
+ *   <tr><td>"You have entered Raindancer118's claim"</td>
+ *       <td>Lists, headings, manuals — anything with rows</td></tr>
+ *   <tr><td>A warning about where the player is standing now</td>
+ *       <td>Anything naming another player who might reply</td></tr>
+ * </table>
  *
  * <h2>Untrusted text</h2>
- * Anything a player typed — a home name, a claim name, a pack's title, another plugin's error
- * message — goes in through {@link #arg}, never concatenated into the template. {@link #arg} uses
+ * Anything a player typed — a home name, a claim name, a pack's title, another plugin's error —
+ * goes in through {@link #arg}, never concatenated into the template. {@link #arg} uses
  * {@link Placeholder#unparsed}, so a claim called {@code <rainbow>} shows up as those nine
  * characters instead of recolouring the rest of the line, and an unclosed tag cannot swallow the
  * message it was pasted into.
  *
  * <h2>Thread safety</h2>
- * Building a component is safe from any thread. Sending is Adventure's business and is safe too.
- * Nothing here touches the world, so none of it needs a region thread.
+ * Building a component is safe from any thread, and so is sending: nothing here touches the world,
+ * so none of it needs a region thread.
  */
 public final class Chat {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
     private final Brand brand;
+    private final Audiences audiences;
 
-    /** @param brand this plugin's name, as a player sees it */
-    public Chat(Brand brand) {
+    /**
+     * @param brand     this plugin's name, as a player sees it
+     * @param audiences where "everybody" and "the console" come from
+     */
+    public Chat(Brand brand, Audiences audiences) {
         this.brand = brand == null ? new Brand("Rain") : brand;
-    }
-
-    /** Shorthand for a plugin that only wants a tag. */
-    public static Chat of(String tag) {
-        return new Chat(new Brand(tag));
+        this.audiences = audiences;
     }
 
     public Brand brand() {
@@ -75,11 +77,6 @@ public final class Chat {
      * <p>Use it for everything a player or a remote server produced. The value is inserted as text,
      * never as markup.
      */
-    public static TagResolver arg(String name, String value) {
-        return Placeholder.unparsed(name, value == null ? "" : value);
-    }
-
-    /** A number, a count, a duration — anything whose {@code toString} is the text you want. */
     public static TagResolver arg(String name, Object value) {
         return Placeholder.unparsed(name, value == null ? "" : String.valueOf(value));
     }
@@ -108,16 +105,18 @@ public final class Chat {
                 arguments);
     }
 
-    // ----------------------------------------------------------------------- answers
+    // ----------------------------------------------------------------------- to one person
 
     /**
-     * An answer to something this recipient just did. May go above the hotbar.
+     * Something this recipient should read: an answer, a confirmation, a refusal.
      *
-     * <p>Plain — no colour of its own. For the three that mean something, use {@link #ok},
+     * <p>Plain — no colour of its own. For the three that mean something use {@link #ok},
      * {@link #warn} or {@link #no}.
      */
     public void tell(Audience recipient, String miniMessage, TagResolver... arguments) {
-        Feedback.personal(recipient, prefixed(miniMessage, arguments));
+        if (recipient != null) {
+            recipient.sendMessage(prefixed(miniMessage, arguments));
+        }
     }
 
     /** It worked. */
@@ -134,21 +133,11 @@ public final class Chat {
      * No.
      *
      * <p>Named {@code no} rather than {@code error} because that is what it is used for nine times
-     * out of ten — a refusal the player caused, not a fault. A fault the player should know about is
-     * still this, and a fault they should not is {@link de.raindancer.core.log.Log}'s business.
+     * out of ten — a refusal the player caused, not a fault. A fault they should know about is still
+     * this; a fault they should not is {@link de.raindancer.core.log.Log}'s business.
      */
     public void no(Audience recipient, String miniMessage, TagResolver... arguments) {
         tell(recipient, colour(Style.bad(), miniMessage), arguments);
-    }
-
-    // -------------------------------------------------------------------- things to read
-
-    /** Something meant to be read at leisure: a heading, a row of a list, a page. Always chat. */
-    public void say(Audience recipient, String miniMessage, TagResolver... arguments) {
-        if (recipient == null) {
-            return;
-        }
-        recipient.sendMessage(prefixed(miniMessage, arguments));
     }
 
     /**
@@ -158,10 +147,9 @@ public final class Chat {
      * heading carries the tag; the rows are indented under it.
      */
     public void row(Audience recipient, String miniMessage, TagResolver... arguments) {
-        if (recipient == null) {
-            return;
+        if (recipient != null) {
+            recipient.sendMessage(mm(miniMessage, arguments));
         }
-        recipient.sendMessage(mm(miniMessage, arguments));
     }
 
     /** A finished component, unchanged and unprefixed — for a caller that built its own. */
@@ -171,35 +159,24 @@ public final class Chat {
         }
     }
 
-    /** An empty line, for separating paragraphs in chat. Never the action bar. */
+    /** An empty line, for separating paragraphs. */
     public void blank(Audience recipient) {
         if (recipient != null) {
             recipient.sendMessage(Component.empty());
         }
     }
 
-    // ------------------------------------------------------------------------ everybody
+    // ------------------------------------------------------------------------ to everybody
 
-    /** Every player on the server. Always chat: a broadcast nobody can scroll back to is noise. */
+    /** Everyone who can be spoken to. */
     public void broadcast(String miniMessage, TagResolver... arguments) {
-        Component message = prefixed(miniMessage, arguments);
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendMessage(message);
-        }
+        send(audiences == null ? null : audiences.everyone(), prefixed(miniMessage, arguments));
     }
 
     /** A chosen few — a town's council, the online moderators. */
     public void broadcast(Collection<? extends Audience> recipients, String miniMessage,
                           TagResolver... arguments) {
-        if (recipients == null) {
-            return;
-        }
-        Component message = prefixed(miniMessage, arguments);
-        for (Audience recipient : recipients) {
-            if (recipient != null) {
-                recipient.sendMessage(message);
-            }
-        }
+        send(recipients, prefixed(miniMessage, arguments));
     }
 
     /**
@@ -210,10 +187,21 @@ public final class Chat {
      * Anything worth keeping goes through the logger instead, and lands in a file.
      */
     public void console(String miniMessage, TagResolver... arguments) {
-        Bukkit.getConsoleSender().sendMessage(prefixed(miniMessage, arguments));
+        if (audiences != null) {
+            raw(audiences.console(), prefixed(miniMessage, arguments));
+        }
     }
 
-    // ------------------------------------------------------------------------ internals
+    private static void send(Collection<? extends Audience> recipients, Component message) {
+        if (recipients == null) {
+            return;
+        }
+        for (Audience recipient : recipients) {
+            if (recipient != null) {
+                recipient.sendMessage(message);
+            }
+        }
+    }
 
     /**
      * Wraps a message in one of the palette's colours.
