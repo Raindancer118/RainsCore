@@ -20,6 +20,7 @@
         -->
         <java.version>25</java.version>
         <paper.api.version>26.2.build.68-beta</paper.api.version>
+        <fastboard.version>2.2.0</fastboard.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -35,6 +36,29 @@
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
             <version>${paper.api.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+          FastBoard: a packet-level scoreboard, MIT, and the only library of its kind that already
+          says 26.2 out loud.
+
+          Compiled against here and fetched at runtime by Paper, through the libraries: block in
+          paper-plugin.yml — not shaded. Two reasons. Paper gives each plugin's declared libraries
+          their own classloader, which solves the collision that shading-with-relocation exists to
+          work around, and solves it better: another plugin shipping a different FastBoard gets its
+          own and neither silently wins. And maven-shade cannot read Java 25 class files at all
+          ("Unsupported class file major version 69"), so the relocation route is not open to us
+          until it can.
+
+          The version is stated twice — here and in paper-plugin.yml — which is exactly the kind of
+          duplication this project keeps removing, so LibraryVersionTest fails the build if the two
+          ever disagree.
+        -->
+        <dependency>
+            <groupId>fr.mrmicky</groupId>
+            <artifactId>fastboard</artifactId>
+            <version>${fastboard.version}</version>
             <scope>provided</scope>
         </dependency>
 

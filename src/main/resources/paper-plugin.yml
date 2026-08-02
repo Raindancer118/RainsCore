@@ -6,6 +6,12 @@ description: The one implementation of everything Rain's plugins do to the game.
 author: Raindancer118
 website: https://github.com/Raindancer118/RainsCore
 
+# Fetched by Paper at startup into a classloader of this plugin's own, so another plugin shipping a
+# different FastBoard gets its own copy rather than silently getting ours. Kept in step with the POM
+# by LibraryVersionTest.
+libraries:
+  - fr.mrmicky:fastboard:2.2.0
+
 # Deliberately no commands: block. The one command this plugin owns is registered through Paper's
 # Brigadier lifecycle in RainsCorePlugin, because a chat button has to point at a command whose
 # namespace is known — /rcore:click — and the plugin.yml form does not give a stable one.
