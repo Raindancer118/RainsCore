@@ -478,6 +478,44 @@ class ActionBarsTest {
         }
     }
 
+    /**
+     * The same race with the ticker as the other thread, rather than a clearing plugin.
+     *
+     * <p>The interleaving is different enough to be worth its own test: {@code computeIfAbsent}
+     * creates a brand-new empty slot, {@code tick()} reaches it before the writer has put anything
+     * in it, finds nothing to show and reaps it — and the writer then populates a slot that has
+     * already been dropped. A countdown started that way renders its first frame, freezes, and fades.
+     */
+    @Test
+    @DisplayName("a tick racing the very first show never leaves a message nothing owns")
+    void neverOrphansABrandNewSlot() throws Exception {
+        for (int round = 0; round < 2_000; round++) {
+            setUp();
+
+            CountDownLatch go = new CountDownLatch(1);
+            Thread ticker = new Thread(() -> {
+                awaitQuietly(go);
+                bars.tick();
+            });
+            Thread shower = new Thread(() -> {
+                awaitQuietly(go);
+                bars.countdown(ALICE, "tpa", Duration.ofSeconds(5), ActionBarPriority.NORMAL,
+                        remaining -> Component.text("Teleporting in " + Math.ceilDiv(remaining, 1000)));
+            });
+            ticker.start();
+            shower.start();
+            go.countDown();
+            ticker.join();
+            shower.join();
+
+            assertThat(bars.isShowingAnything(ALICE))
+                    .as("round %d: the countdown was started, so it has to be tracked — otherwise it "
+                            + "renders one frame and freezes", round)
+                    .isTrue();
+            assertThat(bars.trackedPlayers()).as("round %d", round).contains(ALICE);
+        }
+    }
+
     private static void awaitQuietly(CountDownLatch latch) {
         try {
             latch.await();
