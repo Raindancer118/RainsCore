@@ -2,6 +2,7 @@ package de.raindancer.core;
 
 import de.raindancer.core.actionbar.ActionBars;
 import de.raindancer.core.banner.Banner;
+import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.chat.Brand;
 import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
@@ -12,6 +13,7 @@ import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
+import de.raindancer.core.platform.BukkitBarViewers;
 import de.raindancer.core.scoreboard.FastBoardFactory;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
@@ -64,6 +66,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ClickActions clickActions;
     private ChatButtons buttons;
     private Scoreboards scoreboards;
+    private BossBars bossBars;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -88,6 +91,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         actionBars = new ActionBars(new BukkitActionBarSink(), System::currentTimeMillis);
         scoreboards = new Scoreboards(new FastBoardFactory());
+        bossBars = new BossBars(new BukkitBarViewers());
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -123,6 +127,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (bossBars != null) {
+            bossBars.shutdown();
+        }
         if (scoreboards != null) {
             // Before the settings are written: a board left behind survives a /reload and there is
             // then nothing holding it to take it away.
@@ -239,6 +246,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public BossBars bossBars() {
+        return bossBars;
+    }
+
+    @Override
     public ChatButtons buttons() {
         return buttons;
     }
@@ -278,6 +290,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         actionBars.forget(player.getUniqueId());
         clickActions.forget(player.getUniqueId());
         scoreboards.forget(player.getUniqueId());
+        bossBars.forget(player.getUniqueId());
     }
 
     /**

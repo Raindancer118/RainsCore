@@ -5,6 +5,7 @@ import de.raindancer.core.chat.Brand;
 import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
+import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
@@ -75,6 +76,13 @@ public interface RainsCore {
      * is a collision somebody has to arbitrate.
      */
     Scoreboards scoreboards();
+
+    /**
+     * Boss bars. Unlike the action bar and the sidebar these stack, so this caps how many a player
+     * is shown at once and ranks what fills the cap — and it owns shared bars, where an audience
+     * watches one bar and people join and leave while it runs.
+     */
+    BossBars bossBars();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();
