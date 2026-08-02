@@ -9,6 +9,7 @@ import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
 import de.raindancer.core.chat.ClickResult;
 import de.raindancer.core.chat.Style;
+import de.raindancer.core.gui.MenuListener;
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.platform.BukkitActionBarSink;
@@ -102,6 +103,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         registerClickCommand();
 
         getServer().getPluginManager().registerEvents(this, this);
+        // One listener for every menu in every plugin: a menu is its inventory's holder, so this
+        // recognises our windows without a registry that would outlive the players in it.
+        getServer().getPluginManager().registerEvents(new MenuListener(), this);
         // The scheduler hands the task its own handle, which neither of these wants.
         Scheduling.globalTimer(this, ACTION_BAR_PERIOD_TICKS, ACTION_BAR_PERIOD_TICKS,
                 task -> actionBars.tick());
