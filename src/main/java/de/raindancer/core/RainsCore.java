@@ -5,6 +5,7 @@ import de.raindancer.core.chat.Brand;
 import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
+import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import org.bukkit.plugin.Plugin;
@@ -68,6 +69,12 @@ public interface RainsCore {
 
     /** The action bar. One for the server, because a player has one action bar. */
     ActionBars actionBars();
+
+    /**
+     * The sidebar. One for the server, because a player has one sidebar and two plugins wanting it
+     * is a collision somebody has to arbitrate.
+     */
+    Scoreboards scoreboards();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();

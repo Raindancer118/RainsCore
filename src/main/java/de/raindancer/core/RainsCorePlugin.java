@@ -1,6 +1,7 @@
 package de.raindancer.core;
 
 import de.raindancer.core.actionbar.ActionBars;
+import de.raindancer.core.banner.Banner;
 import de.raindancer.core.chat.Brand;
 import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
@@ -11,6 +12,8 @@ import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
+import de.raindancer.core.scoreboard.FastBoardFactory;
+import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.util.Scheduling;
@@ -60,6 +63,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ActionBars actionBars;
     private ClickActions clickActions;
     private ChatButtons buttons;
+    private Scoreboards scoreboards;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -70,6 +74,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     @Override
     public void onEnable() {
+        long startedAt = System.nanoTime();
         instance = this;
 
         // Settings first: everything after this reads them.
@@ -82,6 +87,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Style.configure(this::colourFor);
 
         actionBars = new ActionBars(new BukkitActionBarSink(), System::currentTimeMillis);
+        scoreboards = new Scoreboards(new FastBoardFactory());
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -98,16 +104,30 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Scheduling.globalTimer(this, SWEEP_PERIOD_TICKS, SWEEP_PERIOD_TICKS,
                 task -> clickActions.sweep());
 
+        Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
+                .version(getPluginMeta().getVersion())
+                .by("Raindancer118")
+                .fact("Settings", settings.schema().settings().size() + " across "
+                        + settings.schema().topics().visibleRoots().size() + " topics")
+                .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
+                .fact("Scheduler", Scheduling.isFolia() ? "Folia, regionised" : "Paper");
         for (String problem : settings.problems()) {
             log.warn("config.yml: {}", problem);
+            banner.warning("config.yml: " + problem);
         }
-        log.info("Rain's Core is up. Logs are written to {}.", Log.currentFile());
+        banner.took(java.time.Duration.ofNanos(System.nanoTime() - startedAt))
+                .print(getComponentLogger());
     }
 
     @Override
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (scoreboards != null) {
+            // Before the settings are written: a board left behind survives a /reload and there is
+            // then nothing holding it to take it away.
+            scoreboards.shutdown();
+        }
         if (settings != null) {
             settings.save();
         }
@@ -214,6 +234,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Scoreboards scoreboards() {
+        return scoreboards;
+    }
+
+    @Override
     public ChatButtons buttons() {
         return buttons;
     }
@@ -252,6 +277,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Player player = event.getPlayer();
         actionBars.forget(player.getUniqueId());
         clickActions.forget(player.getUniqueId());
+        scoreboards.forget(player.getUniqueId());
     }
 
     /**
