@@ -5,6 +5,7 @@ import org.bukkit.Material;
 
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -111,7 +112,13 @@ public final class SettingsSchema<T> {
             }
             topics.file(setting, owner);
         }
-        return new SettingsSchema<>(type, declaration.id(), defaults, topics, Map.copyOf(byKey));
+        // Not Map.copyOf: that returns an immutable map whose iteration order is unspecified, and
+        // the order here is load-bearing. It is the record's component order, which is what
+        // instantiate() pairs against the canonical constructor's parameters, what config.yml is
+        // written in, and what a command completes in. Copying it into a map that reorders silently
+        // built every snapshot with the components shuffled.
+        return new SettingsSchema<>(type, declaration.id(), defaults, topics,
+                Collections.unmodifiableMap(new LinkedHashMap<>(byKey)));
     }
 
     // ------------------------------------------------------------------ reading one component
@@ -292,5 +299,33 @@ public final class SettingsSchema<T> {
     /** One setting by key, or empty. Empty rather than an exception: the key may be a player's typo. */
     public Optional<Setting<?>> setting(String key) {
         return Optional.ofNullable(byKey.get(key == null ? "" : key.trim()));
+    }
+
+    /**
+     * Builds a snapshot from a value per key.
+     *
+     * <p>Through the record's canonical constructor, so a record with a compact constructor that
+     * validates or normalises its own components still gets to run it — this class is binding a
+     * file to a type, not going behind the type's back.
+     *
+     * @param valuesByKey every key the schema knows; a missing one takes its default
+     */
+    public T instantiate(Map<String, Object> valuesByKey) {
+        RecordComponent[] components = type.getRecordComponents();
+        List<Setting<?>> ordered = settings();
+        Class<?>[] parameterTypes = new Class<?>[components.length];
+        Object[] arguments = new Object[components.length];
+        for (int index = 0; index < components.length; index++) {
+            Setting<?> setting = ordered.get(index);
+            parameterTypes[index] = components[index].getType();
+            Object given = valuesByKey.get(setting.key());
+            arguments[index] = given != null ? given : setting.defaultValue();
+        }
+        try {
+            return type.getDeclaredConstructor(parameterTypes).newInstance(arguments);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException(
+                    "Could not build " + type.getSimpleName() + " from its settings", failure);
+        }
     }
 }

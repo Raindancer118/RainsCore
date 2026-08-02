@@ -112,6 +112,26 @@ class SettingsSchemaTest {
             assertThat(setting("gameplay.remove-phantoms").title()).isEqualTo("Remove phantoms");
         }
 
+        /**
+         * The order is load-bearing, and it was silently wrong once.
+         *
+         * <p>The schema kept its settings in {@code Map.copyOf(...)}, whose iteration order is
+         * unspecified. {@link SettingsSchema#instantiate} pairs settings with the canonical
+         * constructor's parameters by position, so a reordered map built every snapshot with the
+         * components shuffled — which surfaced as {@code ClassCastException: Cannot cast Material
+         * to String} from deep inside reflection, rather than as anything resembling the cause.
+         */
+        @Test
+        @DisplayName("keys come back in the order the record declares them, always")
+        void keysAreInDeclarationOrder() {
+            assertThat(SCHEMA.keys()).containsExactly(
+                    "fences-enabled", "fences-height", "fences-tint", "fences-material",
+                    "blocks-per-player", "tax-percent", "greeting", "banned-worlds",
+                    "default-policy", "gameplay.remove-phantoms");
+            assertThat(SCHEMA.settings()).extracting(Setting::key)
+                    .containsExactlyElementsOf(SCHEMA.keys());
+        }
+
         @Test
         @DisplayName("is unique; two components cannot claim the same key")
         void refusesDuplicateKeys() {
