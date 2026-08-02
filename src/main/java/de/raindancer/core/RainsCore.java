@@ -6,6 +6,7 @@ import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
 import de.raindancer.core.bossbar.BossBars;
+import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
@@ -83,6 +84,13 @@ public interface RainsCore {
      * watches one bar and people join and leave while it runs.
      */
     BossBars bossBars();
+
+    /**
+     * Every place any plugin has asked to remember: homes, stops on a ghast line, where somebody
+     * died. One store, so a ghast line can fly a player to their own home without either plugin
+     * knowing about the other.
+     */
+    PoiStore places();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();

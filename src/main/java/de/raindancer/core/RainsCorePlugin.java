@@ -15,6 +15,7 @@ import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
 import de.raindancer.core.platform.BukkitBarViewers;
+import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.FastBoardFactory;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
@@ -56,6 +57,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     /** How often expired chat buttons are swept. They are cheap; once a minute is plenty. */
     private static final long SWEEP_PERIOD_TICKS = 20L * 60L;
 
+    /** How often saved places are written out, if anything changed. */
+    private static final long SAVE_PERIOD_TICKS = 20L * 60L * 2L;
+
     private static volatile RainsCorePlugin instance;
 
     /** The command a chat button points at. Namespaced, so it cannot collide with anybody's. */
@@ -68,6 +72,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatButtons buttons;
     private Scoreboards scoreboards;
     private BossBars bossBars;
+    private PoiStore places;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -93,6 +98,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         actionBars = new ActionBars(new BukkitActionBarSink(), System::currentTimeMillis);
         scoreboards = new Scoreboards(new FastBoardFactory());
         bossBars = new BossBars(new BukkitBarViewers());
+
+        places = new PoiStore(getDataFolder().toPath().resolve("places.yml"));
+        places.load();
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -111,6 +119,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 task -> actionBars.tick());
         Scheduling.globalTimer(this, SWEEP_PERIOD_TICKS, SWEEP_PERIOD_TICKS,
                 task -> clickActions.sweep());
+        // Written on a timer rather than on every change: a disk write every time somebody sets a
+        // home would be a disk write on the main thread, and isDirty() means an idle server writes
+        // nothing at all.
+        Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> places.flush());
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
                 .version(getPluginMeta().getVersion())
@@ -118,7 +130,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .fact("Settings", settings.schema().settings().size() + " across "
                         + settings.schema().topics().visibleRoots().size() + " topics")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
+                .fact("Places", places.all().size() + " remembered")
                 .fact("Scheduler", Scheduling.isFolia() ? "Folia, regionised" : "Paper");
+        for (String problem : places.problems()) {
+            banner.warning("places.yml: " + problem);
+        }
         for (String problem : settings.problems()) {
             log.warn("config.yml: {}", problem);
             banner.warning("config.yml: " + problem);
@@ -131,6 +147,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (places != null) {
+            places.flush();
+        }
         if (bossBars != null) {
             bossBars.shutdown();
         }
@@ -247,6 +266,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Scoreboards scoreboards() {
         return scoreboards;
+    }
+
+    @Override
+    public PoiStore places() {
+        return places;
     }
 
     @Override
