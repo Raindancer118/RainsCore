@@ -10,21 +10,26 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The tree a plugin's settings hang in, and the three roots every plugin shares.
+ * The tree a plugin's settings hang in.
  *
- * <h2>Why the roots are fixed</h2>
- * "The menu feels cluttered" was never about the number of settings — it was about not knowing where
- * to look. Nine plugins each inventing their own top-level groups gave a player nine vocabularies to
- * learn. These three are the question actually being asked when somebody opens a settings screen:
+ * <h2>Why a tree, and why it is open</h2>
+ * The thing that made the old menu unusable was that every setting on the server was one click deep.
+ * Sixty buttons on a flat set of pages is not a menu, it is a wall — you find a setting by reading
+ * all of them. The answer is <em>depth</em>: a page holds a handful of related things, a menu holds a
+ * handful of pages, and any one setting is a few deliberate clicks away instead of one scan.
  *
- * <dl>
- *   <dt>{@code player}</dt><dd>what <em>I</em> set, for myself</dd>
- *   <dt>{@code management}</dt><dd>what I set for <em>other people</em> — my town, my claim, my crew</dd>
- *   <dt>{@code config}</dt><dd>what the <em>server owner</em> sets</dd>
- * </dl>
+ * <p>An earlier version of this class fixed three roots and refused a plugin that wanted a fourth.
+ * That was the wrong lever. A plugin knows what its own settings are about, and forcing the ghast
+ * lines to file "cruise speed" under somebody else's idea of a category makes the menu harder to
+ * read, not easier. So the tree is open: a plugin brings whatever categories it likes, at whatever
+ * depth, and {@link SettingsRegistry} merges the categories of every plugin into one tree.
  *
- * A plugin declares subtopics beneath them and may not add a fourth. The refusal is deliberate and
- * loud: a root invented by one plugin is a button every other plugin's users have to read past.
+ * <h2>Well-known names</h2>
+ * What is left of the old idea is a set of names RainsCore has an opinion about — {@code player},
+ * {@code management}, {@code config} and a few more. A plugin that uses one gets a good title, icon
+ * and description for free, and two plugins that both use it land in the same place. A plugin that
+ * uses something else gets a title derived from the path. Neither is required; it is furniture, not
+ * a rule.
  */
 public final class SettingsTopics {
 
@@ -34,90 +39,102 @@ public final class SettingsTopics {
     public static final String MANAGEMENT = "management";
     /** What the server owner sets. */
     public static final String CONFIG = "config";
+    /** How the plugin looks: colours, symbols, prefixes. */
+    public static final String APPEARANCE = "appearance";
+    /** Kicks, bans, mutes. */
+    public static final String MODERATION = "moderation";
+    /** Which parts of the plugin run at all. */
+    public static final String MODULES = "modules";
 
-    /** The roots, in the order they are offered. Order is deliberate: nearest concern first. */
-    private static final List<String> ROOTS = List.of(PLAYER, MANAGEMENT, CONFIG);
-
-    private record RootDefaults(String title, Material icon, String description) {
+    /** A name RainsCore knows, so a plugin using it gets a sensible button without saying so. */
+    private record Known(String title, Material icon, String description) {
     }
 
-    private static final Map<String, RootDefaults> ROOT_DEFAULTS = Map.of(
-            PLAYER, new RootDefaults("Your settings", Material.PLAYER_HEAD,
+    private static final Map<String, Known> WELL_KNOWN = Map.of(
+            PLAYER, new Known("Your settings", Material.PLAYER_HEAD,
                     "What you set for yourself. Nobody else sees these."),
-            MANAGEMENT, new RootDefaults("Management", Material.IRON_AXE,
+            MANAGEMENT, new Known("Management", Material.IRON_AXE,
                     "What you set for the people in your town, claim or crew."),
-            CONFIG, new RootDefaults("Server settings", Material.REDSTONE,
-                    "What the server runs on. Changing these affects everybody."));
+            CONFIG, new Known("Server settings", Material.REDSTONE,
+                    "What the server runs on. Changing these affects everybody."),
+            APPEARANCE, new Known("Appearance", Material.PAINTING,
+                    "Colours, symbols and prefixes: what everything is drawn in."),
+            MODERATION, new Known("Moderation", Material.IRON_AXE,
+                    "Kicks, bans and mutes: what they do and what they say."),
+            MODULES, new Known("Modules", Material.COMMAND_BLOCK,
+                    "Which parts of the plugin run at all."));
 
     private final Map<String, SettingsTopic> byPath = new LinkedHashMap<>();
+    private final List<SettingsTopic> roots = new ArrayList<>();
 
     SettingsTopics(List<Topic> declared, String owner) {
-        for (String root : ROOTS) {
-            RootDefaults defaults = ROOT_DEFAULTS.get(root);
-            byPath.put(root,
-                    new SettingsTopic(root, defaults.title(), defaults.icon(),
-                            defaults.description(), null));
-        }
         for (Topic topic : declared) {
             declare(topic, owner);
         }
     }
 
     /**
-     * Adds one declared topic, making any missing parent on the way.
+     * Adds one declared topic, making any missing ancestor on the way.
      *
      * <p>Declaring only the leaf is the common case and is allowed: a plugin with one page under
-     * {@code management} should not have to restate what {@code management} is.
+     * {@code config/limits} should not have to restate what {@code config} and {@code config/limits}
+     * are, especially when another plugin has already said.
      */
     private void declare(Topic topic, String owner) {
         String path = normalise(topic.path());
         if (path.isEmpty()) {
             throw new IllegalArgumentException(owner + " declares a topic with no path.");
         }
-        String root = path.contains("/") ? path.substring(0, path.indexOf('/')) : path;
-        if (!ROOTS.contains(root)) {
-            throw new IllegalArgumentException(owner + " declares the topic '" + path
-                    + "', but '" + root + "' is not one of the three roots " + ROOTS
-                    + ". A plugin adds subtopics under those; it does not add a root of its own — "
-                    + "a fourth root is a button everybody else's users have to read past.");
-        }
-        if (ROOTS.contains(path)) {
-            // Re-describing a root is allowed: a plugin that owns most of what is under it may well
-            // have a better title for it than the generic one.
-            SettingsTopic existing = byPath.get(path);
-            byPath.put(path, new SettingsTopic(path, topic.title(),
-                    iconOr(topic.icon(), existing.icon()), description(topic, existing), null));
-            return;
-        }
-        if (byPath.containsKey(path)) {
+        SettingsTopic existing = byPath.get(path);
+        if (existing != null && existing.wasDeclared()) {
             throw new IllegalArgumentException(owner + " declares the topic '" + path + "' twice.");
         }
-        SettingsTopic parent = parentOf(path, owner);
-        SettingsTopic node = new SettingsTopic(path, topic.title(),
-                iconOr(topic.icon(), parent.icon()), topic.description(), parent);
-        byPath.put(path, node);
-        parent.addChild(node);
-    }
-
-    /** The topic above this path, made from its own defaults when it was never declared. */
-    private SettingsTopic parentOf(String path, String owner) {
-        String parentPath = path.substring(0, path.lastIndexOf('/'));
-        SettingsTopic parent = byPath.get(parentPath);
-        if (parent != null) {
-            return parent;
+        if (existing != null) {
+            // Made earlier as somebody's ancestor, now declared properly: keep its place in the tree
+            // and its children, and take the title, icon and description it has just been given.
+            existing.describe(topic.title(), iconOr(topic.icon(), existing.icon()),
+                    topic.description());
+            return;
         }
-        // An undeclared middle: "config/limits/players" where "config/limits" was never named.
-        // Making one keeps the tree whole; its title is the best guess from the path.
-        SettingsTopic grandparent = parentOf(parentPath, owner);
-        SettingsTopic made = new SettingsTopic(parentPath, readable(lastSegment(parentPath)),
-                grandparent.icon(), "", grandparent);
-        byPath.put(parentPath, made);
-        grandparent.addChild(made);
-        return made;
+        make(path, topic.title(), topic.icon(), topic.description(), true);
     }
 
-    private static String description(Topic topic, SettingsTopic existing) {
-        return topic.description().isBlank() ? existing.description() : topic.description();
+    /** Creates the node for a path, and every ancestor it does not have yet. */
+    private SettingsTopic make(String path, String title, Material icon, String description,
+                               boolean declared) {
+        SettingsTopic parent = null;
+        int slash = path.lastIndexOf('/');
+        if (slash > 0) {
+            String parentPath = path.substring(0, slash);
+            parent = byPath.get(parentPath);
+            if (parent == null) {
+                parent = furnish(parentPath);
+            }
+        }
+        Material resolved = iconOr(icon, parent == null ? Material.AIR : parent.icon());
+        SettingsTopic node = new SettingsTopic(path, title, resolved, description, parent, declared);
+        byPath.put(path, node);
+        if (parent == null) {
+            roots.add(node);
+        } else {
+            parent.addChild(node);
+        }
+        return node;
+    }
+
+    /**
+     * A node nobody declared: made because something below it was.
+     *
+     * <p>Given the well-known furniture if its name is one RainsCore knows, and otherwise a title
+     * read out of the path — {@code ghast-lines} becomes "Ghast lines", which is very often exactly
+     * right and is never worse than showing the raw path.
+     */
+    private SettingsTopic furnish(String path) {
+        Known known = WELL_KNOWN.get(lastSegment(path));
+        if (known != null) {
+            return make(path, known.title(), known.icon(), known.description(), false);
+        }
+        return make(path, readable(lastSegment(path)), Material.AIR, "", false);
     }
 
     private static Material iconOr(Material declared, Material fallback) {
@@ -129,7 +146,7 @@ public final class SettingsTopics {
         return slash < 0 ? path : path.substring(slash + 1);
     }
 
-    /** {@code "fence-height"} or {@code "fenceHeight"} becomes {@code "Fence height"}. */
+    /** {@code "ghast-lines"} or {@code "fenceHeight"} becomes {@code "Ghast lines"} / "Fence height". */
     static String readable(String raw) {
         StringBuilder built = new StringBuilder();
         for (int index = 0; index < raw.length(); index++) {
@@ -153,26 +170,22 @@ public final class SettingsTopics {
 
     // -------------------------------------------------------------------------- reading
 
-    /** All three roots, whether or not anything is under them. */
+    /** The top-level categories this plugin brought, in the order they were first needed. */
     public List<SettingsTopic> roots() {
-        List<SettingsTopic> found = new ArrayList<>();
-        for (String root : ROOTS) {
-            found.add(byPath.get(root));
-        }
-        return List.copyOf(found);
+        return List.copyOf(roots);
     }
 
-    /** The roots that have something under them — what the GUI actually offers. */
+    /** The roots that have something under them — what a menu actually offers. */
     public List<SettingsTopic> visibleRoots() {
-        return roots().stream().filter(topic -> !topic.isEmpty()).toList();
+        return roots.stream().filter(topic -> !topic.isEmpty()).toList();
     }
 
-    /** One topic by path, or empty when nobody declared it. */
+    /** One topic by path, or empty when nobody declared or implied it. */
     public Optional<SettingsTopic> at(String path) {
         return Optional.ofNullable(byPath.get(normalise(path)));
     }
 
-    /** Every topic, roots first, in declaration order. */
+    /** Every topic, in the order the nodes were created. */
     public List<SettingsTopic> all() {
         return List.copyOf(byPath.values());
     }

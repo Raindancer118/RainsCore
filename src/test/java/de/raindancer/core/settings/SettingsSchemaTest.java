@@ -252,11 +252,11 @@ class SettingsSchemaTest {
     class Topics {
 
         @Test
-        @DisplayName("the three roots exist whether a plugin declared them or not")
-        void alwaysHasTheThreeRoots() {
+        @DisplayName("the roots are the ones this plugin actually uses, in declaration order")
+        void rootsAreWhatThePluginBrought() {
             assertThat(SCHEMA.topics().roots())
                     .extracting(SettingsTopic::path)
-                    .containsExactly("player", "management", "config");
+                    .containsExactly("management", "config");
         }
 
         @Test
@@ -278,12 +278,30 @@ class SettingsSchemaTest {
         }
 
         @Test
-        @DisplayName("a subtopic under an undeclared root still gets the standard root")
+        @DisplayName("a subtopic whose parent was never declared gets one made for it")
         void createsMissingParents() {
             SettingsTopic config = SCHEMA.topics().at("config").orElseThrow();
-            assertThat(config.title()).isEqualTo("Server settings");
             assertThat(config.children()).extracting(SettingsTopic::path)
                     .containsExactly("config/limits");
+        }
+
+        @Test
+        @DisplayName("a well-known name gets a good title and icon without being declared")
+        void knownNamesComeFurnished() {
+            // "config" is one of the names RainsCore has an opinion about, so a plugin that only
+            // declares "config/limits" still gets a sensible button rather than the word "Config".
+            SettingsTopic config = SCHEMA.topics().at("config").orElseThrow();
+            assertThat(config.title()).isEqualTo("Server settings");
+            assertThat(config.icon()).isNotEqualTo(Material.AIR);
+        }
+
+        @Test
+        @DisplayName("a name nobody knows gets a readable title from the path")
+        void unknownNamesGetAReadableTitle() {
+            SettingsSchema<OwnCategory> schema =
+                    SettingsSchema.of(OwnCategory.class, OwnCategory.DEFAULTS);
+            assertThat(schema.topics().at("ghast-lines").orElseThrow().title())
+                    .isEqualTo("Ghast lines");
         }
 
         @Test
@@ -305,19 +323,42 @@ class SettingsSchemaTest {
         }
 
         @Test
-        @DisplayName("an empty root is not offered — the menu must not have dead buttons in it")
-        void hidesEmptyRoots() {
-            assertThat(SCHEMA.topics().at("player").orElseThrow().isEmpty()).isTrue();
-            assertThat(SCHEMA.topics().visibleRoots()).extracting(SettingsTopic::path)
-                    .containsExactly("management", "config");
+        @DisplayName("a plugin brings whatever categories it likes, at the top level too")
+        void aPluginBringsItsOwnCategories() {
+            SettingsSchema<OwnCategory> schema =
+                    SettingsSchema.of(OwnCategory.class, OwnCategory.DEFAULTS);
+            assertThat(schema.topics().roots()).extracting(SettingsTopic::path)
+                    .containsExactly("ghast-lines");
+            assertThat(schema.topics().at("ghast-lines/flight").orElseThrow().title())
+                    .isEqualTo("Flight");
         }
 
         @Test
-        @DisplayName("a plugin may not invent a fourth root — that is what made the old menu cluttered")
-        void refusesNewRoots() {
-            assertThatThrownBy(() -> SettingsSchema.of(RogueRoot.class, RogueRoot.DEFAULTS))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("miscellaneous");
+        @DisplayName("topics nest as deep as a plugin wants, and every level in between exists")
+        void nestsArbitrarilyDeep() {
+            SettingsSchema<Deep> schema = SettingsSchema.of(Deep.class, Deep.DEFAULTS);
+            assertThat(schema.topics().at("config/limits/claims/blocks")).isPresent();
+            // Only the leaf was declared; the three levels above it were made on the way.
+            assertThat(schema.topics().all()).extracting(SettingsTopic::path)
+                    .contains("config", "config/limits", "config/limits/claims",
+                            "config/limits/claims/blocks");
+            assertThat(schema.topics().at("config/limits/claims").orElseThrow().parent().path())
+                    .isEqualTo("config/limits");
+            assertThat(schema.topics().at("config/limits/claims/blocks").orElseThrow().depth())
+                    .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("a topic that holds nothing at all is not offered — no dead buttons")
+        void hidesEmptyTopics() {
+            SettingsSchema<WithEmpty> schema =
+                    SettingsSchema.of(WithEmpty.class, WithEmpty.DEFAULTS);
+            assertThat(schema.topics().at("config/unused").orElseThrow().isEmpty()).isTrue();
+            assertThat(schema.topics().visibleRoots()).extracting(SettingsTopic::path)
+                    .containsExactly("config");
+            assertThat(schema.topics().at("config").orElseThrow().visibleChildren())
+                    .extracting(SettingsTopic::path)
+                    .containsExactly("config/used");
         }
 
         @Test
@@ -424,9 +465,26 @@ class SettingsSchemaTest {
         static final Bare DEFAULTS = new Bare(1);
     }
 
-    @Settings(id = "rogue", topics = @Topic(path = "miscellaneous", title = "Bits and pieces"))
-    record RogueRoot(@In("miscellaneous") boolean thing) {
-        static final RogueRoot DEFAULTS = new RogueRoot(true);
+    /** A plugin whose settings do not belong under any name RainsCore has heard of. */
+    @Settings(id = "ghasts", topics = {
+            @Topic(path = "ghast-lines/flight", title = "Flight", icon = Material.WHITE_HARNESS)})
+    record OwnCategory(@In("ghast-lines/flight") @Title("Cruise speed") int cruiseSpeed) {
+        static final OwnCategory DEFAULTS = new OwnCategory(4);
+    }
+
+    /** Four levels deep, with only the leaf declared. */
+    @Settings(id = "deep", topics = {
+            @Topic(path = "config/limits/claims/blocks", title = "Blocks")})
+    record Deep(@In("config/limits/claims/blocks") int perPlayer) {
+        static final Deep DEFAULTS = new Deep(1);
+    }
+
+    /** One topic with a setting in it and one with nothing, to prove the empty one is hidden. */
+    @Settings(id = "with-empty", topics = {
+            @Topic(path = "config/used", title = "Used"),
+            @Topic(path = "config/unused", title = "Unused")})
+    record WithEmpty(@In("config/used") boolean thing) {
+        static final WithEmpty DEFAULTS = new WithEmpty(true);
     }
 
     @Settings(id = "homeless", topics = @Topic(path = "config/x", title = "X"))
