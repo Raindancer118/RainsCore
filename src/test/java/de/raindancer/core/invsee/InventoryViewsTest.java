@@ -326,6 +326,83 @@ class InventoryViewsTest {
             assertThat(Slots.sectionOf(99)).isEmpty();
         }
 
+        /**
+         * The save file numbers the same slots differently, and nothing warns you.
+         *
+         * <p>In {@code player.dat} armour is 100 to 103 and the off-hand is −106, where in a running
+         * game they are 36 to 39 and 40. Reading a file with the in-game numbers puts a helmet on
+         * somebody's feet — and the file is written back, so it is a real helmet on real feet.
+         */
+        @Test
+        @DisplayName("armour in the save file is numbered from a hundred, boots first")
+        void fileArmour() {
+            assertThat(Slots.sectionOfFileSlot(103)).contains(Section.ARMOUR);
+            assertThat(Slots.indexWithinFileSlot(103))
+                    .as("103 is the helmet, which this counts as the first piece")
+                    .isZero();
+            assertThat(Slots.indexWithinFileSlot(102)).isEqualTo(1);
+            assertThat(Slots.indexWithinFileSlot(101)).isEqualTo(2);
+            assertThat(Slots.indexWithinFileSlot(100))
+                    .as("100 is the boots — the opposite end from where a person would start")
+                    .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("the off-hand in the save file is a negative number")
+        void fileOffHand() {
+            assertThat(Slots.sectionOfFileSlot(-106)).contains(Section.OFF_HAND);
+            assertThat(Slots.indexWithinFileSlot(-106)).isZero();
+        }
+
+        @Test
+        @DisplayName("the hotbar and backpack are numbered the same in both")
+        void fileCarried() {
+            assertThat(Slots.sectionOfFileSlot(0)).contains(Section.HOTBAR);
+            assertThat(Slots.sectionOfFileSlot(8)).contains(Section.HOTBAR);
+            assertThat(Slots.sectionOfFileSlot(9)).contains(Section.STORAGE);
+            assertThat(Slots.sectionOfFileSlot(35)).contains(Section.STORAGE);
+            assertThat(Slots.indexWithinFileSlot(35)).isEqualTo(26);
+        }
+
+        @Test
+        @DisplayName("a slot number the file should not contain is nothing, not a guess")
+        void fileNonsense() {
+            assertThat(Slots.sectionOfFileSlot(36))
+                    .as("36 is armour in a running game and nothing in the file: rounding it to "
+                            + "the nearest real part is how an item moves by itself")
+                    .isEmpty();
+            assertThat(Slots.sectionOfFileSlot(99)).isEmpty();
+            assertThat(Slots.sectionOfFileSlot(104)).isEmpty();
+            assertThat(Slots.sectionOfFileSlot(-1)).isEmpty();
+            assertThat(Slots.indexWithinFileSlot(36)).isEqualTo(-1);
+        }
+
+        @Test
+        @DisplayName("every part of the file numbering comes back the way it went in")
+        void fileRoundTrips() {
+            for (Section section : List.of(Section.HOTBAR, Section.STORAGE, Section.ARMOUR,
+                    Section.OFF_HAND)) {
+                for (int within = 0; within < section.size(); within++) {
+                    int fileSlot = Slots.fileSlot(section, within);
+                    assertThat(Slots.sectionOfFileSlot(fileSlot))
+                            .as(section + " position " + within + " landed in the wrong part")
+                            .contains(section);
+                    assertThat(Slots.indexWithinFileSlot(fileSlot))
+                            .as(section + " position " + within + " did not come back the same")
+                            .isEqualTo(within);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("the two numberings really are different, which is the whole point")
+        void theNumberingsDiffer() {
+            assertThat(Slots.fileSlot(Section.ARMOUR, 0)).isEqualTo(103);
+            assertThat(Slots.rawSlot(Section.ARMOUR, 0)).isEqualTo(39);
+            assertThat(Slots.fileSlot(Section.OFF_HAND, 0)).isEqualTo(-106);
+            assertThat(Slots.rawSlot(Section.OFF_HAND, 0)).isEqualTo(40);
+        }
+
         @Test
         @DisplayName("a raw slot can be worked out from a part and a position")
         void roundTrips() {

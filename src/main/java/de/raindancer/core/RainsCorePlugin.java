@@ -44,7 +44,10 @@ import de.raindancer.core.chunk.BukkitChunkLoader;
 import de.raindancer.core.chunk.ChunkHolds;
 import de.raindancer.core.effect.BukkitEffectSink;
 import de.raindancer.core.effect.Effects;
+import de.raindancer.core.invsee.Inventories;
+import de.raindancer.core.invsee.InvseeListener;
 import de.raindancer.core.invsee.InventoryViews;
+import de.raindancer.core.invsee.OfflineEdits;
 import de.raindancer.core.player.BukkitPlayerAdminSink;
 import de.raindancer.core.player.PlayerAdmin;
 import de.raindancer.core.vanish.BukkitVanishSink;
@@ -157,6 +160,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Vanish vanish;
     private PlayerAdmin players;
     private InventoryViews inventoryViews;
+    private Inventories inventories;
     private PackServer packServer;
 
     static RainsCorePlugin instance() {
@@ -256,6 +260,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 looking.closeInventory();
             }
         });
+        // The playerdata folder of the main world, which is where the server writes everybody who
+        // is not currently on it. Worked out once rather than per read: getWorlds() is a copy.
+        inventories = new Inventories(this, inventoryViews, new OfflineEdits(System::currentTimeMillis),
+                getServer().getWorlds().get(0).getWorldFolder().toPath().resolve("playerdata"));
+        getServer().getPluginManager().registerEvents(new InvseeListener(inventories), this);
         applyNewSettings(settings.current());
         // Re-applied on every change, so a toggle in the menu takes hold without a restart —
         // which is the difference between a setting somebody uses and one they read about.
@@ -284,6 +293,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                     clickActions.sweep();
                     prompts.sweep();
                     votes.sweep();
+                    // An offline edit whose moderator crashed would otherwise hold that player out
+                    // of the server until a restart.
+                    inventories.sweep();
                 });
         Scheduling.globalTimer(this, TABLIST_PERIOD_TICKS, TABLIST_PERIOD_TICKS,
                 task -> tablists.refresh());
@@ -670,6 +682,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public InventoryViews inventoryViews() {
         return inventoryViews;
+    }
+
+    @Override
+    public Inventories inventories() {
+        return inventories;
     }
 
     @Override

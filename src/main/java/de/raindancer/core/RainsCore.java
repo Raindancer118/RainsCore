@@ -25,6 +25,7 @@ import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.tablist.Tablists;
 import de.raindancer.core.chunk.ChunkHolds;
 import de.raindancer.core.effect.Effects;
+import de.raindancer.core.invsee.Inventories;
 import de.raindancer.core.invsee.InventoryViews;
 import de.raindancer.core.player.PlayerAdmin;
 import de.raindancer.core.vanish.Vanish;
@@ -267,6 +268,17 @@ public interface RainsCore {
      * duplicates items every time.
      */
     InventoryViews inventoryViews();
+
+    /**
+     * Looking inside somebody's inventory, whether or not they are on the server.
+     *
+     * <p>The offline half is the one that matters: {@code OfflinePlayer} has no
+     * {@code getInventory()}, and the players a moderator most needs to look at are exactly the ones
+     * who have logged out. Their items are read out of the file the server saved them in, and an
+     * edit holds them out of the server for as long as it lasts — because the server rewrites that
+     * file on the next join and would discard the change without a word.
+     */
+    Inventories inventories();
 
     /**
      * Weighted loot tables, by tier — what comes out of a chest and how often. An entry may be a
