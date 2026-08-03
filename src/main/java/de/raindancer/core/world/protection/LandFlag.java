@@ -52,6 +52,18 @@ public enum LandFlag {
     MOB_GRIEF(Material.ROTTEN_FLESH, false),
     PISTONS_FROM_OUTSIDE(Material.PISTON, false),
     FLUIDS_FROM_OUTSIDE(Material.BUCKET, false),
+
+    /**
+     * Whether water and lava flow <em>within</em> the area at all.
+     *
+     * <p>The other half of the fluid question, and the one people ask for second. {@code FLUIDS_FROM_OUTSIDE}
+     * stops somebody pouring lava over the wall; this stops the pool inside spreading over a build when a
+     * block that was holding it back is broken — which is the damage that happens by accident rather than by
+     * malice, and the one nobody thinks about until it has.
+     *
+     * <p>Area wide: a flow either happens or it does not, and it cannot happen for one onlooker and not another.
+     */
+    FLUID_FLOW(Material.WATER_BUCKET, true),
     SNOW_ICE_FORM(Material.PACKED_ICE, true),
     FALL_DAMAGE(Material.FEATHER, true, true),
     HUNGER(Material.COOKED_BEEF, true, true),
@@ -64,7 +76,7 @@ public enum LandFlag {
      *
      * <p>Off is vanilla, and then {@link #ITEM_DROPS} decides whether the pile appears.
      */
-    KEEP_INVENTORY(Material.TOTEM_OF_UNDYING, false, true),
+    KEEP_INVENTORY(Material.CHEST, false, true),
 
     /**
      * Whether the pile appears at all when somebody dies without keeping their things.
@@ -167,7 +179,24 @@ public enum LandFlag {
      * granted to named people, this is the ground's own rule for a whole tier. An owner keeping their garden
      * shut to visitors sets this once, rather than editing the public grant and then remembering it is there.
      */
-    WALK_IN(Material.LEATHER_BOOTS, true, true);
+    WALK_IN(Material.LEATHER_BOOTS, true, true),
+
+    /**
+     * Whether somebody inside can be seen from outside.
+     *
+     * <p>Privacy rather than protection, and the one owners ask for that no permission covers: a walled garden
+     * is not private if everybody outside can watch you in it. Off hides the people inside from everybody
+     * standing out, and shows them again the moment either party crosses the border.
+     *
+     * <p>Audience aware, and the tier is the <em>watcher's</em> — so "the people I trust can see in, strangers
+     * cannot" is one setting rather than a list. Owners and trusted players see in by default; only visitors
+     * are turned away by switching it off.
+     *
+     * <p>Hiding a player is a promise every subsystem has to keep, so this is enforced by hiding them from the
+     * watcher's client rather than by suppressing anything: somebody hidden this way is genuinely not sent, not
+     * merely absent from a list somewhere.
+     */
+    VISIBLE_FROM_OUTSIDE(Material.SPYGLASS, true, true);
 
     private final Material icon;
     private final boolean builtInDefault;

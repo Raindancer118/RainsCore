@@ -244,6 +244,14 @@ public final class EnvironmentProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onFluidFlow(BlockFromToEvent event) {
+        // Two questions, asked in this order. "May it flow here at all" is area wide and cheap; "may it come
+        // in from outside" needs both ends looked up, and there is no point asking it about a flow that is
+        // already refused.
+        if (land.landFlags().isEnforced(LandFlag.FLUID_FLOW)
+                && !land.landFlags().isAllowedAt(event.getToBlock().getLocation(), LandFlag.FLUID_FLOW)) {
+            event.setCancelled(true);
+            return;
+        }
         if (!land.landFlags().isEnforced(LandFlag.FLUIDS_FROM_OUTSIDE)) {
             return;
         }

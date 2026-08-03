@@ -222,6 +222,7 @@ land:
     mob-grief: {name: "Mob grief", description: "Mobs may change blocks (ravagers, silverfish, sheep …)"}
     pistons-from-outside: {name: "Outside pistons", description: "Pistons outside may move blocks inside"}
     fluids-from-outside: {name: "Outside fluids", description: "Water and lava may flow in from outside"}
+    fluid-flow: {name: "Fluids flow", description: "Water and lava may spread here at all — off freezes them where they are"}
     snow-ice-form: {name: "Snow & ice", description: "Snow and ice may form or melt"}
     fall-damage: {name: "Fall damage", description: "Players take fall damage"}
     hunger: {name: "Hunger", description: "Players lose food"}
@@ -231,6 +232,7 @@ land:
     riptide: {name: "Riptide", description: "Players may launch themselves with a riptide trident"}
     ender-pearl-in: {name: "Ender pearls", description: "Players may pearl in"}
     walk-in: {name: "Walk in", description: "Players may walk in over the border"}
+    visible-from-outside: {name: "Seen from outside", description: "People inside can be seen by somebody standing outside"}
     teleport-in: {name: "Teleport in", description: "Players may teleport in"}
     potions: {name: "Potions", description: "Potions may be drunk, thrown or left lingering here"}
     totems: {name: "Totems of undying", description: "A totem may save somebody from dying here"}

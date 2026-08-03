@@ -77,6 +77,7 @@ import de.raindancer.core.world.protection.Land;
 import de.raindancer.core.world.protection.LandPolicies;
 import de.raindancer.core.world.protection.MobControlListener;
 import de.raindancer.core.world.protection.MovementProtectionListener;
+import de.raindancer.core.world.protection.Seclusion;
 import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -145,6 +146,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      */
     private static final long TABLIST_PERIOD_TICKS = 40L;
 
+    /**
+     * How often it is worked out who can see whom.
+     *
+     * <p>Ten ticks. Half a second of being visible while walking out of a private garden is not a privacy
+     * failure, and doing it per move event is a lookup per player per tick for an answer that changes when
+     * somebody crosses a line.
+     */
+    private static final long SECLUSION_PERIOD_TICKS = 10L;
+
     /** How often farm worlds are asked whether any is due. Cheap; the regeneration is not. */
     private static final long REGEN_CHECK_TICKS = 20L * 60L;
 
@@ -190,6 +200,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Land land;
     private LandPolicies landPolicies;
     private MovementProtectionListener movementProtection;
+    private Seclusion seclusion;
     private ResourcePacks resourcePacks;
     private ChunkHolds chunks;
     private Safety safety;
@@ -324,6 +335,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
         movementProtection = new MovementProtectionListener(land, messages);
         getServer().getPluginManager().registerEvents(movementProtection, this);
+
+        // Who can be seen from outside a private area. On a timer rather than on every move: two players
+        // walking towards each other generate a move event each per tick, and the answer only changes when
+        // one of them crosses a border.
+        seclusion = new Seclusion(this, land);
+        Scheduling.globalTimer(this, SECLUSION_PERIOD_TICKS, SECLUSION_PERIOD_TICKS,
+                task -> seclusion.refresh());
 
         clickActions = new ClickActions(System::currentTimeMillis);
         // Deliberately empty: Core registers no commands at all, so it has no callback command to
@@ -577,6 +595,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (seclusion != null) {
+            // Before anything else, and for the same reason as the chunk holds below: somebody left hidden by
+            // a reload is invisible until they reconnect, with nothing on their screen to explain it.
+            seclusion.revealEverybody();
+        }
         if (chunks != null) {
             // Before anything else that touches the world: a force-loaded chunk is written into the
             // world's own data and survives a restart, so one left behind here is one ticking for
@@ -967,6 +990,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects.forget(player.getUniqueId());
         land.forget(player.getUniqueId());
         movementProtection.forget(player.getUniqueId());
+        seclusion.forget(player.getUniqueId());
         if (combatListener != null) {
             combatListener.forget(player.getUniqueId());
         }
