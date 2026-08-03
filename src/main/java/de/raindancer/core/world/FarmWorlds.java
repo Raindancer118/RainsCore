@@ -51,6 +51,9 @@ public final class FarmWorlds {
 
     private static final LogChannel log = Log.of("worlds");
 
+    /** How long to wait for a player to actually leave before unloading the world anyway. */
+    private static final long EVACUATION_SECONDS = 5;
+
     private final Plugin plugin;
     private final FarmWorldState state;
 
@@ -169,8 +172,14 @@ public final class FarmWorlds {
         }
         Path folder = Bukkit.getWorldContainer().toPath().resolve(name);
         if (Files.exists(folder) && !deleteWorldFolder(folder, name)) {
-            // Refused or failed. Load it back rather than leaving a hole.
-            create(set, name);
+            // Deliberately NOT recreated. A half-deleted folder is the one case where making the
+            // world again is worse than not having it: WorldCreator would generate fresh terrain
+            // with a new seed around whatever region files survived, and the result is permanent
+            // chunk walls through the middle of the world. A world that is simply missing can be
+            // fixed by hand; a corrupted one cannot.
+            log.fatal("'{}' was only partly deleted and has NOT been made again. Its folder is at "
+                    + "{} — remove it by hand, then start the server. Recreating it now would "
+                    + "generate new terrain around the surviving chunks.", name, folder);
             return false;
         }
         return create(set, name) != null;
@@ -178,14 +187,28 @@ public final class FarmWorlds {
 
     /** Moves everybody out of a world before it stops existing. */
     private void evacuate(World world, Location safety) {
-        for (Player player : List.copyOf(world.getPlayers())) {
+        List<Player> inside = List.copyOf(world.getPlayers());
+        List<java.util.concurrent.CompletableFuture<Boolean>> moving =
+                new ArrayList<>(inside.size());
+        for (Player player : inside) {
             try {
-                player.teleport(safety);
+                // teleportAsync, not teleport: on Folia a synchronous teleport across regions
+                // throws, and the world would then be unloaded with somebody still in it.
+                moving.add(player.teleportAsync(safety));
                 player.sendMessage(net.kyori.adventure.text.Component.text(
                         "The farm world is being made again — you have been moved to spawn."));
             } catch (RuntimeException failure) {
                 log.warn(failure, "Could not move {} out of '{}'.", player.getName(),
                         world.getName());
+            }
+        }
+        // Waited for, because the next thing that happens is the world being unloaded. A player
+        // still in flight when that happens is a player in a world that no longer exists.
+        for (var move : moving) {
+            try {
+                move.get(EVACUATION_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception slow) {
+                log.warn("A player did not leave '{}' in time; carrying on.", world.getName());
             }
         }
     }

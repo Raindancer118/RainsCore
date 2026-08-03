@@ -182,6 +182,13 @@ public final class Tablists {
                 }
                 if (current != null && current.getName().startsWith(TEAM_PREFIX)) {
                     current.removeEntry(player.getName());
+                    // Unregistered once nobody is in it. These live on the MAIN scoreboard, which
+                    // Minecraft saves to scoreboard.dat — an empty team left behind is not merely
+                    // untidy, it is written to disk for ever, and a server whose players change
+                    // world often would accumulate thousands.
+                    if (current.getEntries().isEmpty()) {
+                        current.unregister();
+                    }
                 } else if (current != null) {
                     // Somebody else's team. Leaving it alone is the only safe thing to do: taking a
                     // player out of another plugin's team to sort a list would break whatever that

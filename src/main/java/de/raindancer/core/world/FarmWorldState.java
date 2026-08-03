@@ -130,6 +130,18 @@ public final class FarmWorldState {
             // Real paths, so a link or a .. cannot point somewhere else than it appears to.
             Path server = serverDirectory.toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
             if (!Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) {
+                // Includes the case of a world folder that is a symlink — somebody pointing their
+                // farm world at a RAM disk, which is a reasonable thing to do. It is still refused:
+                // deleting through a link is exactly how a recursive delete reaches somewhere
+                // nobody meant it to. But it is said out loud rather than silently skipped, because
+                // a farm world that never regenerates and never explains why is worse than one that
+                // refuses and says so.
+                if (Files.isSymbolicLink(candidate)) {
+                    log.warn("'{}' is a link rather than a folder, so it will not be deleted and "
+                            + "the farm world cannot be regenerated. Point the world at a real "
+                            + "directory, or mount the fast storage there instead of linking to it.",
+                            candidate);
+                }
                 return false;
             }
             Path folder = candidate.toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();

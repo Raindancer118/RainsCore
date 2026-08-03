@@ -111,6 +111,29 @@ class LootTableTest {
             assertThat(empty.totalWeight()).isZero();
         }
 
+        /**
+         * A review raised this as a defect: {@code totalWeight()} summing a negative weight while
+         * {@code pick()} skips it would shrink the range and make the last entry unreachable. It
+         * would be a real bug if a negative weight could reach a table — it cannot, because
+         * {@link LootEntry} clamps it to zero when it is built. This pins that down, since the
+         * reasoning only holds as long as the clamp does.
+         */
+        @Test
+        @DisplayName("a negative weight is clamped at zero, so the range can never be short")
+        void negativeWeightsCannotShrinkTheRange() {
+            LootTable table = LootTable.builder("hg", "chest")
+                    .entry(LootEntry.of(Material.BREAD, 10))
+                    .entry(LootEntry.of(Material.BEDROCK, -10))
+                    .entry(LootEntry.of(Material.DIAMOND, 10))
+                    .build();
+
+            assertThat(table.totalWeight())
+                    .as("if this were 10 rather than 20, the diamond would be unreachable")
+                    .isEqualTo(20);
+            assertThat(table.entries().get(1).weight()).isZero();
+            assertThat(table.pick(fixed(19)).orElseThrow().material()).isEqualTo(Material.DIAMOND);
+        }
+
         @Test
         @DisplayName("an entry with no weight is never picked, but does not break the others")
         void zeroWeight() {

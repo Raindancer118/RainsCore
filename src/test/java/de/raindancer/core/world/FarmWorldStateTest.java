@@ -186,6 +186,29 @@ class FarmWorldStateTest {
                     .isFalse();
         }
 
+        /**
+         * Raised in review as too strict, because somebody may reasonably point a farm world at a
+         * RAM disk. Kept strict deliberately — deleting through a link is exactly how a recursive
+         * delete reaches somewhere nobody meant — but it now says so in the log rather than
+         * skipping the world for ever without explaining why.
+         */
+        @Test
+        @DisplayName("never through a link, even one pointing at a real world folder")
+        void refusesASymlink() throws IOException {
+            Path real = serverDirectory.resolve("elsewhere");
+            Files.createDirectories(real);
+            Files.writeString(real.resolve("level.dat"), "x");
+            Path link = serverDirectory.resolve("farmworld");
+            try {
+                Files.createSymbolicLink(link, real);
+            } catch (UnsupportedOperationException | IOException notSupported) {
+                return; // No links on this filesystem; nothing to assert.
+            }
+            assertThat(FarmWorldState.mayDelete(serverDirectory, link, "farmworld"))
+                    .as("a recursive delete that follows a link is how the wrong thing gets removed")
+                    .isFalse();
+        }
+
         @Test
         @DisplayName("nulls are refused rather than throwing inside a delete")
         void refusesNulls() {
