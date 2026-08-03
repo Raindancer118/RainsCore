@@ -77,6 +77,42 @@ public final class BukkitVanishSink implements VanishSink {
         }
     }
 
+    /**
+     * The vanilla leave line, to everybody who cannot see them.
+     *
+     * <p>{@code translatable("multiplayer.player.left")} rather than a string of our own: that is the
+     * key the client itself renders, so the line is in the reader's own language and is byte-identical
+     * to a real departure. A hand-written "X left the game" is in English on a German client, which is
+     * precisely the tell this exists to remove.
+     */
+    @Override
+    public void announceDeparture(UUID who, java.util.Set<UUID> exceptThem) {
+        announce(who, exceptThem, "multiplayer.player.left");
+    }
+
+    @Override
+    public void announceArrival(UUID who, java.util.Set<UUID> exceptThem) {
+        announce(who, exceptThem, "multiplayer.player.joined");
+    }
+
+    private void announce(UUID who, java.util.Set<UUID> exceptThem, String key) {
+        Player target = Bukkit.getPlayer(who);
+        if (target == null) {
+            return;
+        }
+        net.kyori.adventure.text.Component line = net.kyori.adventure.text.Component
+                .translatable(key, net.kyori.adventure.text.format.NamedTextColor.YELLOW,
+                        net.kyori.adventure.text.Component.text(target.getName()));
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            // Not to them, and not to anybody who can see them anyway: telling the staff that a
+            // moderator "left" while they can still see them standing there is worse than saying
+            // nothing.
+            if (!viewer.equals(target) && !exceptThem.contains(viewer.getUniqueId())) {
+                viewer.sendMessage(line);
+            }
+        }
+    }
+
     @Override
     public void silentJoinLeave(UUID who, boolean silent) {
         // Nothing to do to the server here: whether a message goes out is decided when the event

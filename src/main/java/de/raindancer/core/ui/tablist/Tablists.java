@@ -10,6 +10,7 @@ import org.bukkit.scoreboard.Team;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.Objects;
 
 /**
@@ -58,9 +59,23 @@ public final class Tablists {
     private final java.util.concurrent.atomic.AtomicLong tick =
             new java.util.concurrent.atomic.AtomicLong();
 
+    /** Who is hidden and should not appear. Nobody, until something says otherwise. */
+    private java.util.function.Supplier<java.util.Set<UUID>> hidden = java.util.Set::of;
+
     public Tablists(TablistModel model, String serverName) {
         this.model = model;
         this.serverName = serverName;
+    }
+
+    /**
+     * Who to leave off the list.
+     *
+     * <p>Pointed at {@code Vanish} by {@code RainsCorePlugin}. Behind a supplier rather than taking the
+     * class, so this package keeps knowing nothing about moderation — and so a server with no vanish at
+     * all still has a tablist.
+     */
+    public void hiddenPlayers(java.util.function.Supplier<java.util.Set<UUID>> hidden) {
+        this.hidden = hidden == null ? java.util.Set::<UUID>of : hidden;
     }
 
     public void serverName(String name) {
@@ -142,7 +157,16 @@ public final class Tablists {
         if (!enabled) {
             return;
         }
-        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+        // Hiding a player's entity is not hiding them from a *custom* tablist: this builds its own
+        // list from getOnlinePlayers(), so a vanished moderator was still on it, name, world and ping.
+        // The one place anybody looks to see who is about.
+        java.util.Set<UUID> hidden = this.hidden.get();
+        List<Player> online = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!hidden.contains(player.getUniqueId())) {
+                online.add(player);
+            }
+        }
         List<TablistEntry> entries = new ArrayList<>(online.size());
         for (Player player : online) {
             entries.add(new TablistEntry(player.getUniqueId(), player.getName(),

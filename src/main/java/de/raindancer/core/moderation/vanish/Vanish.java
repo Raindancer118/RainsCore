@@ -44,6 +44,9 @@ public final class Vanish {
 
     private volatile boolean flightWhileVanished = true;
 
+    /** See {@link #fakeDeparture(boolean)}. On, because being noticed is the thing vanish avoids. */
+    private volatile boolean fakeDeparture = true;
+
     public Vanish(VanishSink sink) {
         this.sink = sink;
     }
@@ -92,6 +95,11 @@ public final class Vanish {
         if (flightWhileVanished && !couldFlyAlready) {
             sink.allowFlight(who, true);
         }
+        if (fakeDeparture) {
+            // So vanishing looks exactly like logging off. Without it, everybody watching sees a
+            // player simply stop existing mid-sentence, which is a louder signal than a leave message.
+            sink.announceDeparture(who, Set.copyOf(maySee));
+        }
         log.info("{} vanished.", who);
         return true;
     }
@@ -109,8 +117,28 @@ public final class Vanish {
             // land in the void when they return.
             sink.allowFlight(who, false);
         }
+        if (fakeDeparture) {
+            // The other half, and not optional if the first half happened: a moderator who "left" and
+            // then reappears without ever "joining" is a moderator everybody works out was hiding.
+            sink.announceArrival(who, Set.copyOf(maySee));
+        }
         log.info("{} is visible again.", who);
         return true;
+    }
+
+    /**
+     * Whether vanishing pretends to be a real departure.
+     *
+     * <p>On by default: the point of hiding is not being noticed, and a player who simply stops existing
+     * mid-conversation is more conspicuous than one who left. A server that would rather say nothing at
+     * all can switch it off.
+     */
+    public void fakeDeparture(boolean fake) {
+        this.fakeDeparture = fake;
+    }
+
+    public boolean isFakingDeparture() {
+        return fakeDeparture;
     }
 
     /** Hides or reveals. Answers whether they are now hidden. */

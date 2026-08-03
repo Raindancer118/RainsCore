@@ -33,6 +33,7 @@ import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.moderation.invsee.Inventories;
 import de.raindancer.core.moderation.invsee.InventoryViews;
 import de.raindancer.core.moderation.players.PlayerAdmin;
+import de.raindancer.core.moderation.players.PlayerPowers;
 import de.raindancer.core.moderation.vanish.Vanish;
 import de.raindancer.core.content.vote.Votes;
 import de.raindancer.core.content.pack.ResourcePacks;
@@ -329,6 +330,16 @@ public interface RainsCore {
      * logged out a moment ago.
      */
     PlayerAdmin players();
+
+    /**
+     * Who cannot be hurt, and who hurts everything in one hit.
+     *
+     * <p>Beside {@link PlayerAdmin} because both are answers to a damage event, and there must be
+     * exactly one plugin on the server deciding what a damage event means. Neither survives a restart:
+     * an invincible player nobody remembers granting it to is indistinguishable from a bug in the damage
+     * system.
+     */
+    PlayerPowers powers();
 
     /**
      * Who is looking inside whose inventory, and what they may touch there.

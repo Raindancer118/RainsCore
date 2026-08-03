@@ -38,6 +38,9 @@ class VanishTest {
     private final List<Did> did = new ArrayList<>();
     private final List<String> announced = new ArrayList<>();
 
+    /** The pretend leave and join lines — see the nested "looking like a real departure" tests. */
+    private final List<String> faked = new ArrayList<>();
+
     private Vanish vanish() {
         return new Vanish(new VanishSink() {
             @Override
@@ -64,11 +67,88 @@ class VanishTest {
             public void silentJoinLeave(UUID who, boolean silent) {
                 announced.add((silent ? "quiet:" : "loud:") + who);
             }
+
+            @Override
+            public void announceDeparture(UUID who, java.util.Set<UUID> exceptThem) {
+                faked.add("left:" + who + " except " + exceptThem.size());
+            }
+
+            @Override
+            public void announceArrival(UUID who, java.util.Set<UUID> exceptThem) {
+                faked.add("joined:" + who + " except " + exceptThem.size());
+            }
         });
     }
 
     private static final UUID MOD = UUID.randomUUID();
     private static final UUID OTHER = UUID.randomUUID();
+
+    @Nested
+    @DisplayName("looking like a real departure")
+    class LookingLikeALeave {
+
+        @Test
+        @DisplayName("vanishing announces a leave, and coming back announces a join")
+        void bothHalves() {
+            // The point of hiding is not being noticed, and a player who simply stops existing
+            // mid-conversation is more conspicuous than one who left. Both halves or neither: a
+            // moderator who "left" and then reappears without ever "joining" is one everybody works
+            // out was hiding.
+            Vanish vanish = vanish();
+
+            vanish.vanish(MOD);
+            assertThat(faked).containsExactly("left:" + MOD + " except 0");
+
+            vanish.reveal(MOD);
+            assertThat(faked).containsExactly("left:" + MOD + " except 0",
+                    "joined:" + MOD + " except 0");
+        }
+
+        @Test
+        @DisplayName("whoever may see them is not told they left")
+        void staffAreNotFooled() {
+            // Telling the staff that a moderator left while they can still see them standing there is
+            // worse than saying nothing at all.
+            Vanish vanish = vanish();
+            vanish.maySeeVanished(OTHER, true);
+
+            vanish.vanish(MOD);
+
+            assertThat(faked).containsExactly("left:" + MOD + " except 1");
+        }
+
+        @Test
+        @DisplayName("a server that would rather say nothing can switch it off")
+        void itCanBeSwitchedOff() {
+            Vanish vanish = vanish();
+            vanish.fakeDeparture(false);
+
+            vanish.vanish(MOD);
+            vanish.reveal(MOD);
+
+            assertThat(faked).isEmpty();
+            assertThat(vanish.isFakingDeparture()).isFalse();
+        }
+
+        @Test
+        @DisplayName("it is on by default, because being noticed is the thing vanish avoids")
+        void onByDefault() {
+            assertThat(vanish().isFakingDeparture()).isTrue();
+        }
+
+        @Test
+        @DisplayName("vanishing twice announces one departure")
+        void notTwice() {
+            // Re-hiding somebody already hidden does nothing at all, and a second leave message would
+            // be the loudest possible way to announce that somebody is using a vanish command.
+            Vanish vanish = vanish();
+
+            vanish.vanish(MOD);
+            vanish.vanish(MOD);
+
+            assertThat(faked).hasSize(1);
+        }
+    }
 
     // ------------------------------------------------------------------ going and coming back
 

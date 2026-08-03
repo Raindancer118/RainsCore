@@ -55,6 +55,8 @@ import de.raindancer.core.moderation.invsee.InventoryViews;
 import de.raindancer.core.moderation.invsee.OfflineEdits;
 import de.raindancer.core.moderation.players.BukkitPlayerAdminSink;
 import de.raindancer.core.moderation.players.PlayerAdmin;
+import de.raindancer.core.moderation.players.PlayerPowerListener;
+import de.raindancer.core.moderation.players.PlayerPowers;
 import de.raindancer.core.moderation.vanish.BukkitVanishSink;
 import de.raindancer.core.moderation.vanish.Vanish;
 import de.raindancer.core.moderation.vanish.VanishListener;
@@ -214,6 +216,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Effects effects;
     private Votes votes;
     private Vanish vanish;
+    private PlayerPowers powers;
     private PlayerAdmin players;
     private InventoryViews inventoryViews;
     private Inventories inventories;
@@ -402,9 +405,20 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects = new Effects(new BukkitEffectSink(), System::currentTimeMillis);
         votes = new Votes(System::currentTimeMillis);
         players = new PlayerAdmin(new BukkitPlayerAdminSink());
+
+        // God mode and instakill. Here rather than in a moderation plugin because they are answers to a
+        // damage event, and there must be exactly one plugin on the server deciding what one means —
+        // see Combat's own class note. Neither survives a restart; see PlayerPowers.
+        powers = new PlayerPowers();
+        getServer().getPluginManager().registerEvents(new PlayerPowerListener(powers), this);
+
         vanish = new Vanish(new BukkitVanishSink(this));
         getServer().getPluginManager().registerEvents(
                 new VanishListener(this, vanish, "rainscore.vanish.see"), this);
+        // Hiding a player's entity does not take them off a *custom* tablist — that list is built from
+        // getOnlinePlayers(), so a vanished moderator was on it with their name, world and ping, in the
+        // one place anybody looks to see who is about.
+        tablists.hiddenPlayers(vanish::everybodyVanished);
         inventoryViews = new InventoryViews(watcher -> {
             org.bukkit.entity.Player looking =
                     getServer().getPlayer(java.util.UUID.fromString(watcher));
@@ -957,6 +971,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public PlayerAdmin players() {
         return players;
+    }
+
+    @Override
+    public PlayerPowers powers() {
+        return powers;
     }
 
     @Override
