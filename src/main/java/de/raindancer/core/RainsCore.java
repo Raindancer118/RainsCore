@@ -11,6 +11,8 @@ import de.raindancer.core.achievement.Achievements;
 import de.raindancer.core.items.CustomItems;
 import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
+import de.raindancer.core.loot.LootFiller;
+import de.raindancer.core.loot.LootTables;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
@@ -158,6 +160,15 @@ public interface RainsCore {
      * be regenerated on a schedule without touching the main ones.
      */
     FarmWorlds farmWorlds();
+
+    /**
+     * Weighted loot tables, by tier — what comes out of a chest and how often. An entry may be a
+     * plain material or one of {@link #items()}, so a supply drop can contain a real custom item.
+     */
+    LootTables lootTables();
+
+    /** Puts a rolled table into an actual container. */
+    LootFiller lootFiller();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();

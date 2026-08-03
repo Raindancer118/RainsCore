@@ -16,6 +16,8 @@ import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.items.CustomItems;
 import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
+import de.raindancer.core.loot.LootFiller;
+import de.raindancer.core.loot.LootTables;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
@@ -100,6 +102,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ItemFactory itemFactory;
     private ItemAbilities itemAbilities;
     private Achievements achievements;
+    private LootTables lootTables;
+    private LootFiller lootFiller;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -146,6 +150,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         items.load();
         itemFactory = new ItemFactory(this);
         itemAbilities = new ItemAbilities(System::currentTimeMillis);
+
+        lootTables = new LootTables(getDataFolder().toPath().resolve("loot.yml"));
+        lootTables.load();
+        lootFiller = new LootFiller(items, itemFactory);
 
         achievements = new Achievements(getDataFolder().toPath().resolve("achievements.yml"),
                 System::currentTimeMillis);
@@ -203,6 +211,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             punishments.flush();
             items.flush();
             achievements.flush();
+            lootTables.flush();
             farmWorlds.state().flush();
         });
         // Its own, much slower timer: regenerating stops the server for as long as the disk takes,
@@ -221,6 +230,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
                 .fact("Achievements", achievements.all().size() + " defined")
+                .fact("Loot tables", lootTables.all().size() + " defined")
                 .fact("Scheduler", Scheduling.isFolia() ? "Folia, regionised" : "Paper");
         for (String problem : places.problems()) {
             banner.warning("places.yml: " + problem);
@@ -254,6 +264,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (achievements != null) {
             achievements.flush();
+        }
+        if (lootTables != null) {
+            lootTables.flush();
         }
         if (tablists != null) {
             // Before anything else: the teams it makes live on the main scoreboard, and one left
@@ -365,6 +378,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public ItemFactory itemFactory() {
         return itemFactory;
+    }
+
+    @Override
+    public LootTables lootTables() {
+        return lootTables;
+    }
+
+    @Override
+    public LootFiller lootFiller() {
+        return lootFiller;
     }
 
     @Override
