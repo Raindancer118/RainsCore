@@ -229,6 +229,61 @@ class TablistTest {
         }
     }
 
+    // ------------------------------------------------------------------ a written header
+
+    @Nested
+    @DisplayName("a header or footer somebody wrote themselves")
+    class CustomText {
+
+        private final List<TablistEntry> online = List.of(
+                entry(ALICE, "A", "world"),
+                entry(BOB, "B", "world_nether"),
+                entry(CAROL, "C", "world"));
+
+        @Test
+        @DisplayName("how many are on")
+        void fillsThePlayerCount() {
+            assertThat(plain(model.custom("<players> on", online, "Rain's SMP")))
+                    .isEqualTo("3 on");
+        }
+
+        @Test
+        @DisplayName("what the server is called")
+        void fillsTheServerName() {
+            assertThat(plain(model.custom("Welcome to <server>", online, "Rain's SMP")))
+                    .isEqualTo("Welcome to Rain's SMP");
+        }
+
+        @Test
+        @DisplayName("how many are in each world — the whole point of the request")
+        void fillsTheWorldCounts() {
+            assertThat(plain(model.custom("<worlds>", online, "Rain's SMP")))
+                    .isEqualTo("Overworld 2 · Nether 1");
+        }
+
+        @Test
+        @DisplayName("colours work, because it is MiniMessage")
+        void keepsColours() {
+            assertThat(plain(model.custom("<gold><players></gold> on", online, "x")))
+                    .isEqualTo("3 on");
+        }
+
+        @Test
+        @DisplayName("a mistyped one is shown as written rather than emptying the list")
+        void survivesBrokenMarkup() {
+            assertThat(plain(model.custom("<notatag>oops", online, "x")))
+                    .as("somebody has to be able to see what they typed in order to fix it")
+                    .contains("oops");
+        }
+
+        @Test
+        @DisplayName("a server name is never parsed as markup")
+        void doesNotParseTheServerName() {
+            assertThat(plain(model.custom("<server>", online, "<red>notacolour")))
+                    .isEqualTo("<red>notacolour");
+        }
+    }
+
     // ------------------------------------------------------------------ sort keys
 
     /**

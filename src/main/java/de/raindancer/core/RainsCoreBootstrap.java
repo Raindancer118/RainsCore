@@ -22,10 +22,11 @@ import org.jetbrains.annotations.NotNull;
  * the server line could have caught it, because the machinery was right and only the registration
  * was in the wrong place.
  *
- * <h2>Why the commands are given a supplier rather than the objects</h2>
- * A bootstrapper runs before {@code onEnable}, so the registry, the chat and the navigation do not
- * exist yet. Each command therefore takes a way to <em>find</em> the running plugin and asks when it
- * is actually run, by which time everything is up.
+ * <h2>Why the commands hold nothing</h2>
+ * A bootstrapper runs before {@code onEnable}, so the registry, the chat, the warps and the farm
+ * worlds do not exist yet. Each command therefore looks the running plugin up through
+ * {@link de.raindancer.core.RainsCore#get()} when it is actually run, by which time everything is
+ * up — and answers nothing at all if it is not, which is the state during a reload.
  */
 public final class RainsCoreBootstrap implements PluginBootstrap {
 
@@ -39,6 +40,13 @@ public final class RainsCoreBootstrap implements PluginBootstrap {
                     "Everything every plugin on this server can be told to do.",
                     java.util.List.of("rcsettings"),
                     new de.raindancer.core.settings.SettingsCommand());
+            event.registrar().register("warp",
+                    "Go to a named place, or manage the list of them.",
+                    new de.raindancer.core.warp.WarpCommand());
+            event.registrar().register("farmworld",
+                    "Go to a farm world, or run one.",
+                    java.util.List.of("fw"),
+                    new de.raindancer.core.world.FarmWorldCommand());
         });
     }
 }

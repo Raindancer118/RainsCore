@@ -44,6 +44,13 @@ public final class Tablists {
     private final TablistModel model;
     private volatile String serverName;
     private volatile boolean showWorldOnEachLine;
+    /** Off leaves the player list exactly as vanilla — nothing here touches it at all. */
+    private volatile boolean enabled = true;
+    /** Off stops the team-sorting, so the list is in whatever order the server likes. */
+    private volatile boolean groupByWorld = true;
+    /** What the owner wrote instead of the built-in header, or empty for the built-in one. */
+    private volatile String customHeader = "";
+    private volatile String customFooter = "";
 
     public Tablists(TablistModel model, String serverName) {
         this.model = model;
@@ -64,12 +71,54 @@ public final class Tablists {
         this.showWorldOnEachLine = show;
     }
 
+    /**
+     * Whether the player list is ours at all.
+     *
+     * <p>Switching it off puts everything back: the teams are removed and no header, footer or name
+     * is sent again. A setting that only stops updating would leave whatever was last drawn on
+     * screen for ever, which is worse than not having the setting.
+     */
+    public void enabled(boolean on) {
+        boolean was = this.enabled;
+        this.enabled = on;
+        if (was && !on) {
+            shutdown();
+            restoreNames();
+        }
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /** Whether players are sorted so everybody in one world is together. */
+    public void groupByWorld(boolean group) {
+        boolean was = this.groupByWorld;
+        this.groupByWorld = group;
+        if (was && !group) {
+            // Leave nothing behind: a team that stops being updated still sorts.
+            shutdown();
+        }
+    }
+
+    /** What the owner wrote instead of the built-in header. Empty uses the built-in one. */
+    public void header(String miniMessage) {
+        this.customHeader = miniMessage == null ? "" : miniMessage;
+    }
+
+    public void footer(String miniMessage) {
+        this.customFooter = miniMessage == null ? "" : miniMessage;
+    }
+
     public TablistModel model() {
         return model;
     }
 
     /** Rebuilds everybody's tablist. Called on a timer, and when somebody joins or changes world. */
     public void refresh() {
+        if (!enabled) {
+            return;
+        }
         List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
         List<TablistEntry> entries = new ArrayList<>(online.size());
         for (Player player : online) {
@@ -77,8 +126,12 @@ public final class Tablists {
                     player.getWorld().getName(), player.getPing()));
         }
 
-        Component header = model.header(entries, serverName);
-        Component footer = model.footer(entries);
+        Component header = customHeader.isBlank()
+                ? model.header(entries, serverName)
+                : model.custom(customHeader, entries, serverName);
+        Component footer = customFooter.isBlank()
+                ? model.footer(entries)
+                : model.custom(customFooter, entries, serverName);
 
         for (Player player : online) {
             try {
@@ -89,7 +142,9 @@ public final class Tablists {
             }
         }
 
-        applyOrder(entries);
+        if (groupByWorld) {
+            applyOrder(entries);
+        }
 
         for (int index = 0; index < online.size(); index++) {
             Player player = online.get(index);
@@ -141,6 +196,19 @@ public final class Tablists {
             } catch (RuntimeException failure) {
                 log.debug("Could not sort {} in the tablist: {}", entry.name(),
                         failure.toString());
+            }
+        }
+    }
+
+    /** Puts every player's name back to plain, for when the custom list is switched off. */
+    private void restoreNames() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            try {
+                player.playerListName(null);
+                player.sendPlayerListHeaderAndFooter(Component.empty(), Component.empty());
+            } catch (RuntimeException gone) {
+                log.debug("Could not restore {}'s tablist entry: {}", player.getName(),
+                        gone.toString());
             }
         }
     }

@@ -26,6 +26,8 @@ import org.bukkit.Material;
                 description = "What is written down, and for how long."),
         @Topic(path = "config/chat", title = "Chat", icon = Material.NAME_TAG,
                 description = "How long a clickable button in chat stays good for."),
+        @Topic(path = "appearance/tablist", title = "Tablist", icon = Material.PLAYER_HEAD,
+                description = "The player list: what it says, and how it is sorted."),
 })
 public record CoreConfig(
 
@@ -84,7 +86,34 @@ public record CoreConfig(
         @In("config/chat") @Title("Button lifetime in minutes") @Range(min = 1, max = 1440)
         @Describe("How long a clickable button in chat stays good for, when the plugin offering it "
                 + "does not say.")
-        int buttonMinutes
+        int buttonMinutes,
+
+        @In("appearance/tablist") @Title("Custom tablist")
+        @Describe("Whether the player list is ours at all. Off leaves it exactly as vanilla.")
+        boolean tablistEnabled,
+
+        @In("appearance/tablist") @Title("Group by world")
+        @Describe("Sorts players so everybody in the same world is together. This is what makes "
+                + "the list say who is where.")
+        boolean tablistGroupByWorld,
+
+        @In("appearance/tablist") @Title("World on every line")
+        @Describe("Also writes the world beside each name. Off by default: the grouping already "
+                + "says it, and saying it twice is noise.")
+        boolean tablistWorldOnEachLine,
+
+        @In("appearance/tablist") @Title("Header")
+        @Describe("What sits above the list. Empty uses the server's name and how many are on.")
+        String tablistHeader,
+
+        @In("appearance/tablist") @Title("Footer")
+        @Describe("What sits below it. Empty lists how many players are in each world.")
+        String tablistFooter,
+
+        @In("appearance/tablist") @Title("Refresh every (ticks)") @Range(min = 10, max = 200)
+        @Describe("How often the list is rebuilt. A player's ping changes continuously, so an "
+                + "event-only list would show a stale one for ever.")
+        int tablistRefreshTicks
 
 ) {
 
@@ -103,5 +132,6 @@ public record CoreConfig(
             "", "", "", "", "", "", "", "", "", "",
             "▸",
             LogLevel.INFO, LogLevel.INFO, 14,
-            15);
+            15,
+            true, true, false, "", "", 40);
 }

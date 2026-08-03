@@ -152,6 +152,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         achievements.load();
 
         tablists = new Tablists(new TablistModel(identities), getServer().getMotd());
+        applyTablistSettings();
+        // Applied again whenever they change, so switching the custom list off in a menu puts
+        // every name back rather than freezing whatever was last drawn.
+        settings.onChange(config -> applyTablistSettings());
         warps = new Warps(places, System::currentTimeMillis);
 
         FarmWorldState farmState = new FarmWorldState(
@@ -279,6 +283,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * other plugin's hands to serve an implementation detail would be rude. Here only the namespaced
      * form exists, which is the only one a button ever uses.
      */
+    /** Reads the tablist's half of the settings onto it. */
+    private void applyTablistSettings() {
+        CoreConfig config = settings.current();
+        tablists.enabled(config.tablistEnabled());
+        tablists.groupByWorld(config.tablistGroupByWorld());
+        tablists.showWorldOnEachLine(config.tablistWorldOnEachLine());
+        tablists.header(config.tablistHeader());
+        tablists.footer(config.tablistFooter());
+    }
+
     /**
      * Points the logger at the data folder and at whatever the settings currently say.
      *

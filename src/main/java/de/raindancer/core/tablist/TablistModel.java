@@ -207,6 +207,44 @@ public final class TablistModel {
         return MINI.deserialize(built.append('\n').toString());
     }
 
+    /**
+     * A header or footer a server owner wrote, with the placeholders filled in.
+     *
+     * <p>Deliberately few of them, and each answers a question somebody actually asks: how many are
+     * on, what the server is called, and how many are in each world. A full expression language
+     * here would be a second settings system nobody asked for.
+     */
+    public Component custom(String miniMessage, List<TablistEntry> online, String serverName) {
+        int count = online == null ? 0 : online.size();
+        String name = serverName == null || serverName.isBlank() ? "This server" : serverName.trim();
+        String filled = miniMessage
+                .replace("<players>", String.valueOf(count))
+                .replace("<server>", escape(name))
+                .replace("<worlds>", worldCounts(online))
+                .replace("\\n", "\n");
+        try {
+            return MINI.deserialize(filled);
+        } catch (RuntimeException broken) {
+            // A header somebody mistyped must not empty the tablist: show it as written, so they
+            // can see what they wrote and fix it.
+            return Component.text(filled);
+        }
+    }
+
+    /** "Overworld 3 · Nether 1" — what {@code <worlds>} becomes. */
+    private String worldCounts(List<TablistEntry> online) {
+        List<TablistGroup> groups = groups(online);
+        StringBuilder built = new StringBuilder();
+        for (int index = 0; index < groups.size(); index++) {
+            if (index > 0) {
+                built.append(" · ");
+            }
+            built.append(escape(groups.get(index).label())).append(' ')
+                    .append(groups.get(index).size());
+        }
+        return built.toString();
+    }
+
     // ------------------------------------------------------------------------ ordering
 
     /**
