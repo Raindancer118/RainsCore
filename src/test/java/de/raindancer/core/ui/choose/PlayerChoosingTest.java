@@ -112,4 +112,38 @@ class PlayerChoosingTest {
         assertThat(directory.size()).isZero();
         assertThat(directory.byName("Anybody")).isEmpty();
     }
+
+    @Test
+    @DisplayName("the directory is read once, not once per question asked of it")
+    void thelistIsSnapshotted() {
+        // PlayerDirectory calls its supplier on every query — everybody(), bySection(), presenceOf() and the
+        // rest. That is right for the directory, which does not know how expensive its source is.
+        //
+        // It is fatal for a chooser whose source is Bukkit.getOfflinePlayers(), which reads the whole player
+        // directory off disk: on a long-running server that is thousands of files, on the main thread, and a
+        // paginated screen asks several questions per render. So the chooser has to snapshot, and this is the
+        // test that says so — the comment in PlayerChooser claimed it did before it actually did.
+        int[] reads = {0};
+        PlayerDirectory live = new PlayerDirectory(() -> {
+            reads[0]++;
+            return List.of(player("Somebody", true, NOW), player("Else", false, NOW - 5_000L));
+        }, () -> NOW);
+
+        PlayerDirectory snapshot = PlayerChooser.snapshotOf(live);
+        int afterSnapshot = reads[0];
+        assertThat(afterSnapshot).as("the snapshot has to read it at least once").isPositive();
+
+        // Everything a paginated render asks, several times over.
+        snapshot.everybody();
+        snapshot.bySection();
+        snapshot.everybody();
+        snapshot.search("some");
+
+        assertThat(reads[0])
+                .as("the whole point: the disk is not touched again however often the screen asks")
+                .isEqualTo(afterSnapshot);
+        assertThat(snapshot.everybody())
+                .as("and it still answers with the same people")
+                .hasSize(2);
+    }
 }

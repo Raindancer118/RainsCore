@@ -74,14 +74,30 @@ public final class PlayerChooser extends PaginatedMenu<PlayerEntry> {
         if (exclude != null && !exclude.isEmpty()) {
             narrowed = narrowed.excluding(exclude.toArray(UUID[]::new));
         }
-        this.directory = narrowed.countingRecentAs(RECENTLY);
+        this.directory = snapshotOf(narrowed).countingRecentAs(RECENTLY);
+    }
+
+    /**
+     * Reads a directory once and hands back one that will not read it again.
+     *
+     * <p>{@link PlayerDirectory} calls its supplier on every question asked of it — {@code everybody()},
+     * {@code bySection()}, {@code presenceOf()}. That is right for the directory, which cannot know how
+     * expensive its source is, and fatal for a chooser whose source is {@link Bukkit#getOfflinePlayers()}:
+     * that reads the whole player directory off disk, on the main thread, and a paginated screen asks several
+     * questions per render. On a server that has been up for a year it is thousands of files, per page turn.
+     *
+     * <p>So the list is taken once, here, and everything after that is asked of the copy. A name that changes
+     * while somebody is staring at the screen is not worth a stutter.
+     */
+    static PlayerDirectory snapshotOf(PlayerDirectory source) {
+        List<PlayerEntry> once = List.copyOf(source.everybody());
+        return new PlayerDirectory(() -> once, System::currentTimeMillis);
     }
 
     /**
      * Everybody the server has a record of, online or not.
      *
-     * <p>{@code getOfflinePlayers} reads the whole player directory off disk, which is why this is built once
-     * when the screen opens rather than per page: on a long-running server that is thousands of files.
+     * <p>Read exactly once, through {@link #snapshotOf}.
      */
     private static PlayerDirectory fromServer() {
         return new PlayerDirectory(() -> {
