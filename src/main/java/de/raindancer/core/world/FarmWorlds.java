@@ -153,7 +153,19 @@ public final class FarmWorlds {
                 allBack = false;
             }
         }
-        state.recordRegenerated(set.name(), Instant.now());
+        Instant now = Instant.now();
+        // The attempt is always recorded, so a set that cannot be made does not retry every minute.
+        state.recordAttempt(set.name(), now);
+        if (allBack) {
+            state.recordRegenerated(set.name(), now);
+        } else {
+            // Deliberately not recorded as regenerated. Doing so — which this used to — reset the
+            // schedule as though it had worked, and left a depleted farm world depleted for the
+            // whole period with nothing further in the log.
+            log.error("'{}' was not fully made again. It stays due, and will be tried again in {}.",
+                    set.name(),
+                    de.raindancer.core.moderation.Durations.describe(FarmWorldState.RETRY_AFTER));
+        }
         state.flush();
         return allBack;
     }

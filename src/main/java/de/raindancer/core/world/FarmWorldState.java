@@ -43,6 +43,8 @@ public final class FarmWorldState {
     private final Path file;
     private final Map<String, WorldSet> sets = new ConcurrentHashMap<>();
     private final Map<String, Instant> madeAt = new ConcurrentHashMap<>();
+    /** When a set was last <em>tried</em>, whether or not it worked. See {@link #due}. */
+    private final Map<String, Instant> triedAt = new ConcurrentHashMap<>();
     private final AtomicBoolean dirty = new AtomicBoolean();
 
     public FarmWorldState(Path file) {
@@ -100,10 +102,36 @@ public final class FarmWorldState {
         }
     }
 
-    /** Every set whose time is up. */
+    /**
+     * How long to wait before trying again after a regeneration that did not work.
+     *
+     * <p>Long enough that a set which cannot be made — a locked file, a folder that is a link —
+     * does not retry every minute and fill the log; short enough that it is not a week before
+     * anybody looks. The difference matters: recording a failure as a success, which is what this
+     * used to do, left a depleted farm world depleted for the whole period with nothing said.
+     */
+    public static final Duration RETRY_AFTER = Duration.ofHours(1);
+
+    /** Records that a set was tried, whether or not it worked. */
+    public void recordAttempt(String name, Instant when) {
+        if (name != null && when != null) {
+            triedAt.put(name.trim().toLowerCase(Locale.ROOT), when);
+        }
+    }
+
+    /**
+     * Every set whose time is up.
+     *
+     * <p>A set that was tried and failed is held off for {@link #RETRY_AFTER} rather than for its
+     * whole period: it still needs making, and the alternative is a week of nobody noticing.
+     */
     public List<WorldSet> due(Instant now) {
         return sets.values().stream()
                 .filter(set -> set.isDue(madeAt.get(set.name()), now))
+                .filter(set -> {
+                    Instant tried = triedAt.get(set.name());
+                    return tried == null || !now.isBefore(tried.plus(RETRY_AFTER));
+                })
                 .toList();
     }
 

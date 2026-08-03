@@ -98,6 +98,41 @@ class FarmWorldStateTest {
             assertThat(state.due(now)).extracting(WorldSet::name).containsExactly("weekly");
         }
 
+        /**
+         * Raised in review: a regeneration that failed was still recorded as having happened, so
+         * the schedule reset and the farm world stayed depleted for another full week with nothing
+         * in the log after the first complaint. A failure now retries sooner instead.
+         */
+        @Test
+        @DisplayName("a failed attempt does not reset the schedule, but does space out the retries")
+        void aFailedAttemptRetriesSooner() {
+            state.define(WorldSet.builder("farmworld").every(Duration.ofDays(7)).build());
+            Instant now = Instant.ofEpochSecond(1_700_000_000);
+            state.recordRegenerated("farmworld", now.minus(Duration.ofDays(8)));
+            assertThat(state.due(now)).hasSize(1);
+
+            state.recordAttempt("farmworld", now);
+
+            assertThat(state.due(now.plus(Duration.ofMinutes(1))))
+                    .as("it must not hammer a set that cannot be made")
+                    .isEmpty();
+            assertThat(state.due(now.plus(FarmWorldState.RETRY_AFTER).plusSeconds(1)))
+                    .as("but it must try again, rather than waiting out the whole week")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a successful regeneration resets the whole schedule")
+        void successResetsTheSchedule() {
+            state.define(WorldSet.builder("farmworld").every(Duration.ofDays(7)).build());
+            Instant now = Instant.ofEpochSecond(1_700_000_000);
+            state.recordAttempt("farmworld", now.minus(Duration.ofDays(1)));
+            state.recordRegenerated("farmworld", now);
+
+            assertThat(state.due(now.plus(Duration.ofDays(1)))).isEmpty();
+            assertThat(state.due(now.plus(Duration.ofDays(8)))).hasSize(1);
+        }
+
         @Test
         @DisplayName("a set can be forgotten")
         void undefines() {
