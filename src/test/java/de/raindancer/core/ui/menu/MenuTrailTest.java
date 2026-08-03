@@ -159,4 +159,34 @@ class MenuTrailTest {
                 .as("the child page still has a title of its own, and that is the one that matters")
                 .contains("Trusted people");
     }
+
+    @Test
+    @DisplayName("a long page name stays inside the window frame, with room to spare")
+    void alongTitleDoesNotTouchTheEdge() {
+        // From a screenshot: "Claims » Where nobody may cl…" — the clip had run, the ellipsis was there, and the
+        // text still reached the right-hand edge of the window. So the budget was not wrong about clipping, it
+        // was wrong about how much room a chest title actually has.
+        //
+        // The frame is 176 pixels wide and the title is drawn eight in from the left, which leaves 160 before it
+        // meets the far edge. Filling all 160 is what produced a title touching the border, so the budget keeps
+        // a margin and this test is the thing that stops somebody widening it back.
+        String rendered = plain(new Page("Where nobody may claim", null).windowTitle());
+
+        assertThat(de.raindancer.core.platform.util.FontWidth.of(rendered))
+                .as("a title that reaches the frame reads as a rendering fault, whether it was clipped or not")
+                .isLessThanOrEqualTo(150);
+    }
+
+    @Test
+    @DisplayName("the margin is not so generous that ordinary names get cut")
+    void ashortTitleIsLeftWhole() {
+        // The other half: a budget tightened too far starts clipping names nobody would call long, and the
+        // ellipsis then looks like a bug in a different place.
+        for (String page : java.util.List.of("Greetings", "Fence", "People", "Configuration", "The manual")) {
+            assertThat(plain(new Page(page, null).windowTitle()))
+                    .as("'" + page + "' is a name that has to survive whole")
+                    .contains(page)
+                    .doesNotContain("\u2026");
+        }
+    }
 }

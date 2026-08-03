@@ -154,6 +154,11 @@ public abstract class Menu implements InventoryHolder {
         }
         layoutBands();
         decorate();
+        // Again, because band(), toolbar() and cell() buffer rather than place, and decorate() is the obvious
+        // place to put chrome that does not depend on the page's contents. Flushed only once, before decorate,
+        // anything asked for there went into the buffer and was silently never drawn — no error, no log line,
+        // just a missing button. The flush empties the buffer as it writes, so nothing lands twice.
+        layoutBands();
         paintChrome();
     }
 
@@ -245,6 +250,12 @@ public abstract class Menu implements InventoryHolder {
             place(grid.getValue(), grid.getKey(), 0, 8);
         }
         place(pendingToolbar, MenuLayout.TOOLBAR_ROW, 1, 7);
+        // Emptied as it is written, because this runs twice per render — once for what render() asked for and
+        // once for what decorate() did. Left full, a band of three would be laid out again as a band of six and
+        // centre itself somewhere neither belongs.
+        pendingBands.clear();
+        pendingCells.clear();
+        pendingToolbar.clear();
     }
 
     private void place(NavigableMap<Integer, Placement> row, int rowIndex,

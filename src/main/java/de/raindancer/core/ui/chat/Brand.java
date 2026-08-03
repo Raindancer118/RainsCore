@@ -50,7 +50,18 @@ public final class Brand {
      * does not already use, which is the other half of the same mistake: a seven-letter bold tag costs
      * three times what a three-letter one does.
      */
-    private static final int TITLE_PIXELS = 154;
+    /**
+     * How wide a chest window's title may be, in pixels.
+     *
+     * <p>The frame is 176 wide and the title is drawn eight in from the left, so 160 is where it meets the far
+     * edge. 154 spent every pixel of that and produced titles pressed against the border — "Claims » Where
+     * nobody may cl…", clipped correctly and still touching the frame, which reads as a rendering fault whether
+     * the ellipsis is there or not.
+     *
+     * <p>146 leaves a margin. Tightening it further starts clipping names nobody would call long, and an
+     * ellipsis on "Configuration" looks like a different bug, so both ends of this are pinned by tests.
+     */
+    private static final int TITLE_PIXELS = 146;
 
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
 

@@ -51,6 +51,19 @@ public abstract class PaginatedMenu<T> extends Menu {
         return Icons.of(Material.COBWEB, "<" + Style.itemLore() + ">Nothing here yet");
     }
 
+    /**
+     * What clicking that icon does, for a list whose empty state has a way out of it.
+     *
+     * <p>Does nothing by default, so every existing list behaves exactly as it did and only the screens with
+     * something to offer opt in.
+     *
+     * <p>Worth having because the empty icon usually names the way out — "start one with /claim new" — and being
+     * unclickable made it read as broken rather than as instructions. Everything else on a page is clickable; the
+     * one thing that is not is the one thing a player tries first.
+     */
+    protected void emptyAction(InventoryClickEvent event) {
+    }
+
     @Override
     protected void render() {
         List<T> all = entries();
@@ -58,7 +71,7 @@ public abstract class PaginatedMenu<T> extends Menu {
         page = MenuLayout.clampPage(page, pages);
 
         if (all.isEmpty()) {
-            set(MenuLayout.bandSlot(MenuLayout.RULES, 4), emptyIcon());
+            set(MenuLayout.bandSlot(MenuLayout.RULES, 4), emptyIcon(), this::emptyAction);
             return;
         }
         int from = MenuLayout.pageStart(page, PER_PAGE);
