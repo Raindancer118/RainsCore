@@ -12,6 +12,7 @@ import de.raindancer.core.chat.Style;
 import de.raindancer.core.gui.MenuListener;
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
 import de.raindancer.core.platform.BukkitBarViewers;
@@ -75,6 +76,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private BossBars bossBars;
     private PoiStore places;
     private Identities identities;
+    private Punishments punishments;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -106,6 +108,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         identities = new Identities(getDataFolder().toPath().resolve("identities.yml"));
         identities.load();
+
+        punishments = new Punishments(getDataFolder().toPath().resolve("punishments.yml"),
+                System::currentTimeMillis);
+        punishments.load();
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -130,6 +136,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> {
             places.flush();
             identities.flush();
+            punishments.flush();
         });
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
@@ -139,6 +146,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                         + settings.schema().topics().visibleRoots().size() + " topics")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
+                .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Scheduler", Scheduling.isFolia() ? "Folia, regionised" : "Paper");
         for (String problem : places.problems()) {
             banner.warning("places.yml: " + problem);
@@ -160,6 +168,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (identities != null) {
             identities.flush();
+        }
+        if (punishments != null) {
+            punishments.flush();
         }
         if (bossBars != null) {
             bossBars.shutdown();
@@ -277,6 +288,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Scoreboards scoreboards() {
         return scoreboards;
+    }
+
+    @Override
+    public Punishments punishments() {
+        return punishments;
     }
 
     @Override

@@ -7,6 +7,7 @@ import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
 import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.identity.Identities;
+import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
@@ -98,6 +99,12 @@ public interface RainsCore {
      * their head, and the colour of their name.
      */
     Identities identities();
+
+    /**
+     * Bans, mutes, freezes and the record of who did what — for any plugin that needs to refuse
+     * somebody something and remember that it did.
+     */
+    Punishments punishments();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();

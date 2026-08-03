@@ -65,7 +65,7 @@ public final class LogFile implements AutoCloseable {
     private static final int QUEUE_CAPACITY = 8192;
 
     /** Past this the day's file is continued in a second part, so no single file becomes unopenable. */
-    private static final long MAX_BYTES_PER_PART = 32L * 1024 * 1024;
+    static final long DEFAULT_MAX_BYTES_PER_PART = 32L * 1024 * 1024;
 
     /** How long the drain waits for a line before looking at {@link #stopping} again. */
     private static final long POLL_MILLIS = 200;
@@ -76,6 +76,16 @@ public final class LogFile implements AutoCloseable {
     private final Path directory;
     private final int retentionDays;
     private final ZoneId zone;
+    /**
+     * When a day's file is continued in another part.
+     *
+     * <p>A field rather than the constant it was, so the rotation can be tested without writing
+     * sixty-four megabytes to prove it. That is not a courtesy to the tests: a rotation test that
+     * has to allocate real megabytes is one that depends on the disk having room and on sparse
+     * files behaving, which is exactly the sort of thing that fails once in fifty runs and teaches
+     * everyone to re-run the build rather than read it.
+     */
+    private final long maxBytesPerPart;
 
     private final BlockingQueue<String> pending = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
     private final AtomicLong dropped = new AtomicLong();
@@ -105,6 +115,12 @@ public final class LogFile implements AutoCloseable {
      * @param retentionDays how many days of logs to keep, at least one
      */
     public LogFile(Path directory, int retentionDays, ZoneId zone) {
+        this(directory, retentionDays, zone, DEFAULT_MAX_BYTES_PER_PART);
+    }
+
+    /** @param maxBytesPerPart when to continue the day in another part */
+    LogFile(Path directory, int retentionDays, ZoneId zone, long maxBytesPerPart) {
+        this.maxBytesPerPart = Math.max(1L, maxBytesPerPart);
         this.directory = directory;
         this.retentionDays = Math.max(1, retentionDays);
         this.zone = zone;
@@ -208,7 +224,7 @@ public final class LogFile implements AutoCloseable {
     private Writer writerFor(int incomingLength) throws IOException {
         LocalDate today = LocalDate.now(zone);
         boolean newDay = !today.equals(openDay);
-        boolean tooBig = openBytes + incomingLength > MAX_BYTES_PER_PART;
+        boolean tooBig = openBytes + incomingLength > maxBytesPerPart;
         if (open != null && !newDay && !tooBig) {
             return open;
         }
@@ -248,7 +264,7 @@ public final class LogFile implements AutoCloseable {
         }
         Path candidate = fileFor(day, highest);
         try {
-            if (Files.exists(candidate) && Files.size(candidate) >= MAX_BYTES_PER_PART) {
+            if (Files.exists(candidate) && Files.size(candidate) >= maxBytesPerPart) {
                 return highest + 1;
             }
         } catch (IOException unreadable) {

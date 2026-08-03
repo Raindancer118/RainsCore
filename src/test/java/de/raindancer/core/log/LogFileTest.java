@@ -207,25 +207,34 @@ class LogFileTest {
      * end of the full part 1, its second to part 2, and so on — a startup sequence scattered one line
      * at a time across the tails of every part of the day.
      */
+    /**
+     * The part cap is injected rather than real.
+     *
+     * <p>This test used to allocate two sparse 32 MiB files to prove the same thing, which made it
+     * depend on the disk having room and on sparse files behaving — and it failed once, in a full
+     * build, for reasons nothing here could reproduce. A rotation test should exercise the
+     * arithmetic, not the filesystem.
+     */
+    private static final long TINY_PART = 64L;
+
     @Test
     @DisplayName("a restart continues after a full part instead of writing into it")
     void resumesAfterAFullPart(@TempDir Path directory) throws IOException {
         Files.createDirectories(directory);
         Path part1 = todaysFile(directory);
         Path part2 = directory.resolve(part1.getFileName().toString().replace(".log", "-2.log"));
-        // A part is "full" at 32 MiB. Written sparsely so the test does not cost 64 MB of disk.
-        writeSparseFile(part1, 32L * 1024 * 1024);
-        writeSparseFile(part2, 32L * 1024 * 1024);
+        Files.writeString(part1, "x".repeat((int) TINY_PART));
+        Files.writeString(part2, "x".repeat((int) TINY_PART));
 
-        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault())) {
+        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault(), TINY_PART)) {
             file.write("the server started");
         }
 
         Path part3 = directory.resolve(part1.getFileName().toString().replace(".log", "-3.log"));
         assertThat(part3).exists();
         assertThat(Files.readString(part3)).contains("the server started");
-        assertThat(Files.size(part1)).isEqualTo(32L * 1024 * 1024);
-        assertThat(Files.size(part2)).isEqualTo(32L * 1024 * 1024);
+        assertThat(Files.size(part1)).isEqualTo(TINY_PART);
+        assertThat(Files.size(part2)).isEqualTo(TINY_PART);
     }
 
     @Test
@@ -234,10 +243,10 @@ class LogFileTest {
         Files.createDirectories(directory);
         Path part1 = todaysFile(directory);
         Path part2 = directory.resolve(part1.getFileName().toString().replace(".log", "-2.log"));
-        writeSparseFile(part1, 32L * 1024 * 1024);
+        Files.writeString(part1, "x".repeat((int) TINY_PART));
         Files.writeString(part2, "room left here\n");
 
-        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault())) {
+        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault(), TINY_PART)) {
             file.write("the server started");
         }
 
@@ -249,9 +258,9 @@ class LogFileTest {
     void publishesTheCurrentFile(@TempDir Path directory) throws Exception {
         Files.createDirectories(directory);
         Path part1 = todaysFile(directory);
-        writeSparseFile(part1, 32L * 1024 * 1024);
+        Files.writeString(part1, "x".repeat((int) TINY_PART));
 
-        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault())) {
+        try (LogFile file = new LogFile(directory, 7, ZoneId.systemDefault(), TINY_PART)) {
             // Before anything is written the answer is where the first line would go.
             assertThat(file.currentFile()).isEqualTo(part1);
             file.write("rolled");
@@ -266,13 +275,4 @@ class LogFileTest {
         }
     }
 
-    /** A file of the right size without writing the bytes, so the rotation tests stay cheap. */
-    private static void writeSparseFile(Path file, long bytes) throws IOException {
-        try (var channel = java.nio.channels.FileChannel.open(file,
-                java.nio.file.StandardOpenOption.CREATE,
-                java.nio.file.StandardOpenOption.WRITE)) {
-            channel.position(bytes - 1);
-            channel.write(java.nio.ByteBuffer.wrap(new byte[] {'\n'}));
-        }
-    }
 }
