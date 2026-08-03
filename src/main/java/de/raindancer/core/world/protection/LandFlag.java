@@ -55,8 +55,42 @@ public enum LandFlag {
     SNOW_ICE_FORM(Material.PACKED_ICE, true),
     FALL_DAMAGE(Material.FEATHER, true, true),
     HUNGER(Material.COOKED_BEEF, true, true),
-    ITEM_DROP_ON_DEATH(Material.TOTEM_OF_UNDYING, false, true),
+    /**
+     * Whether somebody dying here keeps what they were carrying.
+     *
+     * <p>Was called {@code ITEM_DROP_ON_DEATH} and meant the opposite of what it said: the name read as "items
+     * drop", the description said "keep inventory", and true meant keeping. An old file's value is read into
+     * this one unchanged — see {@link #byKey} — so a server that had it on keeps it on.
+     *
+     * <p>Off is vanilla, and then {@link #ITEM_DROPS} decides whether the pile appears.
+     */
+    KEEP_INVENTORY(Material.TOTEM_OF_UNDYING, false, true),
+
+    /**
+     * Whether the pile appears at all when somebody dies without keeping their things.
+     *
+     * <p>The third outcome, and the one that had no flag: not kept and not dropped, simply gone. An arena that
+     * hands out its own kit wants exactly this — with plain vanilla the floor fills with other people's armour,
+     * and with keep-inventory nobody loses anything and there is no stake.
+     *
+     * <p>Only consulted when {@link #KEEP_INVENTORY} is off. Keeping beats dropping: somebody who keeps their
+     * inventory has nothing to drop.
+     */
+    ITEM_DROPS(Material.DROPPER, true, true),
     ELYTRA_FLIGHT(Material.ELYTRA, true, true, EnumSet.of(LandAudience.OWNER)),
+
+    /**
+     * Whether a riptide trident may be used here.
+     *
+     * <p>Its own flag rather than folded into the elytra one, because they are refused for different reasons.
+     * An elytra is banned to stop people flying over a wall; a trident is banned because it launches somebody
+     * through one from a standing start, in rain, with no run-up — which is the trick that gets past a border
+     * an elytra rule already covers.
+     *
+     * <p>Audience aware and allowed by default, like the elytra: most claims do not care, and the ones that do
+     * usually want the owner exempt.
+     */
+    RIPTIDE(Material.TRIDENT, true, true, EnumSet.of(LandAudience.OWNER)),
     ENDER_PEARL_IN(Material.ENDER_PEARL, true, true,
             EnumSet.of(LandAudience.OWNER, LandAudience.TRUSTED)),
     TELEPORT_IN(Material.COMPASS, true, true,
@@ -150,8 +184,11 @@ public enum LandFlag {
                 return Optional.of(flag);
             }
         }
-        // Retired here rather than removed silently: these three were claim notifications rather than
-        // world protection and now live with the claims module. A caller can tell "moved" from "typo".
+        // An old file's name for what is now KEEP_INVENTORY. Read rather than ignored, because ignoring it
+        // would silently switch keep-inventory off on every server that had it on.
+        if (normalised.equals("ITEM_DROP_ON_DEATH")) {
+            return Optional.of(KEEP_INVENTORY);
+        }
         return Optional.empty();
     }
 

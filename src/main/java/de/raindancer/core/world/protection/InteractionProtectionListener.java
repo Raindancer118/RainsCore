@@ -300,6 +300,31 @@ public final class InteractionProtectionListener implements Listener {
         who.sendActionBar(messages.prefixed("land.potions-refused", "claim", where));
     }
 
+    /**
+     * A riptide trident, which is a way over a wall from a standing start.
+     *
+     * <p>Its own flag rather than the elytra's: an elytra needs height and a run-up, a trident needs rain and a
+     * click, so a border that stops one does not stop the other.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onRiptide(org.bukkit.event.player.PlayerRiptideEvent event) {
+        Player player = event.getPlayer();
+        if (!land.landFlags().isEnforced(LandFlag.RIPTIDE) || land.isBypassing(player)) {
+            return;
+        }
+        if (land.landFlags().isAllowedAt(player.getLocation(), LandFlag.RIPTIDE, player.getUniqueId())) {
+            return;
+        }
+        // PlayerRiptideEvent cannot be cancelled — the client has already launched — so the velocity is taken
+        // away on the next tick instead. Stopping them dead rather than letting them sail over the wall.
+        player.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+        land.areaAt(player.getLocation()).ifPresent(area -> refuseRiptide(player, area));
+    }
+
+    private void refuseRiptide(Player who, ProtectedArea area) {
+        who.sendActionBar(messages.prefixed("land.riptide-refused", "claim", area.name()));
+    }
+
     /** Whether potions are allowed for this person on this ground. */
     private boolean potionsAllowedFor(Player who, org.bukkit.Location where) {
         return land.landFlags().isAllowedAt(where, LandFlag.POTIONS, who.getUniqueId());

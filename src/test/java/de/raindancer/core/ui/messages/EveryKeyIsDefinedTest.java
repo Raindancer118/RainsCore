@@ -92,6 +92,11 @@ class EveryKeyIsDefinedTest {
             keys.add(audience.nameKey());
             keys.add(audience.descriptionKey());
         }
+        for (de.raindancer.core.world.protection.LandFlagGroup group
+                : de.raindancer.core.world.protection.LandFlagGroup.values()) {
+            keys.add(group.nameKey());
+            keys.add(group.descriptionKey());
+        }
         return Set.copyOf(keys);
     }
 

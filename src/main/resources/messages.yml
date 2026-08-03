@@ -180,6 +180,7 @@ land:
   denied: "<red>You may not <white><permission></white> in <white><claim></white>."
   pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
   potions-refused: "<red>Potions are not allowed in <white><claim></white>."
+  riptide-refused: "<red>Riptide is not allowed in <white><claim></white>."
 
   audience:
     owner:
@@ -191,6 +192,15 @@ land:
     visitor:
       name: "Visitors"
       description: "Everybody else"
+
+  flag-group:
+    combat: {name: "Fighting & harm", description: "Who may hurt whom, and what hurts them"}
+    nature: {name: "Nature", description: "What the ground and the weather do on their own"}
+    mobs: {name: "Creatures", description: "Where they appear, whether they come in, what they may break"}
+    travel: {name: "Getting in", description: "Ways in and out that are not walking"}
+    border: {name: "Across the border", description: "What somebody outside can reach in with"}
+    death: {name: "Dying here", description: "What happens to what you were carrying"}
+    other: {name: "Everything else", description: "Rules not filed anywhere yet"}
 
   flag:
     pvp: {name: "PvP", description: "Players may damage each other"}
@@ -211,8 +221,10 @@ land:
     snow-ice-form: {name: "Snow & ice", description: "Snow and ice may form or melt"}
     fall-damage: {name: "Fall damage", description: "Players take fall damage"}
     hunger: {name: "Hunger", description: "Players lose food"}
-    item-drop-on-death: {name: "Keep inventory", description: "Players keep their items on death — off means vanilla"}
+    keep-inventory: {name: "Keep inventory", description: "Players keep what they carried when they die here"}
+    item-drops: {name: "Items drop", description: "Off means what they carried is gone rather than dropped — only when they do not keep it"}
     elytra-flight: {name: "Elytra", description: "Players may fly with an elytra"}
+    riptide: {name: "Riptide", description: "Players may launch themselves with a riptide trident"}
     ender-pearl-in: {name: "Ender pearls", description: "Players may pearl in"}
     teleport-in: {name: "Teleport in", description: "Players may teleport in"}
     potions: {name: "Potions", description: "Potions may be drunk, thrown or left lingering here"}

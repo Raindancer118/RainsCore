@@ -258,6 +258,45 @@ public final class EnvironmentProtectionListener implements Listener {
         }
     }
 
+    /**
+     * What happens to somebody's things when they die here.
+     *
+     * <p>Three outcomes rather than vanilla's two, which is the whole reason these are two flags:
+     *
+     * <ul>
+     *   <li><b>Keep inventory</b> — they get up with everything. Beats the other flag; somebody who keeps their
+     *       things has nothing to drop.</li>
+     *   <li><b>Items drop</b> — vanilla. The pile appears where they fell.</li>
+     *   <li><b>Neither</b> — the things are gone. An arena that hands out its own kit wants this: vanilla fills
+     *       the floor with other people's armour, and keep-inventory removes the stake entirely.</li>
+     * </ul>
+     *
+     * <p>Experience follows the items. Keeping your sword and losing thirty levels is a rule nobody asked for,
+     * and dropping experience where the items vanished leaves a glowing pile marking a death that cost nothing.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        org.bukkit.Location where = player.getLocation();
+
+        if (land.landFlags().isEnforced(LandFlag.KEEP_INVENTORY)
+                && land.landFlags().isAllowedAt(where, LandFlag.KEEP_INVENTORY, player.getUniqueId())) {
+            event.setKeepInventory(true);
+            event.getDrops().clear();
+            event.setKeepLevel(true);
+            event.setDroppedExp(0);
+            return;
+        }
+
+        if (land.landFlags().isEnforced(LandFlag.ITEM_DROPS)
+                && !land.landFlags().isAllowedAt(where, LandFlag.ITEM_DROPS, player.getUniqueId())) {
+            // Not kept and not dropped: gone. Cleared rather than kept, which is the difference between this
+            // and the flag above.
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+        }
+    }
+
     // ------------------------------------------------------------ visitor comfort
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -302,22 +341,4 @@ public final class EnvironmentProtectionListener implements Listener {
         }
     }
 
-    /**
-     * Keeps a player's inventory when they die inside a claim that promises it.
-     * <p>
-     * The flag reads "items drop on death", so <em>denying</em> it is what keeps the inventory — off means
-     * vanilla. Experience is kept along with the items: dying with your gear but without the levels to
-     * repair it is not what anybody means by "keep inventory".
-     */
-    @EventHandler(priority = EventPriority.LOW)
-    public void onDeath(PlayerDeathEvent event) {
-        Player player = event.getEntity();
-        if (!deniedFor(player, LandFlag.ITEM_DROP_ON_DEATH)) {
-            return;
-        }
-        event.setKeepInventory(true);
-        event.getDrops().clear();
-        event.setKeepLevel(true);
-        event.setDroppedExp(0);
-    }
 }
