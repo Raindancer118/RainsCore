@@ -53,6 +53,12 @@ public final class LandFlags {
             return true;
         }
         ProtectedArea area = land.areaAt(location).orElse(null);
+        // The actor-less half of the bypass. This overload is what every world event comes through — a redstone
+        // torch, a pressure plate, a block completing a circuit — and none of them carry a player, so the
+        // per-player check above can never fire for them. See Land.isSuspendedIn.
+        if (land.isSuspendedIn(area)) {
+            return true;
+        }
         return rules.isAllowed(area, flag, LandAudience.of(area, who), who);
     }
 

@@ -3,6 +3,7 @@ package de.raindancer.core.world.protection;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.ui.messages.Messages;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -196,6 +197,45 @@ public final class Land {
         }
         bypassing.add(id);
         return true;
+    }
+
+    /**
+     * Whether this area's flags are suspended because somebody who bypasses them is standing in it.
+     *
+     * <p>For the flag questions that carry no player and cannot. {@code BlockRedstoneEvent} has none, and it is
+     * the event that decides whether a circuit runs — so a redstone torch placed by an admin powered nothing,
+     * a pressure plate they stepped on did nothing, and judging the click instead covered levers and buttons
+     * and nothing else.
+     *
+     * <p>Presence rather than a time window. Redstone propagates for many ticks, so a window generous enough to
+     * cover it is a window in which the flag is off for everybody in the world; presence is bounded, visible,
+     * and easy to say out loud — a claim's rules are suspended while an admin is standing in it, and they resume
+     * when the admin walks out.
+     *
+     * <p>The cost, plainly: somebody else in the same claim gets working redstone for as long as the admin is
+     * there. That is the price of enforcing a flag whose event has no actor. An admin in a claim can already
+     * build and break anything in it, so this is smaller than what they could already do, and they can see that
+     * they are the reason.
+     *
+     * <p>The loop is over the bypassing players, not the online ones. That set is empty on almost every server,
+     * which makes the usual answer free — and this is asked on every redstone tick.
+     */
+    public boolean isSuspendedIn(ProtectedArea area) {
+        if (area == null || bypassing.isEmpty()) {
+            return false;
+        }
+        for (UUID id : bypassing) {
+            Player watcher = Bukkit.getPlayer(id);
+            if (watcher == null || !isBypassing(watcher)) {
+                continue;
+            }
+            if (areaAt(watcher.getLocation())
+                    .filter(where -> where.id().equals(area.id()))
+                    .isPresent()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
