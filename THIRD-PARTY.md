@@ -15,7 +15,7 @@ one is a copy rather than a merge.
   `de.raindancer.core.internal.fastboard`. Nothing else — no local edits, so upgrading is
   unpack-and-rename rather than a merge. The String-based `FastBoard` class was not copied; only the
   Adventure one is used.
-- **How it fits our code** everything of ours reaches it through `de.raindancer.core.scoreboard`:
+- **How it fits our code** everything of ours reaches it through `de.raindancer.core.ui.scoreboard`:
   `Board`/`BoardFactory` are the seam, `FastBoardFactory` is the only class allowed to import it, and
   `Scoreboards` adds what a library has no business deciding — which plugin owns a player's sidebar.
   It never logs; it throws, and `Scoreboards` turns that into our `Log` and into "this server has no

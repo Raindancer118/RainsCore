@@ -1,39 +1,39 @@
 package de.raindancer.core;
 
-import de.raindancer.core.actionbar.ActionBars;
-import de.raindancer.core.chat.Brand;
-import de.raindancer.core.chat.Chat;
-import de.raindancer.core.chat.ChatButtons;
-import de.raindancer.core.chat.ClickActions;
-import de.raindancer.core.bossbar.BossBars;
-import de.raindancer.core.identity.Identities;
-import de.raindancer.core.achievement.Achievements;
-import de.raindancer.core.items.CustomItems;
-import de.raindancer.core.items.ItemAbilities;
-import de.raindancer.core.items.ItemFactory;
-import de.raindancer.core.loot.LootFiller;
-import de.raindancer.core.loot.LootTables;
-import de.raindancer.core.moderation.PunishmentGuard;
-import de.raindancer.core.moderation.Punishments;
-import de.raindancer.core.moderation.VanillaBanBridge;
-import de.raindancer.core.poi.PoiStore;
-import de.raindancer.core.prompt.ChatPrompts;
-import de.raindancer.core.scoreboard.Scoreboards;
-import de.raindancer.core.settings.SettingsNavigation;
-import de.raindancer.core.settings.SettingsSchema;
-import de.raindancer.core.settings.SettingsStore;
-import de.raindancer.core.tablist.Tablists;
-import de.raindancer.core.chunk.ChunkHolds;
-import de.raindancer.core.effect.Effects;
-import de.raindancer.core.invsee.Inventories;
-import de.raindancer.core.invsee.InventoryViews;
-import de.raindancer.core.player.PlayerAdmin;
-import de.raindancer.core.vanish.Vanish;
-import de.raindancer.core.vote.Votes;
-import de.raindancer.core.pack.ResourcePacks;
-import de.raindancer.core.safety.Safety;
-import de.raindancer.core.warp.Warps;
-import de.raindancer.core.world.FarmWorlds;
+import de.raindancer.core.ui.actionbar.ActionBars;
+import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.chat.ChatButtons;
+import de.raindancer.core.ui.chat.ClickActions;
+import de.raindancer.core.ui.bossbar.BossBars;
+import de.raindancer.core.ui.identity.Identities;
+import de.raindancer.core.content.achievement.Achievements;
+import de.raindancer.core.content.items.CustomItems;
+import de.raindancer.core.content.items.ItemAbilities;
+import de.raindancer.core.content.items.ItemFactory;
+import de.raindancer.core.content.loot.LootFiller;
+import de.raindancer.core.content.loot.LootTables;
+import de.raindancer.core.moderation.punishment.PunishmentGuard;
+import de.raindancer.core.moderation.punishment.Punishments;
+import de.raindancer.core.moderation.punishment.VanillaBanBridge;
+import de.raindancer.core.world.poi.PoiStore;
+import de.raindancer.core.ui.prompt.ChatPrompts;
+import de.raindancer.core.ui.scoreboard.Scoreboards;
+import de.raindancer.core.data.settings.SettingsNavigation;
+import de.raindancer.core.data.settings.SettingsSchema;
+import de.raindancer.core.data.settings.SettingsStore;
+import de.raindancer.core.ui.tablist.Tablists;
+import de.raindancer.core.world.chunk.ChunkHolds;
+import de.raindancer.core.ui.effect.Effects;
+import de.raindancer.core.moderation.invsee.Inventories;
+import de.raindancer.core.moderation.invsee.InventoryViews;
+import de.raindancer.core.moderation.players.PlayerAdmin;
+import de.raindancer.core.moderation.vanish.Vanish;
+import de.raindancer.core.content.vote.Votes;
+import de.raindancer.core.content.pack.ResourcePacks;
+import de.raindancer.core.world.safety.Safety;
+import de.raindancer.core.world.warp.Warps;
+import de.raindancer.core.world.farm.FarmWorlds;
 import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
@@ -202,7 +202,7 @@ public interface RainsCore {
      *
      * <p>A player has one resource pack, so a plugin must never send its own: whichever sends last
      * wins and everybody else's textures are simply not there, with nothing logged anywhere. Offer
-     * a {@link de.raindancer.core.pack.PackContribution} instead and this decides what is sent,
+     * a {@link de.raindancer.core.content.pack.PackContribution} instead and this decides what is sent,
      * builds it reproducibly, serves it, and reports the files two plugins both wanted.
      */
     ResourcePacks resourcePacks();

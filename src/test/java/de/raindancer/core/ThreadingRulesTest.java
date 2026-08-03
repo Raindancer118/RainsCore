@@ -86,7 +86,7 @@ class ThreadingRulesTest {
         @Test
         @DisplayName("changes to a live inventory are pushed from the window, not from a listener")
         void liveChangesGoThroughTheSource() throws IOException {
-            String listener = code("invsee/InvseeListener.java");
+            String listener = code("moderation/invsee/InvseeListener.java");
 
             assertThat(listener)
                     .as("a listener that reaches into a player's inventory itself is a listener "
@@ -103,7 +103,7 @@ class ThreadingRulesTest {
         @Test
         @DisplayName("a saved inventory is read and written off the server's threads")
         void savedInventoriesAreReadOffThread() throws IOException {
-            String inventories = code("invsee/Inventories.java");
+            String inventories = code("moderation/invsee/Inventories.java");
 
             long fileCalls = inventories.lines()
                     .filter(line -> line.contains("saved.read(") || line.contains("saved.write("))
@@ -123,8 +123,8 @@ class ThreadingRulesTest {
         @Test
         @DisplayName("the NBT reader is never called straight out of an event handler")
         void nbtIsNotReadInListeners() throws IOException {
-            for (Path file : javaFilesIn("invsee")) {
-                String source = code("invsee/" + file.getFileName());
+            for (Path file : javaFilesIn("moderation/invsee")) {
+                String source = code("moderation/invsee/" + file.getFileName());
                 if (!source.contains("implements Listener")) {
                     continue;
                 }
@@ -140,12 +140,12 @@ class ThreadingRulesTest {
         @DisplayName("only the one class whose job it is touches player files at all")
         void onlyOneClassReadsPlayerFiles() throws IOException {
             List<String> offenders = new ArrayList<>();
-            for (Path file : javaFilesIn("invsee")) {
+            for (Path file : javaFilesIn("moderation/invsee")) {
                 String name = file.getFileName().toString();
                 if (name.equals("PlayerDataInventorySource.java")) {
                     continue;
                 }
-                String source = code("invsee/" + name);
+                String source = code("moderation/invsee/" + name);
                 if (source.contains("Nbt.read(") || source.contains("Nbt.write(")) {
                     offenders.add(name);
                 }
@@ -165,8 +165,8 @@ class ThreadingRulesTest {
         @DisplayName("no scheduled work is waited on from a server thread")
         void nothingJoinsOrGets() throws IOException {
             List<String> offenders = new ArrayList<>();
-            for (Path file : javaFilesIn("invsee")) {
-                String source = code("invsee/" + file.getFileName());
+            for (Path file : javaFilesIn("moderation/invsee")) {
+                String source = code("moderation/invsee/" + file.getFileName());
                 if (source.contains(".join()") || source.contains("CountDownLatch")
                         || source.contains(".get(5,") || source.contains("Thread.sleep(")) {
                     offenders.add(file.getFileName().toString());

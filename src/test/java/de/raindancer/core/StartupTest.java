@@ -1,10 +1,10 @@
 package de.raindancer.core;
 
-import de.raindancer.core.chat.Style;
-import de.raindancer.core.settings.Setting;
-import de.raindancer.core.settings.SettingsSchema;
-import de.raindancer.core.settings.SettingsStore;
-import de.raindancer.core.settings.SettingsTopic;
+import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.data.settings.Setting;
+import de.raindancer.core.data.settings.SettingsSchema;
+import de.raindancer.core.data.settings.SettingsStore;
+import de.raindancer.core.data.settings.SettingsTopic;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -184,7 +184,7 @@ class StartupTest {
     void everyThemeExists() {
         for (CoreConfig.Theme theme : CoreConfig.Theme.values()) {
             String id = theme.name().toLowerCase(java.util.Locale.ROOT);
-            assertThat(de.raindancer.core.chat.Preset.ids())
+            assertThat(de.raindancer.core.ui.chat.Preset.ids())
                     .as("the setting offers '%s' but no preset answers to it", id)
                     .contains(id);
         }

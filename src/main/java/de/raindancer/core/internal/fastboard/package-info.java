@@ -34,7 +34,7 @@
  * It does not, and deliberately so. This code never logs; it throws — {@code RuntimeException} for a
  * packet it could not send, and {@link ExceptionInInitializerError} from a static block on a server
  * whose internals it does not recognise. Catching all of that and putting it through
- * {@link de.raindancer.core.log.Log} is {@code Scoreboards}' job, which is the right place for it:
+ * {@link de.raindancer.core.platform.log.Log} is {@code Scoreboards}' job, which is the right place for it:
  * that class already knows whether the failure is worth a warning, a debug line, or switching
  * sidebars off for the rest of the session. Editing logging into these files would duplicate a
  * judgement that is already made one level up, and cost us the clean upgrade path for nothing.

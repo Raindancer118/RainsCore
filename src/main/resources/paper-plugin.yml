@@ -9,7 +9,7 @@ website: https://github.com/Raindancer118/RainsCore
 
 # Deliberately no commands: block, and a bootstrapper that registers nothing. This is a library —
 # taking a name like /warp on somebody's server is not its decision to make. The ready-made handlers
-# live in de.raindancer.core.command.CoreCommands and a plugin registers whichever it wants,
+# live in de.raindancer.core.platform.command.CoreCommands and a plugin registers whichever it wants,
 # including the callback command chat buttons need (a command only because a chat click has to be).
 #
 # The empty bootstrapper is required, not leftover: Paper's bootstrap phase has its own registry, and

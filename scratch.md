@@ -1,9 +1,9 @@
 ### src/main/java/de/raindancer/core/store/YamlStore.java
 ```java
-package de.raindancer.core.store;
+package de.raindancer.core.data.store;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -214,7 +214,7 @@ public final class YamlStore {
 
 ### src/main/java/de/raindancer/core/pack/PackMerger.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -233,9 +233,9 @@ import java.util.zip.ZipOutputStream;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import de.raindancer.core.util.Hashes;
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.util.Hashes;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 /**
  * Combines several resource packs into one zip.
@@ -478,7 +478,7 @@ public final class PackMerger {
 
 ### src/main/java/de/raindancer/core/pack/PackContribution.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import java.nio.file.Path;
 import java.util.Locale;
@@ -547,10 +547,10 @@ public record PackContribution(String owner, String name, Path source, int prior
 
 ### src/main/java/de/raindancer/core/pack/PackLibrary.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -696,12 +696,12 @@ public final class PackLibrary {
 
 ### src/main/java/de/raindancer/core/pack/PackServer.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -897,7 +897,7 @@ public final class PackServer {
 
 ### src/main/java/de/raindancer/core/pack/PackStatus.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 /**
  * Where one player is with the pack.
@@ -942,7 +942,7 @@ public enum PackStatus {
 
 ### src/main/java/de/raindancer/core/pack/PackOffer.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import net.kyori.adventure.text.Component;
 
@@ -969,7 +969,7 @@ public record PackOffer(UUID id, String url, String sha1, boolean required, Comp
 
 ### src/main/java/de/raindancer/core/pack/PackSink.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import java.util.List;
 import java.util.UUID;
@@ -999,11 +999,11 @@ public interface PackSink {
 
 ### src/main/java/de/raindancer/core/pack/ResourcePacks.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
-import de.raindancer.core.util.Hashes;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.platform.util.Hashes;
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
@@ -1292,10 +1292,10 @@ public final class ResourcePacks {
 
 ### src/main/java/de/raindancer/core/pack/BukkitPackSink.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.resource.ResourcePackInfo;
 import net.kyori.adventure.resource.ResourcePackRequest;
 import org.bukkit.Bukkit;
@@ -1367,7 +1367,7 @@ public final class BukkitPackSink implements PackSink {
 
 ### src/main/java/de/raindancer/core/pack/PackListener.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -1440,11 +1440,11 @@ public final class PackListener implements Listener {
 
 ### src/main/java/de/raindancer/core/pack/PackBuilder.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
-import de.raindancer.core.util.Hashes;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.platform.util.Hashes;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -1734,7 +1734,7 @@ public final class PackBuilder {
 
 ### src/main/java/de/raindancer/core/pack/PackPart.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import java.nio.file.Path;
 
@@ -1762,7 +1762,7 @@ public record PackPart(Path file, String sha1, long size, String label) {
 
 ### src/main/java/de/raindancer/core/pack/PackMode.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 /**
  * Whether the plugins' assets are sent as several packs or combined into one.
@@ -1800,7 +1800,7 @@ public enum PackMode {
 
 ### src/main/java/de/raindancer/core/pack/PackBuild.java
 ```java
-package de.raindancer.core.pack;
+package de.raindancer.core.content.pack;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -1881,7 +1881,7 @@ public record PackBuild(PackMode mode, List<PackPart> parts, int contributions,
 
 ### src/main/java/de/raindancer/core/safety/BlockKind.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 /**
  * What a block is, as far as standing in it is concerned.
@@ -1944,7 +1944,7 @@ public enum BlockKind {
 
 ### src/main/java/de/raindancer/core/safety/Spot.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 /**
  * A block position — where a player's feet would be.
@@ -1990,7 +1990,7 @@ public record Spot(String world, int x, int y, int z) {
 
 ### src/main/java/de/raindancer/core/safety/Blocks.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 /**
  * What is where — the one thing in this package that has to ask the world.
@@ -2026,7 +2026,7 @@ public interface Blocks {
 
 ### src/main/java/de/raindancer/core/safety/Danger.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 /**
  * Why a spot is not safe.
@@ -2093,7 +2093,7 @@ public enum Danger {
 
 ### src/main/java/de/raindancer/core/safety/SafeSpots.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -2411,7 +2411,7 @@ public final class SafeSpots {
 
 ### src/main/java/de/raindancer/core/safety/BukkitBlocks.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -2511,10 +2511,10 @@ public final class BukkitBlocks implements Blocks {
 
 ### src/main/java/de/raindancer/core/safety/Safety.java
 ```java
-package de.raindancer.core.safety;
+package de.raindancer.core.world.safety;
 
-import de.raindancer.core.chunk.ChunkAt;
-import de.raindancer.core.chunk.ChunkHolds;
+import de.raindancer.core.world.chunk.ChunkAt;
+import de.raindancer.core.world.chunk.ChunkHolds;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -2636,7 +2636,7 @@ public final class Safety {
 
 ### src/main/java/de/raindancer/core/chunk/ChunkAt.java
 ```java
-package de.raindancer.core.chunk;
+package de.raindancer.core.world.chunk;
 
 /**
  * One chunk, by world and chunk coordinates.
@@ -2679,7 +2679,7 @@ public record ChunkAt(String world, int x, int z) {
 
 ### src/main/java/de/raindancer/core/chunk/ChunkLoader.java
 ```java
-package de.raindancer.core.chunk;
+package de.raindancer.core.world.chunk;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -2717,10 +2717,10 @@ public interface ChunkLoader {
 
 ### src/main/java/de/raindancer/core/chunk/ChunkHolds.java
 ```java
-package de.raindancer.core.chunk;
+package de.raindancer.core.world.chunk;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -2932,10 +2932,10 @@ public final class ChunkHolds {
 
 ### src/main/java/de/raindancer/core/chunk/BukkitChunkLoader.java
 ```java
-package de.raindancer.core.chunk;
+package de.raindancer.core.world.chunk;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
@@ -2989,7 +2989,7 @@ public final class BukkitChunkLoader implements ChunkLoader {
 
 ### src/main/java/de/raindancer/core/effect/SoundCue.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
 /**
  * One sound, as the protocol wants it.
@@ -3028,7 +3028,7 @@ public record SoundCue(String key, float volume, float pitch) {
 
 ### src/main/java/de/raindancer/core/effect/ParticleCue.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
 /**
  * A puff of particles.
@@ -3072,7 +3072,7 @@ public record ParticleCue(String particle, int count, double spreadX, double spr
 
 ### src/main/java/de/raindancer/core/effect/Effect.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
 /**
  * What one named cue actually does: a sound, some particles, or both.
@@ -3116,7 +3116,7 @@ public record Effect(SoundCue sound, ParticleCue particles) {
 
 ### src/main/java/de/raindancer/core/effect/EffectSink.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
 import java.util.UUID;
 
@@ -3156,7 +3156,7 @@ public interface EffectSink {
 
 ### src/main/java/de/raindancer/core/effect/Cues.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
 import java.util.List;
 
@@ -3273,10 +3273,10 @@ public final class Cues {
 
 ### src/main/java/de/raindancer/core/effect/Effects.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -3600,10 +3600,10 @@ public final class Effects {
 
 ### src/main/java/de/raindancer/core/effect/BukkitEffectSink.java
 ```java
-package de.raindancer.core.effect;
+package de.raindancer.core.ui.effect;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -3715,7 +3715,7 @@ public final class BukkitEffectSink implements EffectSink {
 
 ### src/main/java/de/raindancer/core/time/Times.java
 ```java
-package de.raindancer.core.time;
+package de.raindancer.core.world.time;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -4071,7 +4071,7 @@ public final class Times {
 
 ### src/main/java/de/raindancer/core/choose/Category.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 /**
  * The drawers everything is sorted into.
@@ -4118,7 +4118,7 @@ public enum Category {
 
 ### src/main/java/de/raindancer/core/choose/Catalogue.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -4522,7 +4522,7 @@ public final class Catalogue {
 
 ### src/main/java/de/raindancer/core/choose/SoundFamily.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.util.Locale;
 
@@ -4582,7 +4582,7 @@ public enum SoundFamily {
 
 ### src/main/java/de/raindancer/core/choose/SoundCatalogue.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -4747,14 +4747,14 @@ public final class SoundCatalogue {
 
 ### src/main/java/de/raindancer/core/choose/ItemChooser.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
-import de.raindancer.core.chat.Brand;
-import de.raindancer.core.chat.Style;
-import de.raindancer.core.effect.Cues;
-import de.raindancer.core.gui.Icons;
-import de.raindancer.core.gui.Menu;
-import de.raindancer.core.gui.PaginatedMenu;
+import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.ui.effect.Cues;
+import de.raindancer.core.ui.menu.Icons;
+import de.raindancer.core.ui.menu.Menu;
+import de.raindancer.core.ui.menu.PaginatedMenu;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
@@ -4968,15 +4968,15 @@ public final class ItemChooser extends PaginatedMenu<Category> {
 
 ### src/main/java/de/raindancer/core/choose/SoundChooser.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import de.raindancer.core.RainsCore;
-import de.raindancer.core.chat.Brand;
-import de.raindancer.core.chat.Style;
-import de.raindancer.core.effect.SoundCue;
-import de.raindancer.core.gui.Icons;
-import de.raindancer.core.gui.Menu;
-import de.raindancer.core.gui.PaginatedMenu;
+import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.ui.effect.SoundCue;
+import de.raindancer.core.ui.menu.Icons;
+import de.raindancer.core.ui.menu.Menu;
+import de.raindancer.core.ui.menu.PaginatedMenu;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
@@ -5124,16 +5124,16 @@ public final class SoundChooser extends PaginatedMenu<SoundFamily> {
 
 ### src/main/java/de/raindancer/core/choose/EffectChooser.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import de.raindancer.core.RainsCore;
-import de.raindancer.core.chat.Brand;
-import de.raindancer.core.chat.Style;
-import de.raindancer.core.effect.Effect;
-import de.raindancer.core.effect.Effects;
-import de.raindancer.core.gui.Icons;
-import de.raindancer.core.gui.Menu;
-import de.raindancer.core.gui.PaginatedMenu;
+import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.ui.effect.Effect;
+import de.raindancer.core.ui.effect.Effects;
+import de.raindancer.core.ui.menu.Icons;
+import de.raindancer.core.ui.menu.Menu;
+import de.raindancer.core.ui.menu.PaginatedMenu;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
@@ -5258,7 +5258,7 @@ public final class EffectChooser extends PaginatedMenu<String> {
 
 ### src/main/java/de/raindancer/core/choose/ParticleGroup.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.util.List;
 import java.util.Locale;
@@ -5318,7 +5318,7 @@ public enum ParticleGroup {
 
 ### src/main/java/de/raindancer/core/choose/ParticleCatalogue.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -5525,13 +5525,13 @@ public final class ParticleCatalogue {
 
 ### src/main/java/de/raindancer/core/choose/ParticleChooser.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
-import de.raindancer.core.chat.Brand;
-import de.raindancer.core.chat.Style;
-import de.raindancer.core.gui.Icons;
-import de.raindancer.core.gui.Menu;
-import de.raindancer.core.gui.PaginatedMenu;
+import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.ui.menu.Icons;
+import de.raindancer.core.ui.menu.Menu;
+import de.raindancer.core.ui.menu.PaginatedMenu;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
@@ -5685,9 +5685,9 @@ public final class ParticleChooser extends PaginatedMenu<ParticleGroup> {
 
 ### src/main/java/de/raindancer/core/choose/PlayerEntry.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
-import de.raindancer.core.time.Times;
+import de.raindancer.core.world.time.Times;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -5745,7 +5745,7 @@ public record PlayerEntry(UUID id, String name, boolean online, long lastSeen) {
 
 ### src/main/java/de/raindancer/core/choose/PlayerDirectory.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 import java.time.Duration;
 import java.util.Comparator;
@@ -5949,7 +5949,7 @@ public final class PlayerDirectory {
 
 ### src/main/java/de/raindancer/core/choose/Presence.java
 ```java
-package de.raindancer.core.choose;
+package de.raindancer.core.ui.choose;
 
 /**
  * How long ago somebody was here — the rank a list of players is sectioned by.
@@ -5993,7 +5993,7 @@ public enum Presence {
 
 ### src/main/java/de/raindancer/core/vote/Ballot.java
 ```java
-package de.raindancer.core.vote;
+package de.raindancer.core.content.vote;
 
 /**
  * What happened when somebody tried to vote.
@@ -6046,7 +6046,7 @@ public enum Ballot {
 
 ### src/main/java/de/raindancer/core/vote/Tally.java
 ```java
-package de.raindancer.core.vote;
+package de.raindancer.core.content.vote;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -6163,7 +6163,7 @@ public final class Tally {
 
 ### src/main/java/de/raindancer/core/vote/Vote.java
 ```java
-package de.raindancer.core.vote;
+package de.raindancer.core.content.vote;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -6325,10 +6325,10 @@ public final class Vote {
 
 ### src/main/java/de/raindancer/core/vote/Votes.java
 ```java
-package de.raindancer.core.vote;
+package de.raindancer.core.content.vote;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -6428,7 +6428,7 @@ public final class Votes {
                 now + lasting.toMillis(), mayVote == null ? null : Set.copyOf(mayVote));
         votes.put(vote.id(), vote);
         log.info("Vote opened: \"{}\" with {} answers, closing in {}", vote.question(),
-                cleaned.size(), de.raindancer.core.time.Times.brief(lasting));
+                cleaned.size(), de.raindancer.core.world.time.Times.brief(lasting));
         return Optional.of(vote);
     }
 
@@ -6533,7 +6533,7 @@ public final class Votes {
 
 ### src/main/java/de/raindancer/core/vanish/VanishSink.java
 ```java
-package de.raindancer.core.vanish;
+package de.raindancer.core.moderation.vanish;
 
 import java.util.UUID;
 
@@ -6565,10 +6565,10 @@ public interface VanishSink {
 
 ### src/main/java/de/raindancer/core/vanish/Vanish.java
 ```java
-package de.raindancer.core.vanish;
+package de.raindancer.core.moderation.vanish;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.util.Collection;
 import java.util.List;
@@ -6782,10 +6782,10 @@ public final class Vanish {
 
 ### src/main/java/de/raindancer/core/vanish/BukkitVanishSink.java
 ```java
-package de.raindancer.core.vanish;
+package de.raindancer.core.moderation.vanish;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -6877,7 +6877,7 @@ public final class BukkitVanishSink implements VanishSink {
 
 ### src/main/java/de/raindancer/core/vanish/VanishListener.java
 ```java
-package de.raindancer.core.vanish;
+package de.raindancer.core.moderation.vanish;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -6950,7 +6950,7 @@ public final class VanishListener implements Listener {
 
 ### src/main/java/de/raindancer/core/player/Outcome.java
 ```java
-package de.raindancer.core.player;
+package de.raindancer.core.moderation.players;
 
 /**
  * What happened when a management action was tried.
@@ -6999,7 +6999,7 @@ public enum Outcome {
 
 ### src/main/java/de/raindancer/core/player/PlayerState.java
 ```java
-package de.raindancer.core.player;
+package de.raindancer.core.moderation.players;
 
 /**
  * A snapshot of somebody, as far as management cares.
@@ -7030,7 +7030,7 @@ public record PlayerState(double health, double maxHealth, int food, boolean fly
 
 ### src/main/java/de/raindancer/core/player/PlayerAdminSink.java
 ```java
-package de.raindancer.core.player;
+package de.raindancer.core.moderation.players;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -7071,10 +7071,10 @@ public interface PlayerAdminSink {
 
 ### src/main/java/de/raindancer/core/player/PlayerAdmin.java
 ```java
-package de.raindancer.core.player;
+package de.raindancer.core.moderation.players;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.time.Duration;
 import java.util.List;
@@ -7390,10 +7390,10 @@ public final class PlayerAdmin {
 
 ### src/main/java/de/raindancer/core/player/BukkitPlayerAdminSink.java
 ```java
-package de.raindancer.core.player;
+package de.raindancer.core.moderation.players;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
@@ -7554,7 +7554,7 @@ public final class BukkitPlayerAdminSink implements PlayerAdminSink {
 
 ### src/main/java/de/raindancer/core/invsee/Section.java
 ```java
-package de.raindancer.core.invsee;
+package de.raindancer.core.moderation.invsee;
 
 /**
  * The parts of what somebody is carrying.
@@ -7627,7 +7627,7 @@ public enum Section {
 
 ### src/main/java/de/raindancer/core/invsee/Slots.java
 ```java
-package de.raindancer.core.invsee;
+package de.raindancer.core.moderation.invsee;
 
 import java.util.Optional;
 
@@ -7713,7 +7713,7 @@ public final class Slots {
 
 ### src/main/java/de/raindancer/core/invsee/Access.java
 ```java
-package de.raindancer.core.invsee;
+package de.raindancer.core.moderation.invsee;
 
 /**
  * What somebody watching an inventory is allowed to do to it.
@@ -7760,10 +7760,10 @@ public enum Access {
 
 ### src/main/java/de/raindancer/core/invsee/InventoryViews.java
 ```java
-package de.raindancer.core.invsee;
+package de.raindancer.core.moderation.invsee;
 
-import de.raindancer.core.log.Log;
-import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 
 import java.util.List;
 import java.util.Map;
@@ -7951,12 +7951,12 @@ public final class InventoryViews {
 
 ### src/main/java/de/raindancer/core/command/CoreCommands.java
 ```java
-package de.raindancer.core.command;
+package de.raindancer.core.platform.command;
 
-import de.raindancer.core.chat.ClickCommand;
-import de.raindancer.core.settings.SettingsCommand;
-import de.raindancer.core.warp.WarpCommand;
-import de.raindancer.core.world.FarmWorldCommand;
+import de.raindancer.core.ui.chat.ClickCommand;
+import de.raindancer.core.data.settings.SettingsCommand;
+import de.raindancer.core.world.warp.WarpCommand;
+import de.raindancer.core.world.farm.FarmWorldCommand;
 import io.papermc.paper.command.brigadier.Commands;
 
 import java.util.List;

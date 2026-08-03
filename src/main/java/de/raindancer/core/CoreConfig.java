@@ -1,12 +1,12 @@
 package de.raindancer.core;
 
-import de.raindancer.core.log.LogLevel;
-import de.raindancer.core.settings.Describe;
-import de.raindancer.core.settings.In;
-import de.raindancer.core.settings.Range;
-import de.raindancer.core.settings.Settings;
-import de.raindancer.core.settings.Title;
-import de.raindancer.core.settings.Topic;
+import de.raindancer.core.platform.log.LogLevel;
+import de.raindancer.core.data.settings.Describe;
+import de.raindancer.core.data.settings.In;
+import de.raindancer.core.data.settings.Range;
+import de.raindancer.core.data.settings.Settings;
+import de.raindancer.core.data.settings.Title;
+import de.raindancer.core.data.settings.Topic;
 import org.bukkit.Material;
 
 /**

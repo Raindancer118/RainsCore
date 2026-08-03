@@ -127,11 +127,11 @@ Everything below is reached through `RainsCore.get()`.
 |---|---|
 | **`settingsFor(...)`** | Your settings as an annotated record — see below. |
 | **`farmWorlds()`** | A farm world is three linked worlds with its own nether and end, regenerated on a schedule. Its portals stay inside it, which is the entire point. |
-| **`de.raindancer.core.gui`** | The one menu framework. Six rows, three bands, chrome the framework owns. |
-| **`de.raindancer.core.log`** | One logger, one logfile per day, rotated and pruned. Never blocks, never throws. |
-| **`de.raindancer.core.banner`** | The startup splash, with a logo drawn from your plugin's name. |
-| **`de.raindancer.core.messages`** | `Messages` — a `messages.yml` an owner can edit, over the defaults your plugin ships. A key their file is missing falls back rather than blanking; player text is escaped; broken markup still renders. |
-| **`de.raindancer.core.store`** | `YamlStore` — a YAML file read and written without ever losing it. Use it for anything your plugin keeps. |
+| **`de.raindancer.core.ui.menu`** | The one menu framework. Six rows, three bands, chrome the framework owns. |
+| **`de.raindancer.core.platform.log`** | One logger, one logfile per day, rotated and pruned. Never blocks, never throws. |
+| **`de.raindancer.core.ui.banner`** | The startup splash, with a logo drawn from your plugin's name. |
+| **`de.raindancer.core.ui.messages`** | `Messages` — a `messages.yml` an owner can edit, over the defaults your plugin ships. A key their file is missing falls back rather than blanking; player text is escaped; broken markup still renders. |
+| **`de.raindancer.core.data.store`** | `YamlStore` — a YAML file read and written without ever losing it. Use it for anything your plugin keeps. |
 | **`safety()`** | Is it safe to put a player there, and where instead. Two blocks of room, solid ground, no lava/fire/portal, a survivable drop — optionally checking the blocks around it too. Never loads a chunk to answer; `chunks()` does that first. |
 | **`chunks()`** | Keeping chunks loaded — for a moment, or until somebody lets go. Every permanent hold carries a name, because the flag survives a restart. |
 | **`effects()`** | Every sound and particle any plugin makes, asked for **by meaning** (`Cues.NO`) rather than by sound. 23 cues shipped; rebind one and every plugin's changes. Repeats suppressed so a per-tick loop cannot deafen anybody. |
@@ -139,8 +139,8 @@ Everything below is reached through `RainsCore.get()`.
 | **`players()`** | Heal, feed, starve, damage, effects, flight, gamemode, kick. Every action answers what happened instead of throwing on the edges. |
 | **`inventoryViews()`** | Invsee. One editor at a time (two duplicates items), armour protected by default, windows close when their owner leaves. |
 | **`votes()`** | Ask a question, count the answers. One ballot each, changeable until the deadline, and a tie stays a tie. |
-| **`de.raindancer.core.choose`** | Ready-made catalogues: every item sorted into the creative tabs **and into families within them** (Oak, Deepslate, Red, Diamond); every sound with an icon of the thing that makes it; every particle; every player who has ever visited, ranked by how long ago. |
-| **`de.raindancer.core.time`** | `Times` — reads what people type. `2min`, `2m`, `1h30m`, `2 weeks`, `perm`. **`m` is minutes and `M` is months**, deliberately. |
+| **`de.raindancer.core.ui.choose`** | Ready-made catalogues: every item sorted into the creative tabs **and into families within them** (Oak, Deepslate, Red, Diamond); every sound with an icon of the thing that makes it; every particle; every player who has ever visited, ranked by how long ago. |
+| **`de.raindancer.core.world.time`** | `Times` — reads what people type. `2min`, `2m`, `1h30m`, `2 weeks`, `perm`. **`m` is minutes and `M` is months**, deliberately. |
 
 ---
 

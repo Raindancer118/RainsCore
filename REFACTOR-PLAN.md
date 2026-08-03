@@ -90,16 +90,16 @@ is a separate question for another day, deliberately not answered here.
 
 ```
 RainsCore                       (new repo)  →  RainsCore.jar, a library plugin
-  de.raindancer.core.gui         THE menu framework. Every screen in every plugin.
-  de.raindancer.core.chat        Chat/messaging helper: prefixes, routing, action bar vs chat
-  de.raindancer.core.log         One logger, with real logfiles on disk
-  de.raindancer.core.scoreboard  Scoreboard manager, exposed as a Java API
-  de.raindancer.core.bossbar     Bossbar handler
-  de.raindancer.core.poi         The single Point-Of-Interest store
-  de.raindancer.core.moderation  Punishment & moderation, usable by any plugin
-  de.raindancer.core.items       Custom-item API + registry, configured by command and GUI
+  de.raindancer.core.ui.menu         THE menu framework. Every screen in every plugin.
+  de.raindancer.core.ui.chat        Chat/messaging helper: prefixes, routing, action bar vs chat
+  de.raindancer.core.platform.log         One logger, with real logfiles on disk
+  de.raindancer.core.ui.scoreboard  Scoreboard manager, exposed as a Java API
+  de.raindancer.core.ui.bossbar     Bossbar handler
+  de.raindancer.core.world.poi         The single Point-Of-Interest store
+  de.raindancer.core.moderation.punishment  Punishment & moderation, usable by any plugin
+  de.raindancer.core.content.items       Custom-item API + registry, configured by command and GUI
   de.raindancer.core.module      PluginModule / ModuleHost (moved out of smpcore)
-  de.raindancer.core.util        Scheduling, FontWidth, Duration, Text
+  de.raindancer.core.platform.util        Scheduling, FontWidth, Duration, Text
 
 Each plugin repo                 →  <X>Plugin extends JavaPlugin  (standalone jar)
                                     <X>Module — the real thing, takes a Plugin host

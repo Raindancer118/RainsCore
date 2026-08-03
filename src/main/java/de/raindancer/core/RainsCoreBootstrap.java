@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
  * {@code dependencies.bootstrap} entry on Core: the server refuses it with "Unknown/missing
  * dependency plugins: [RainsCore]" and the dependent does not load at all.
  *
- * <p>So the foundation Core offers for writing commands ({@link de.raindancer.core.command.CoreCommands})
+ * <p>So the foundation Core offers for writing commands ({@link de.raindancer.core.platform.command.CoreCommands})
  * is unusable unless this class is here. It was found the only way it could be: by deleting it,
  * declaring the dependency properly in the test plugin, and watching a real server refuse to load it.
  *
