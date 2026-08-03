@@ -195,35 +195,51 @@ public final class EnvironmentProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onPistonExtend(BlockPistonExtendEvent event) {
-        if (pistonCrossesBorder(event.getBlock(), event.getBlocks())) {
+        if (pistonCrossesBorder(event.getBlock(), event.getBlocks(), event.getDirection())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onPistonRetract(BlockPistonRetractEvent event) {
-        if (pistonCrossesBorder(event.getBlock(), event.getBlocks())) {
+        if (pistonCrossesBorder(event.getBlock(), event.getBlocks(), event.getDirection())) {
             event.setCancelled(true);
         }
     }
 
-    /** True when a piston outside a claim tries to move blocks that belong to it. */
-    private boolean pistonCrossesBorder(Block piston, java.util.List<Block> moved) {
+    /**
+     * True when a piston outside protected ground reaches into it.
+     *
+     * <p>Both the blocks being moved <em>and where they end up</em>. Checking only the moved blocks left the
+     * obvious griefing machine working: put the piston outside, put an unclaimed block next to the border, and
+     * push it in. Every block in the list was unclaimed, so nothing objected, and the block landed inside —
+     * replacing whatever was there.
+     */
+    private boolean pistonCrossesBorder(Block piston, java.util.List<Block> moved,
+                                        org.bukkit.block.BlockFace direction) {
         if (!land.landFlags().isEnforced(LandFlag.PISTONS_FROM_OUTSIDE)) {
             return false;
         }
-        Optional<ProtectedArea> pistonClaim = land.areaAt(piston.getLocation());
+        Optional<ProtectedArea> pistonArea = land.areaAt(piston.getLocation());
         for (Block block : moved) {
-            Optional<ProtectedArea> blockClaim = land.areaAt(block.getLocation());
-            if (blockClaim.isEmpty()) {
-                continue;
+            if (reachesInto(pistonArea, block)) {
+                return true;
             }
-            boolean sameClaim = pistonClaim.isPresent() && pistonClaim.get().id().equals(blockClaim.get().id());
-            if (!sameClaim && !land.flags().isAllowed(blockClaim.get(), LandFlag.PISTONS_FROM_OUTSIDE)) {
+            if (direction != null && reachesInto(pistonArea, block.getRelative(direction))) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Whether this block is on protected ground the piston is not itself standing on. */
+    private boolean reachesInto(Optional<ProtectedArea> pistonArea, Block block) {
+        Optional<ProtectedArea> area = land.areaAt(block.getLocation());
+        if (area.isEmpty()) {
+            return false;
+        }
+        boolean sameGround = pistonArea.isPresent() && pistonArea.get().id().equals(area.get().id());
+        return !sameGround && !land.flags().isAllowed(area.get(), LandFlag.PISTONS_FROM_OUTSIDE);
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -252,8 +268,10 @@ public final class EnvironmentProtectionListener implements Listener {
         // block damage: a claim may want fireworks and TNT mining without visitors getting blown up.
         if (cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION
                 || cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
-            if (event.getEntity() instanceof LivingEntity
-                    && deniedFor(event.getEntity(), LandFlag.EXPLOSION_DAMAGE)) {
+            // Every entity, not only the living ones. Item frames, paintings, minecarts and boats are
+            // exactly what somebody detonating TNT at a border is after, and they are not LivingEntity —
+            // so the flag protected the cows and left the map wall on the floor.
+            if (deniedFor(event.getEntity(), LandFlag.EXPLOSION_DAMAGE)) {
                 event.setCancelled(true);
             }
             return;

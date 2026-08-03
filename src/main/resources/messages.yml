@@ -179,6 +179,7 @@ land:
   # these per tick.
   denied: "<red>You may not <white><permission></white> in <white><claim></white>."
   pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
+  potions-refused: "<red>Potions are not allowed in <white><claim></white>."
 
   audience:
     owner:
@@ -214,6 +215,7 @@ land:
     elytra-flight: {name: "Elytra", description: "Players may fly with an elytra"}
     ender-pearl-in: {name: "Ender pearls", description: "Players may pearl in"}
     teleport-in: {name: "Teleport in", description: "Players may teleport in"}
+    potions: {name: "Potions", description: "Potions may be drunk, thrown or left lingering here"}
 
   action:
     enter: {name: "Enter", description: "Walk or teleport in"}

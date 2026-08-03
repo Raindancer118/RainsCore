@@ -1,5 +1,8 @@
 package de.raindancer.core.world.protection;
 
+import org.bukkit.entity.ThrownPotion;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
@@ -36,6 +39,10 @@ import java.util.Optional;
 public final class InteractionProtectionListener implements Listener {
 
     private final Land land;
+
+    /** Throttles the potion refusal per player — see refusePotions. */
+    private final java.util.Map<java.util.UUID, Long> lastPotionRefusal =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private final de.raindancer.core.ui.messages.Messages messages;
 
     public InteractionProtectionListener(Land land,
@@ -46,9 +53,12 @@ public final class InteractionProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
+        // Both hands. Refusing only the main hand let a player carry the thing they wanted to use in the
+        // off-hand and open any chest on the server — the event fires once per hand and only one was
+        // being checked.
         Block block = event.getClickedBlock();
         if (block == null) {
             return;
@@ -85,9 +95,8 @@ public final class InteractionProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onEntityInteract(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
-            return;
-        }
+        // Both hands, for the same reason as onInteract: carrying the thing in the off-hand was a way
+        // through every protection this listener applies.
         LandAction required = InteractionClassifier.forEntityInteract(event.getRightClicked());
         if (required == null) {
             return;
@@ -194,10 +203,106 @@ public final class InteractionProtectionListener implements Listener {
             return;
         }
         for (LivingEntity affected : new java.util.ArrayList<>(event.getAffectedEntities())) {
-            if (affected instanceof Player hurt && !pvpAllowed(thrower, hurt, false)) {
+            if (!mayBeSplashed(thrower, affected)) {
                 event.setIntensity(affected, 0.0D);
             }
         }
+    }
+
+    /**
+     * Whether this thrower may hit this creature with something harmful.
+     *
+     * <p>Players go through the PvP rule. <b>Everything else goes through the claim's own protection</b>, which
+     * is the half that was missing: a splash of Harming II over somebody's fence killed every cow, sheep,
+     * villager and tamed wolf inside, because potion damage produces no damage event naming the thrower and
+     * nothing else was checking. Found by review, not by a crash — it simply worked.
+     */
+    private boolean mayBeSplashed(Player thrower, LivingEntity affected) {
+        // The POTIONS flag first: where it is off, nothing lands there at all, harmful or not.
+        if (land.landFlags().isEnforced(LandFlag.POTIONS)
+                && !land.landFlags().isAllowedAt(affected.getLocation(), LandFlag.POTIONS,
+                        affected instanceof Player hit ? hit.getUniqueId() : null)) {
+            return false;
+        }
+        if (affected instanceof Player hurt) {
+            return pvpAllowed(thrower, hurt, false);
+        }
+        return land.can(thrower, affected.getLocation(), LandAction.DAMAGE_ANIMALS);
+    }
+
+    /**
+     * Drinking one.
+     *
+     * <p>The half of the potion flag people forget to ask for and then want: an arena where fighters bring what
+     * they brought, a duel that is not decided by whoever stocked more Strength. Refused where the flag says so,
+     * for the tier the drinker falls into — so an owner testing their own arena is not stopped by their own
+     * rule unless they meant to be.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onDrink(PlayerItemConsumeEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.POTIONS)) {
+            return;
+        }
+        org.bukkit.Material drinking = event.getItem().getType();
+        if (drinking != org.bukkit.Material.POTION) {
+            return;   // milk, food and everything else is not this flag's business
+        }
+        Player player = event.getPlayer();
+        if (land.isBypassing(player) || potionsAllowedFor(player, player.getLocation())) {
+            return;
+        }
+        event.setCancelled(true);
+        refusePotions(player);
+    }
+
+    /**
+     * Throwing one, whoever it would have hit.
+     *
+     * <p>Checked where it <em>lands</em> rather than where it was thrown, because the point of the flag is that
+     * nothing arrives — a potion lobbed over a wall from outside is exactly the case an owner is switching it
+     * off for.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onPotionThrown(ProjectileLaunchEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.POTIONS)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ThrownPotion potion)) {
+            return;
+        }
+        Player thrower = playerBehind(potion);
+        if (thrower == null || land.isBypassing(thrower)) {
+            return;
+        }
+        // Where it was thrown from. Where it lands is not known yet, and the splash handler below catches
+        // the rest — this stops the obvious case early and cheaply.
+        if (potionsAllowedFor(thrower, thrower.getLocation())) {
+            return;
+        }
+        event.setCancelled(true);
+        refusePotions(thrower);
+    }
+
+    /**
+     * Tells somebody potions are not allowed here.
+     *
+     * <p>On the action bar and throttled the same way every other refusal is, because drinking is something a
+     * player does repeatedly and holding the key down would otherwise fill their screen.
+     */
+    private void refusePotions(Player who) {
+        long now = System.currentTimeMillis();
+        Long last = lastPotionRefusal.get(who.getUniqueId());
+        if (last != null && now - last < 1_500L) {
+            return;
+        }
+        lastPotionRefusal.put(who.getUniqueId(), now);
+        String where = land.areaAt(who.getLocation()).map(ProtectedArea::name).orElse("here");
+        who.sendActionBar(messages.prefixed("land.potions-refused", "claim", where));
+    }
+
+    /** Whether potions are allowed for this person on this ground. */
+    private boolean potionsAllowedFor(Player who, org.bukkit.Location where) {
+        return land.landFlags().isAllowedAt(where, LandFlag.POTIONS, who.getUniqueId());
     }
 
     /** The lingering counterpart: the cloud applies over and over, so each application is checked. */
@@ -210,12 +315,29 @@ public final class InteractionProtectionListener implements Listener {
                 && projectile.getShooter() instanceof Player shooter) {
             thrower = shooter;
         }
-        if (thrower == null || !isHarmful(event.getEntity().getCustomEffects())) {
+        if (thrower == null || !isHarmful(event.getEntity())) {
             return;
         }
         Player source = thrower;
-        event.getAffectedEntities().removeIf(affected ->
-                affected instanceof Player hurt && !pvpAllowed(source, hurt, false));
+        event.getAffectedEntities().removeIf(affected -> !mayBeSplashed(source, affected));
+    }
+
+    /**
+     * Whether a cloud is one nobody would want to stand in.
+     *
+     * <p>Both halves matter. A brewed potion carries its effect as the <em>base type</em> and
+     * {@code getCustomEffects()} is empty for it — so checking only the custom list read every stock Lingering
+     * Potion of Harming as harmless and let it through.
+     */
+    private boolean isHarmful(org.bukkit.entity.AreaEffectCloud cloud) {
+        if (isHarmful(cloud.getCustomEffects())) {
+            return true;
+        }
+        org.bukkit.potion.PotionType base = cloud.getBasePotionType();
+        if (base == null) {
+            return false;
+        }
+        return isHarmful(base.getPotionEffects());
     }
 
     /** Whether an effect list contains anything a player would not want thrown at them. */

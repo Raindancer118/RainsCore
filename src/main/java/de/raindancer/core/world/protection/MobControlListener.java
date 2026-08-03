@@ -133,12 +133,20 @@ public final class MobControlListener implements Listener {
         if (!isHostile(entity)) {
             return;
         }
-        if (land.landFlags().isAllowedAt(event.getTo(), LandFlag.MONSTER_ENTRY)) {
+        // Only a move that actually *enters* protected ground is a candidate. Asking the flag about the
+        // destination alone was wrong in the one case that matters: the built-in default is "no entry", so a
+        // mob walking from inside a claim out into open country was refused too — the wilderness answered
+        // "not allowed" and it stood at the border for ever. The promise in the comment below was not being
+        // kept at all.
+        Optional<ProtectedArea> to = land.areaAt(event.getTo());
+        if (to.isEmpty()) {
+            return;   // leaving, or walking about outside. Neither is entering anything.
+        }
+        if (land.flags().isAllowed(to.get(), LandFlag.MONSTER_ENTRY)) {
             return;
         }
-        // A mob already inside — spawned there, or there before the flag flipped — is allowed to walk
-        // back out. "Inside" now means the same claim or the same town, so a mob crossing between two
-        // streets of one town is not treated as entering it afresh.
+        // A mob already inside — spawned there, or there before the flag flipped — may move about and may
+        // walk back out. Only a step across the border from somewhere else is stopped.
         if (sameGround(event.getFrom(), event.getTo())) {
             return;
         }

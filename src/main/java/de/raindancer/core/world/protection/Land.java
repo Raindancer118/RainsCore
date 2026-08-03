@@ -72,8 +72,15 @@ public final class Land {
     private final FlagRules flags;
     private final LandFlags landFlags;
 
-    /** At most one. Two plugins answering for the same block is two sets of rules and no tie-breaker. */
-    private volatile LandProvider provider;
+    /**
+     * At most one. Two plugins answering for the same block is two sets of rules and no tie-breaker.
+     *
+     * <p>An AtomicReference rather than a volatile field because registering is check-then-act: two plugins
+     * enabling at once could both read null and both believe they had the job. Whichever wrote second would
+     * win silently, so which plugin's rules a server ran would depend on load order.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<LandProvider> provider =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     private final Set<UUID> bypassing = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastRefusal = new ConcurrentHashMap<>();
@@ -98,22 +105,21 @@ public final class Land {
         if (candidate == null) {
             return false;
         }
-        LandProvider existing = provider;
-        if (existing != null) {
+        if (!provider.compareAndSet(null, candidate)) {
             log.warn("{} offered to answer land questions, but {} already does. Ignoring the second one — "
                             + "two answers for the same block cannot both be enforced.",
-                    candidate.name(), existing.name());
+                    candidate.name(), provider.get().name());
             return false;
         }
-        provider = candidate;
         log.info("Land questions are answered by {}.", candidate.name());
         return true;
     }
 
     /** Stands the provider down — called when the plugin that registered it stops. */
     public void withdraw(LandProvider registered) {
-        if (provider == registered && registered != null) {
-            provider = null;
+        // Only if it is still the one registered: a module shutting down must not be able to unregister a
+        // provider that replaced it in the meantime.
+        if (registered != null && provider.compareAndSet(registered, null)) {
             log.info("{} has stopped answering land questions; nothing is protected until something does.",
                     registered.name());
         }
@@ -121,19 +127,19 @@ public final class Land {
 
     /** Whether anybody is answering at all. */
     public boolean hasProvider() {
-        return provider != null;
+        return provider.get() != null;
     }
 
     /** Who is answering, for the console line and for the diagnostics command. */
     public Optional<LandProvider> provider() {
-        return Optional.ofNullable(provider);
+        return Optional.ofNullable(provider.get());
     }
 
     // ------------------------------------------------------------------------ looking ground up
 
     /** The protected area at this spot, if there is one and if anybody knows. */
     public Optional<ProtectedArea> areaAt(Location location) {
-        LandProvider answering = provider;
+        LandProvider answering = provider.get();
         if (answering == null || location == null) {
             return Optional.empty();
         }
@@ -148,7 +154,7 @@ public final class Land {
      * between two answers several times a second.
      */
     public Optional<ProtectedArea> areaAround(Player player) {
-        LandProvider answering = provider;
+        LandProvider answering = provider.get();
         if (answering == null || player == null) {
             return Optional.empty();
         }
@@ -164,7 +170,7 @@ public final class Land {
      * plugin.
      */
     public LandVerdict safeToReshape(World world) {
-        LandProvider answering = provider;
+        LandProvider answering = provider.get();
         if (answering == null || world == null) {
             return LandVerdict.UNKNOWN;
         }
@@ -231,7 +237,7 @@ public final class Land {
 
     /** The three-way answer, for a caller that needs to tell "no" from "nobody knows". */
     public LandVerdict verdict(Player player, Location location, LandAction action) {
-        if (provider == null) {
+        if (provider.get() == null) {
             return LandVerdict.UNKNOWN;
         }
         Optional<ProtectedArea> area = areaAt(location);

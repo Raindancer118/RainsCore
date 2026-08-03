@@ -60,7 +60,19 @@ public enum LandFlag {
     ENDER_PEARL_IN(Material.ENDER_PEARL, true, true,
             EnumSet.of(LandAudience.OWNER, LandAudience.TRUSTED)),
     TELEPORT_IN(Material.COMPASS, true, true,
-            EnumSet.of(LandAudience.OWNER, LandAudience.TRUSTED));
+            EnumSet.of(LandAudience.OWNER, LandAudience.TRUSTED)),
+
+    /**
+     * Whether potions may be used here at all — drunk, thrown or left lingering.
+     *
+     * <p>Separate from PvP, and both halves are wanted. An arena wants its fighters to bring what they brought
+     * and nothing more; a shop or a spawn wants no clouds on the floor; a claim owner may want to drink their
+     * own potions in peace while nobody throws anything over the wall.
+     *
+     * <p>Audience aware, because "the owner may, visitors may not" is the common setting and the whole reason
+     * the tiers exist.
+     */
+    POTIONS(Material.SPLASH_POTION, true, true);
 
     private final Material icon;
     private final boolean builtInDefault;
