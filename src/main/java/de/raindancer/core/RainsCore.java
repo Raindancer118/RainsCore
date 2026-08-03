@@ -9,6 +9,7 @@ import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.identity.Identities;
 import de.raindancer.core.achievement.Achievements;
 import de.raindancer.core.items.CustomItems;
+import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.poi.PoiStore;
@@ -117,6 +118,12 @@ public interface RainsCore {
 
     /** Turns a definition into an actual stack, and recognises one again by the key inside it. */
     ItemFactory itemFactory();
+
+    /**
+     * What an item <em>does</em>: the trigger it answers to, its cooldown, and how many uses it has
+     * left. A plugin registers the effect; this decides whether it may run and says why not.
+     */
+    ItemAbilities itemAbilities();
 
     /**
      * Custom achievements: what a player has done and what they are working towards. Not vanilla

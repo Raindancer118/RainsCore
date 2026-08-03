@@ -14,6 +14,7 @@ import de.raindancer.core.gui.MenuListener;
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.items.CustomItems;
+import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.platform.BukkitActionBarSink;
@@ -82,6 +83,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Punishments punishments;
     private CustomItems items;
     private ItemFactory itemFactory;
+    private ItemAbilities itemAbilities;
     private Achievements achievements;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
@@ -122,6 +124,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         items = new CustomItems(getDataFolder().toPath().resolve("items.yml"));
         items.load();
         itemFactory = new ItemFactory(this);
+        itemAbilities = new ItemAbilities(System::currentTimeMillis);
 
         achievements = new Achievements(getDataFolder().toPath().resolve("achievements.yml"),
                 System::currentTimeMillis);
@@ -320,6 +323,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public ItemAbilities itemAbilities() {
+        return itemAbilities;
+    }
+
+    @Override
     public ItemFactory itemFactory() {
         return itemFactory;
     }
@@ -389,6 +397,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         actionBars.forget(player.getUniqueId());
         clickActions.forget(player.getUniqueId());
         scoreboards.forget(player.getUniqueId());
+        itemAbilities.forget(player.getUniqueId());
         bossBars.forget(player.getUniqueId());
     }
 

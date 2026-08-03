@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  */
 public record CustomItem(String plugin, String id, Material material, String displayName,
                          List<String> lore, Integer customModelData, boolean glowing,
-                         Map<String, String> tags) {
+                         String abilityKey, List<String> recipeRows, Map<String, String> tags) {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
@@ -63,6 +63,7 @@ public record CustomItem(String plugin, String id, Material material, String dis
         plugin = plugin.trim().toLowerCase(Locale.ROOT);
         id = id.trim().toLowerCase(Locale.ROOT);
         lore = lore == null ? List.of() : List.copyOf(lore);
+        recipeRows = recipeRows == null ? List.of() : List.copyOf(recipeRows);
         tags = tags == null ? Map.of() : Map.copyOf(tags);
     }
 
@@ -105,6 +106,35 @@ public record CustomItem(String plugin, String id, Material material, String dis
         return Optional.ofNullable(customModelData);
     }
 
+    /**
+     * Which {@link ItemAbility} this item does, if it does anything.
+     *
+     * <p>A key rather than the ability itself, so a definition can be read from a file before the
+     * plugin that owns the ability has registered it — and so an item whose plugin is switched off
+     * is an inert item rather than an unreadable definition.
+     */
+    public Optional<String> ability() {
+        return abilityKey == null || abilityKey.isBlank()
+                ? Optional.empty() : Optional.of(abilityKey);
+    }
+
+    /**
+     * The crafting recipe, as up to three rows of material names — {@code "LIGHTNING_ROD
+     * DIAMOND_BLOCK LIGHTNING_ROD"}. Empty for an item nobody can craft.
+     *
+     * <p>Rows of text rather than a Bukkit {@code ShapedRecipe} for the same reason the ability is a
+     * key: this is what a server owner writes in a config file and edits in a menu, and it has to
+     * survive being read before there is a server to register it with. {@link ItemRecipes} turns it
+     * into the real thing.
+     */
+    public List<String> recipe() {
+        return recipeRows;
+    }
+
+    public boolean isCraftable() {
+        return !recipeRows.isEmpty();
+    }
+
     public boolean isGlowing() {
         return glowing;
     }
@@ -114,23 +144,23 @@ public record CustomItem(String plugin, String id, Material material, String dis
     }
 
     public CustomItem withMaterial(Material newMaterial) {
-        return new CustomItem(plugin, id, newMaterial, displayName, lore, customModelData, glowing, tags);
+        return new CustomItem(plugin, id, newMaterial, displayName, lore, customModelData, glowing, abilityKey, recipeRows, tags);
     }
 
     public CustomItem withName(String newDisplayName) {
-        return new CustomItem(plugin, id, material, newDisplayName, lore, customModelData, glowing, tags);
+        return new CustomItem(plugin, id, material, newDisplayName, lore, customModelData, glowing, abilityKey, recipeRows, tags);
     }
 
     public CustomItem withLore(List<String> newLore) {
-        return new CustomItem(plugin, id, material, displayName, newLore, customModelData, glowing, tags);
+        return new CustomItem(plugin, id, material, displayName, newLore, customModelData, glowing, abilityKey, recipeRows, tags);
     }
 
     public CustomItem withModelData(Integer newModelData) {
-        return new CustomItem(plugin, id, material, displayName, lore, newModelData, glowing, tags);
+        return new CustomItem(plugin, id, material, displayName, lore, newModelData, glowing, abilityKey, recipeRows, tags);
     }
 
     public CustomItem withGlowing(boolean nowGlowing) {
-        return new CustomItem(plugin, id, material, displayName, lore, customModelData, nowGlowing, tags);
+        return new CustomItem(plugin, id, material, displayName, lore, customModelData, nowGlowing, abilityKey, recipeRows, tags);
     }
 
     public CustomItem withTag(String key, String value) {
@@ -140,7 +170,7 @@ public record CustomItem(String plugin, String id, Material material, String dis
         } else {
             updated.put(key, value);
         }
-        return new CustomItem(plugin, id, material, displayName, lore, customModelData, glowing, updated);
+        return new CustomItem(plugin, id, material, displayName, lore, customModelData, glowing, abilityKey, recipeRows, updated);
     }
 
     private static boolean parses(String miniMessage) {
@@ -162,6 +192,8 @@ public record CustomItem(String plugin, String id, Material material, String dis
         private List<String> lore = List.of();
         private Integer modelData;
         private boolean glowing;
+        private String ability;
+        private List<String> recipe = List.of();
         private final Map<String, String> tags = new LinkedHashMap<>();
 
         private Builder(String plugin, String id) {
@@ -195,6 +227,18 @@ public record CustomItem(String plugin, String id, Material material, String dis
             return this;
         }
 
+        /** Which ability this item performs, e.g. {@code "hg:lightning"}. */
+        public Builder ability(String value) {
+            this.ability = value;
+            return this;
+        }
+
+        /** How it is crafted: up to three rows, each of up to three material names or {@code -}. */
+        public Builder recipe(List<String> rows) {
+            this.recipe = rows;
+            return this;
+        }
+
         public Builder tag(String key, String value) {
             if (key != null && value != null) {
                 tags.put(key, value);
@@ -204,7 +248,7 @@ public record CustomItem(String plugin, String id, Material material, String dis
 
         public CustomItem build() {
             return new CustomItem(plugin, id, material, displayName, lore, modelData, glowing,
-                    tags);
+                    ability, recipe, tags);
         }
     }
 }

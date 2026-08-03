@@ -190,7 +190,9 @@ public final class CustomItems {
                 .material(material)
                 .name(entry.getString("name"))
                 .lore(entry.getStringList("lore"))
-                .glowing(entry.getBoolean("glowing"));
+                .glowing(entry.getBoolean("glowing"))
+                .ability(entry.getString("ability"))
+                .recipe(entry.getStringList("recipe"));
         if (entry.contains("model-data")) {
             built.modelData(entry.getInt("model-data"));
         }
@@ -221,6 +223,10 @@ public final class CustomItems {
             item.modelData().ifPresent(data -> yaml.set(path + "model-data", data));
             if (item.isGlowing()) {
                 yaml.set(path + "glowing", true);
+            }
+            item.ability().ifPresent(ability -> yaml.set(path + "ability", ability));
+            if (item.isCraftable()) {
+                yaml.set(path + "recipe", item.recipe());
             }
             item.tags().forEach((tag, value) -> yaml.set(path + "tags." + tag, value));
         }
