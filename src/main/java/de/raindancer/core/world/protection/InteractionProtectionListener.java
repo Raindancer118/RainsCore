@@ -40,7 +40,7 @@ public final class InteractionProtectionListener implements Listener {
 
     private final Land land;
 
-    /** Throttles the potion refusal per player — see refusePotions. */
+    /** Throttles every flag refusal this listener sends, per player — see refuse. */
     private final java.util.Map<java.util.UUID, Long> lastPotionRefusal =
             new java.util.concurrent.ConcurrentHashMap<>();
     private final de.raindancer.core.ui.messages.Messages messages;
@@ -290,14 +290,7 @@ public final class InteractionProtectionListener implements Listener {
      * player does repeatedly and holding the key down would otherwise fill their screen.
      */
     private void refusePotions(Player who) {
-        long now = System.currentTimeMillis();
-        Long last = lastPotionRefusal.get(who.getUniqueId());
-        if (last != null && now - last < 1_500L) {
-            return;
-        }
-        lastPotionRefusal.put(who.getUniqueId(), now);
-        String where = land.areaAt(who.getLocation()).map(ProtectedArea::name).orElse("here");
-        who.sendActionBar(messages.prefixed("land.potions-refused", "claim", where));
+        land.areaAt(who.getLocation()).ifPresent(area -> refuse(who, area, "land.potions-refused"));
     }
 
     /**
@@ -322,7 +315,76 @@ public final class InteractionProtectionListener implements Listener {
     }
 
     private void refuseRiptide(Player who, ProtectedArea area) {
-        who.sendActionBar(messages.prefixed("land.riptide-refused", "claim", area.name()));
+        refuse(who, area, "land.riptide-refused");
+    }
+
+    /**
+     * Leading an animal.
+     *
+     * <p>Distinct from the ANIMALS permission, which is about touching one. This is about walking one off the
+     * property — the trick that empties a pen without breaking a single block, so nothing in the block
+     * protection ever sees it happen.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onLeash(org.bukkit.event.entity.PlayerLeashEntityEvent event) {
+        Player player = event.getPlayer();
+        if (!land.landFlags().isEnforced(LandFlag.LEADS) || land.isBypassing(player)) {
+            return;
+        }
+        if (land.landFlags().isAllowedAt(event.getEntity().getLocation(), LandFlag.LEADS,
+                player.getUniqueId())) {
+            return;
+        }
+        event.setCancelled(true);
+        land.areaAt(event.getEntity().getLocation())
+                .ifPresent(area -> refuse(player, area, "land.leads-refused"));
+    }
+
+    /**
+     * Putting a boat or a minecart down.
+     *
+     * <p>Distinct from the VEHICLES permission, which decides who may use one. This decides whether they exist
+     * here at all: a spawn where forty abandoned boats have accumulated, or an arena where a boat is a way onto
+     * a wall nobody meant to be climbable.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onVehiclePlaced(org.bukkit.event.player.PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getItem() == null) {
+            return;
+        }
+        if (!isVehicle(event.getItem().getType())) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (!land.landFlags().isEnforced(LandFlag.BOATS) || land.isBypassing(player)) {
+            return;
+        }
+        org.bukkit.Location where = event.getClickedBlock() == null
+                ? player.getLocation() : event.getClickedBlock().getLocation();
+        if (land.landFlags().isAllowedAt(where, LandFlag.BOATS, player.getUniqueId())) {
+            return;
+        }
+        event.setCancelled(true);
+        land.areaAt(where).ifPresent(area -> refuse(player, area, "land.boats-refused"));
+    }
+
+    /** Whether this item puts a vehicle down. Boats, rafts and every kind of minecart. */
+    private static boolean isVehicle(org.bukkit.Material material) {
+        String name = material.name();
+        return name.endsWith("_BOAT") || name.endsWith("_CHEST_BOAT")
+                || name.endsWith("_RAFT") || name.endsWith("_CHEST_RAFT")
+                || name.equals("MINECART") || name.endsWith("_MINECART");
+    }
+
+    /** One throttled line on the action bar. Shared by the flag refusals, which are all the same shape. */
+    private void refuse(Player who, ProtectedArea area, String key) {
+        long now = System.currentTimeMillis();
+        Long last = lastPotionRefusal.get(who.getUniqueId());
+        if (last != null && now - last < 1_500L) {
+            return;
+        }
+        lastPotionRefusal.put(who.getUniqueId(), now);
+        who.sendActionBar(messages.prefixed(key, "claim", area.name()));
     }
 
     /** Whether potions are allowed for this person on this ground. */

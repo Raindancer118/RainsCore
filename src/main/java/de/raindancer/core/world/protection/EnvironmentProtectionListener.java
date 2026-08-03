@@ -297,6 +297,74 @@ public final class EnvironmentProtectionListener implements Listener {
         }
     }
 
+    /**
+     * A totem saving somebody.
+     *
+     * <p>Cancelling the resurrection is not a thing Bukkit offers directly — the totem fires as an
+     * {@code EntityResurrectEvent}, which <em>is</em> cancellable, and cancelling it means the totem is not
+     * consumed and the death goes ahead. Which is the right behaviour: they keep the item and lose the fight,
+     * rather than losing an expensive item to a rule they did not know about.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onTotem(org.bukkit.event.entity.EntityResurrectEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.TOTEMS)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player player)) {
+            return;   // a totem in a mob's hand is not what this is about
+        }
+        if (land.isBypassing(player)) {
+            return;
+        }
+        if (!land.landFlags().isAllowedAt(player.getLocation(), LandFlag.TOTEMS, player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Whether redstone runs.
+     *
+     * <p>Not about who may place it — that is the BUILD action — but whether what is placed does anything. Off
+     * freezes the machines where they stand: no pistons, no dispensers, no doors opening themselves.
+     *
+     * <p>Area wide rather than per person, because a circuit cannot run for the owner and not for a visitor. It
+     * is one machine.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onRedstone(org.bukkit.event.block.BlockRedstoneEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.REDSTONE)) {
+            return;
+        }
+        if (land.landFlags().isAllowedAt(event.getBlock().getLocation(), LandFlag.REDSTONE)) {
+            return;
+        }
+        // Held at its old level rather than cancelled: this event has no cancel, and putting the new current
+        // back to the old one is what "nothing changed" means to everything downstream of it.
+        event.setNewCurrent(event.getOldCurrent());
+    }
+
+    /**
+     * Breeding animals.
+     *
+     * <p>The flag people reach for after their first lag report: two players, forty cows, one chunk. Separate
+     * from ANIMAL_SPAWNING, which is the world putting animals there — this is somebody standing in a pen with
+     * a bucket of wheat.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBreed(org.bukkit.event.entity.EntityBreedEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.BREEDING)) {
+            return;
+        }
+        org.bukkit.entity.LivingEntity breeder = event.getBreeder();
+        java.util.UUID who = breeder instanceof Player person ? person.getUniqueId() : null;
+        if (breeder instanceof Player person && land.isBypassing(person)) {
+            return;
+        }
+        if (!land.landFlags().isAllowedAt(event.getEntity().getLocation(), LandFlag.BREEDING, who)) {
+            event.setCancelled(true);
+        }
+    }
+
     // ------------------------------------------------------------ visitor comfort
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)

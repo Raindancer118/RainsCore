@@ -76,6 +76,7 @@ import de.raindancer.core.world.protection.InteractionProtectionListener;
 import de.raindancer.core.world.protection.Land;
 import de.raindancer.core.world.protection.LandPolicies;
 import de.raindancer.core.world.protection.MobControlListener;
+import de.raindancer.core.world.protection.MovementProtectionListener;
 import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -188,6 +189,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private FarmWorlds farmWorlds;
     private Land land;
     private LandPolicies landPolicies;
+    private MovementProtectionListener movementProtection;
     private ResourcePacks resourcePacks;
     private ChunkHolds chunks;
     private Safety safety;
@@ -320,6 +322,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new InteractionProtectionListener(land, messages), this);
         getServer().getPluginManager().registerEvents(new EnvironmentProtectionListener(land), this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
+        movementProtection = new MovementProtectionListener(land, messages);
+        getServer().getPluginManager().registerEvents(movementProtection, this);
 
         clickActions = new ClickActions(System::currentTimeMillis);
         // Deliberately empty: Core registers no commands at all, so it has no callback command to
@@ -962,6 +966,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         warps.forget(player.getUniqueId());
         effects.forget(player.getUniqueId());
         land.forget(player.getUniqueId());
+        movementProtection.forget(player.getUniqueId());
         if (combatListener != null) {
             combatListener.forget(player.getUniqueId());
         }

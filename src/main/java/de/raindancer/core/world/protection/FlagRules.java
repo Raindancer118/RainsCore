@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * What a {@link LandFlag} actually resolves to, for whom.
@@ -40,7 +41,26 @@ public final class FlagRules {
      *                 {@link LandFlag#audienceAware()} ever has
      */
     public boolean isAllowed(ProtectedArea area, LandFlag flag, LandAudience audience) {
-        return switch (policy.policy(flag)) {
+        return isAllowed(area, flag, audience, null);
+    }
+
+    /**
+     * The same, for a named person — which is what lets an area exempt somebody from its own rules.
+     *
+     * <p>The exemption is checked before the area's own value and after the server's policy, and that order is
+     * the design: a server that has forced a flag has taken the decision away from the ground entirely, so an
+     * area cannot hand it back by exempting people. Whoever is responsible for a piece of ground may excuse
+     * somebody from their own rules, never from the server's.
+     */
+    public boolean isAllowed(ProtectedArea area, LandFlag flag, LandAudience audience, UUID who) {
+        FlagPolicy decided = policy.policy(flag);
+        if (decided == FlagPolicy.AVAILABLE && area != null && who != null
+                && area.isExemptFromFlags(who)) {
+            // Exempt means the rule does not apply to them, which is "allowed" — the same thing DISABLED
+            // means at the server level, and for the same reason: nothing is interfering.
+            return true;
+        }
+        return switch (decided) {
             // Not enforced means not interfered with, and not interfering with fire spread means fire
             // spreads. See the class comment — this line is the one people misread.
             case DISABLED -> true;
@@ -82,7 +102,8 @@ public final class FlagRules {
 
     /** The value that applies to this player, based on where they stand on this ground. */
     public boolean isAllowedFor(ProtectedArea area, LandFlag flag, Player player) {
-        return isAllowed(area, flag, audienceOf(area, player));
+        return isAllowed(area, flag, audienceOf(area, player),
+                player == null ? null : player.getUniqueId());
     }
 
     /**

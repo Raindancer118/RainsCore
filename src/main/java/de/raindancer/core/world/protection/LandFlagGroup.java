@@ -20,32 +20,50 @@ import java.util.Locale;
  */
 public enum LandFlagGroup {
 
-    /** Who may hurt whom, and what hurts them. */
-    COMBAT(Material.DIAMOND_SWORD,
-            LandFlag.PVP, LandFlag.MOB_DAMAGE, LandFlag.EXPLOSION_DAMAGE, LandFlag.FALL_DAMAGE,
-            LandFlag.HUNGER, LandFlag.POTIONS),
+    /**
+     * What happens to a person standing here.
+     *
+     * <p>Everything whose subject is a player rather than the world: what may hurt them, what may find them,
+     * what they may drink, whether a totem saves them. {@code MONSTER_TARGETING} belongs here rather than with
+     * the creatures for exactly that reason — it decides whether a skeleton takes aim at <em>you</em>, which is
+     * a question about you. The creature group is about where mobs come from and what they may break.
+     */
+    PLAYER(Material.PLAYER_HEAD,
+            LandFlag.PVP, LandFlag.MOB_DAMAGE, LandFlag.MONSTER_TARGETING, LandFlag.EXPLOSION_DAMAGE,
+            LandFlag.FALL_DAMAGE, LandFlag.HUNGER, LandFlag.POTIONS),
 
     /** What the ground and the weather do on their own. */
     NATURE(Material.OAK_SAPLING,
             LandFlag.FIRE_SPREAD, LandFlag.LEAF_DECAY, LandFlag.SNOW_ICE_FORM, LandFlag.EXPLOSIONS),
 
-    /** Creatures: where they appear, whether they come in, and whether they can break things. */
-    MOBS(Material.ZOMBIE_HEAD,
+    /**
+     * Everything that is an entity rather than a block: where creatures come from, what they may break, and
+     * what may be put down that is not a block.
+     *
+     * <p>A boat is an entity, which is why it is here rather than with the machinery — a spawn drowning in
+     * abandoned boats and a spawn overrun with bred cows are the same complaint about the same kind of thing.
+     */
+    ENTITIES(Material.ZOMBIE_HEAD,
             LandFlag.MONSTER_SPAWNING, LandFlag.ANIMAL_SPAWNING, LandFlag.SPAWNER_SPAWNING,
-            LandFlag.MONSTER_ENTRY, LandFlag.MONSTER_TARGETING, LandFlag.MOB_GRIEF,
-            LandFlag.ENDERMAN_GRIEF),
+            LandFlag.MONSTER_ENTRY, LandFlag.MOB_GRIEF,
+            LandFlag.ENDERMAN_GRIEF, LandFlag.BREEDING, LandFlag.LEADS, LandFlag.BOATS),
 
     /** Ways in and out that are not walking. */
     TRAVEL(Material.ENDER_PEARL,
-            LandFlag.TELEPORT_IN, LandFlag.ENDER_PEARL_IN, LandFlag.ELYTRA_FLIGHT, LandFlag.RIPTIDE),
+            LandFlag.WALK_IN, LandFlag.TELEPORT_IN, LandFlag.ENDER_PEARL_IN,
+            LandFlag.ELYTRA_FLIGHT, LandFlag.RIPTIDE),
 
     /** What somebody outside the border can reach in with. */
     BORDER(Material.PISTON,
             LandFlag.PISTONS_FROM_OUTSIDE, LandFlag.FLUIDS_FROM_OUTSIDE),
 
+    /** Machinery: whether what has been built here actually runs. */
+    MACHINERY(Material.REPEATER,
+            LandFlag.REDSTONE),
+
     /** What happens to somebody's things when they die here. */
     DEATH(Material.TOTEM_OF_UNDYING,
-            LandFlag.KEEP_INVENTORY, LandFlag.ITEM_DROPS),
+            LandFlag.KEEP_INVENTORY, LandFlag.ITEM_DROPS, LandFlag.TOTEMS),
 
     /**
      * Anything not filed anywhere else.

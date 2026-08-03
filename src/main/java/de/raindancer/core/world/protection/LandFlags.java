@@ -50,7 +50,7 @@ public final class LandFlags {
             return true;
         }
         ProtectedArea area = land.areaAt(location).orElse(null);
-        return rules.isAllowed(area, flag, LandAudience.of(area, who));
+        return rules.isAllowed(area, flag, LandAudience.of(area, who), who);
     }
 
     /** The answer for a creature, resolved where it is standing. */
@@ -71,8 +71,8 @@ public final class LandFlags {
      */
     public boolean isAllowedForTracked(ProtectedArea tracked, Location location, LandFlag flag,
                                        Player player) {
-        return rules.isAllowed(tracked, flag,
-                LandAudience.of(tracked, player == null ? null : player.getUniqueId()));
+        UUID who = player == null ? null : player.getUniqueId();
+        return rules.isAllowed(tracked, flag, LandAudience.of(tracked, who), who);
     }
 
     /** The area-level resolver behind this, for the screens that show a flag rather than enforce it. */

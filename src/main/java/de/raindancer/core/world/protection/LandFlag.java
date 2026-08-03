@@ -106,7 +106,68 @@ public enum LandFlag {
      * <p>Audience aware, because "the owner may, visitors may not" is the common setting and the whole reason
      * the tiers exist.
      */
-    POTIONS(Material.SPLASH_POTION, true, true);
+    POTIONS(Material.SPLASH_POTION, true, true),
+
+    /**
+     * Whether a totem of undying saves somebody here.
+     *
+     * <p>An arena's whole point is that losing means something, and a totem is the item that removes that.
+     * Audience aware, because "the owner may keep theirs" is a reasonable thing to want in a claim and a
+     * ridiculous one in an arena — and both are set the same way.
+     */
+    TOTEMS(Material.TOTEM_OF_UNDYING, true, true),
+
+    /**
+     * Whether redstone runs here.
+     *
+     * <p>Not about who may <em>place</em> it — that is the BUILD action — but whether what is placed does
+     * anything. Switching it off freezes the machines: no pistons firing, no dispensers, no doors opening
+     * themselves. Wanted for a spawn where somebody has built a lag machine, and for an arena where a hidden
+     * dispenser is not part of the fight.
+     *
+     * <p>Area wide, because a circuit cannot run for the owner and not for a visitor — it is one machine.
+     */
+    REDSTONE(Material.REDSTONE, true),
+
+    /**
+     * Whether animals may be bred here.
+     *
+     * <p>The flag people reach for after their first lag report: two players, forty cows, one chunk. Separate
+     * from ANIMAL_SPAWNING, which is about the world putting animals there — this is about somebody standing in
+     * a pen with a bucket of wheat.
+     */
+    BREEDING(Material.WHEAT, true, true),
+
+    /**
+     * Whether leads work here.
+     *
+     * <p>Distinct from the ANIMALS permission, which is about who may touch an animal. This is about whether
+     * anybody can walk one off the property — the trick that empties a pen without breaking a single block, so
+     * nothing in the block protection ever sees it.
+     */
+    LEADS(Material.LEAD, true, true),
+
+    /**
+     * Whether boats and minecarts may be put down here.
+     *
+     * <p>Distinct from the VEHICLES permission, which decides who may use them. This decides whether they exist
+     * here at all: a spawn where forty abandoned boats have accumulated, an arena where a boat is a way onto a
+     * wall nobody meant to be climbable.
+     */
+    BOATS(Material.OAK_BOAT, true, true),
+
+    /**
+     * Whether somebody may walk in at all.
+     *
+     * <p>The counterpart to the teleport and pearl flags, and the one that makes them a complete set: without
+     * it an owner can close every other way in and still have people wander through the front. With it, a tier
+     * that is not allowed is turned back at the border.
+     *
+     * <p>A flag as well as {@link LandAction#ENTER}, which is not a duplicate: the action is a permission
+     * granted to named people, this is the ground's own rule for a whole tier. An owner keeping their garden
+     * shut to visitors sets this once, rather than editing the public grant and then remembering it is there.
+     */
+    WALK_IN(Material.LEATHER_BOOTS, true, true);
 
     private final Material icon;
     private final boolean builtInDefault;

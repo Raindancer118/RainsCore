@@ -58,6 +58,27 @@ public interface ProtectedArea {
      */
     boolean may(UUID who, LandAction action);
 
+    /**
+     * Whether this person is exempt from this ground's own flags.
+     *
+     * <p>For the case an owner actually asks for: they set no PvP, no elytra, no potions because that is how
+     * they want the place to be, and then have to work on the build. Without this the only way is to turn each
+     * rule off, do the work, and turn them all back on — and the one that stays off afterwards is the one
+     * nobody notices for a month.
+     *
+     * <p>Deliberately <b>not</b> the server-wide admin bypass. That one is Core's, covers every kind of
+     * protected ground, and is a permission. This is per area, granted by whoever is responsible for that area,
+     * and reaches no further than it.
+     *
+     * <p>Flags only. Someone exempt from a claim's flags is not thereby allowed to break its blocks: what a
+     * person <em>may do</em> is {@link #may}, and it is asked separately.
+     *
+     * <p>Default false, so an area with no such notion says nothing and behaves as before.
+     */
+    default boolean isExemptFromFlags(UUID who) {
+        return false;
+    }
+
     /** Whether anybody may be here at all — the cheap early exit for the movement path. */
     default boolean mayEnter(UUID who) {
         return may(who, LandAction.ENTER);

@@ -93,8 +93,7 @@ public final class FlagChooser extends Menu {
         int band = MenuLayout.WHO;
 
         for (LandFlagGroup group : groups) {
-            band(band, column, Icons.of(group.icon(), "<gold>" + words(group.nameKey()), lore(group)),
-                    click -> new FlagPage(viewer(), brand(), this, group).open());
+            band(band, column, iconFor(group), click -> new FlagPage(viewer(), brand(), this, group).open());
             column++;
             if (column > 4) {
                 // Four to a row. More starts to read as a grid, and a grid is what this exists to stop being.
@@ -107,6 +106,21 @@ public final class FlagChooser extends Menu {
             band(MenuLayout.RULES, 4, Icons.of(Material.BARRIER, "<gray>Nothing to set",
                     "<gray>This server leaves none of the rules to you."));
         }
+    }
+
+    /**
+     * The group's button.
+     *
+     * <p>The player group wears the viewer's own head rather than a generic one. It costs nothing and it is
+     * immediately obvious which page is about <em>you</em> — the same reason the member lists use heads instead
+     * of named paper.
+     */
+    private org.bukkit.inventory.ItemStack iconFor(LandFlagGroup group) {
+        String name = "<gold>" + words(group.nameKey());
+        List<String> lore = lore(group);
+        return group == LandFlagGroup.PLAYER
+                ? Icons.head(viewer(), name, lore)
+                : Icons.of(group.icon(), name, lore);
     }
 
     // ── which groups and flags are on the screen at all ────────────────────────────────────────────
