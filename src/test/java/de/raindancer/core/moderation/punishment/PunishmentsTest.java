@@ -1,5 +1,8 @@
 package de.raindancer.core.moderation.punishment;
 
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,11 +42,31 @@ class PunishmentsTest {
     Path directory;
     private AtomicLong clock;
     private Punishments punishments;
+    /**
+     * The real engine, not a stand-in.
+     *
+     * <p>These punishments live in SQLite now, and the questions worth testing are its questions:
+     * whether a lift survives being written and read back, whether a time column that is absent
+     * comes back as absent rather than as 1970. A fake would answer both the way we expect.
+     */
+    private Database database;
+
+    private Database openDatabase() {
+        return Database.open(directory.resolve("core.db"), CoreSchema.CORE, () -> false);
+    }
 
     @BeforeEach
     void setUp() {
         clock = new AtomicLong(1_000_000L);
-        punishments = new Punishments(directory.resolve("punishments.yml"), clock::get);
+        database = openDatabase();
+        punishments = new Punishments(database, clock::get);
+    }
+
+    @AfterEach
+    void closeDatabase() {
+        if (database != null) {
+            database.close();
+        }
     }
 
     private void advance(Duration by) {
@@ -267,7 +290,11 @@ class PunishmentsTest {
             punishments.lift(BOB, PunishmentKind.MUTE, MOD, "sorry");
             punishments.flush();
 
-            Punishments reopened = new Punishments(directory.resolve("punishments.yml"), clock::get);
+            // Closed and reopened over the same file, because that is what a restart is: a
+            // connection that stayed open would prove only that the in-memory copy is still there.
+            database.close();
+            database = openDatabase();
+            Punishments reopened = new Punishments(database, clock::get);
             reopened.load();
 
             assertThat(reopened.isActive(ALICE, PunishmentKind.BAN)).isTrue();
@@ -284,7 +311,11 @@ class PunishmentsTest {
             punishments.flush();
             advance(Duration.ofDays(8));
 
-            Punishments reopened = new Punishments(directory.resolve("punishments.yml"), clock::get);
+            // Closed and reopened over the same file, because that is what a restart is: a
+            // connection that stayed open would prove only that the in-memory copy is still there.
+            database.close();
+            database = openDatabase();
+            Punishments reopened = new Punishments(database, clock::get);
             reopened.load();
 
             assertThat(reopened.isActive(ALICE, PunishmentKind.BAN))
@@ -295,9 +326,12 @@ class PunishmentsTest {
         @Test
         @DisplayName("a missing file is a clean server")
         void survivesAMissingFile() {
-            Punishments fresh = new Punishments(directory.resolve("nothing.yml"), clock::get);
+            Database empty = Database.open(directory.resolve("never-used.db"), CoreSchema.CORE,
+                    () -> false);
+            Punishments fresh = new Punishments(empty, clock::get);
             assertThatCode(fresh::load).doesNotThrowAnyException();
             assertThat(fresh.allActive()).isEmpty();
+            empty.close();
         }
     }
 

@@ -5,6 +5,8 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -31,13 +33,31 @@ class IdentitiesTest {
     private static final UUID ALICE = UUID.nameUUIDFromBytes("alice".getBytes());
     private static final UUID BOB = UUID.nameUUIDFromBytes("bob".getBytes());
 
+    private Database openedDatabase;
+
+    /** One database per test, opened on first use so the temporary directory already exists. */
+    private Database database() {
+        if (openedDatabase == null || !openedDatabase.isUsable()) {
+            openedDatabase = Database.open(directory.resolve("core.db"), CoreSchema.CORE,
+                    () -> false);
+        }
+        return openedDatabase;
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void closeDatabase() {
+        if (openedDatabase != null) {
+            openedDatabase.close();
+        }
+    }
+
     @TempDir
     Path directory;
     private Identities identities;
 
     @BeforeEach
     void setUp() {
-        identities = new Identities(directory.resolve("identities.yml"));
+        identities = new Identities(database());
     }
 
     private static String plain(Component component) {
@@ -211,7 +231,10 @@ class IdentitiesTest {
             identities.setPrefix(BOB, "<green>[Member] ");
             identities.flush();
 
-            Identities reopened = new Identities(directory.resolve("identities.yml"));
+            // Closed and reopened over the same file, because that is what a restart is: reusing the
+            // open connection would prove only that the in-memory copy is still there.
+            openedDatabase.close();
+            Identities reopened = new Identities(database());
             reopened.load();
 
             assertThat(plain(reopened.chatName(ALICE, "Raindancer118"))).isEqualTo("[Admin] Raindancer118 *");
@@ -228,15 +251,17 @@ class IdentitiesTest {
             identities.setPrefix(ALICE, null);
             identities.flush();
 
-            Identities reopened = new Identities(directory.resolve("identities.yml"));
+            openedDatabase.close();
+            Identities reopened = new Identities(database());
             reopened.load();
             assertThat(reopened.known()).isEmpty();
         }
 
         @Test
-        @DisplayName("a missing file is an empty set of identities, not a failure")
+        @DisplayName("a database with nothing in it is an empty set of identities, not a failure")
         void survivesAMissingFile() {
-            Identities fresh = new Identities(directory.resolve("never-written.yml"));
+            Identities fresh = new Identities(Database.open(
+                    directory.resolve("never-used.db"), CoreSchema.CORE, () -> false));
             assertThatCode(fresh::load).doesNotThrowAnyException();
             assertThat(fresh.known()).isEmpty();
         }

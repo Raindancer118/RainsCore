@@ -1,6 +1,9 @@
 package de.raindancer.core.content.achievement;
 
 import org.bukkit.Material;
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +44,24 @@ class AchievementsTest {
     private static final UUID ALICE = UUID.nameUUIDFromBytes("alice".getBytes());
     private static final UUID BOB = UUID.nameUUIDFromBytes("bob".getBytes());
 
+    private Database openedDatabase;
+
+    /** One database per test, opened on first use so the temporary directory already exists. */
+    private Database database() {
+        if (openedDatabase == null || !openedDatabase.isUsable()) {
+            openedDatabase = Database.open(directory.resolve("core.db"), CoreSchema.CORE,
+                    () -> false);
+        }
+        return openedDatabase;
+    }
+
+    @AfterEach
+    void closeDatabase() {
+        if (openedDatabase != null) {
+            openedDatabase.close();
+        }
+    }
+
     @TempDir
     Path directory;
     private AtomicLong clock;
@@ -54,7 +75,8 @@ class AchievementsTest {
     void setUp() {
         clock = new AtomicLong(1_000_000L);
         announced = new ArrayList<>();
-        achievements = new Achievements(directory.resolve("achievements.yml"), clock::get);
+        achievements = new Achievements(directory.resolve("achievements.yml"), database(),
+                clock::get);
         achievements.onEarned((player, achievement) ->
                 announced.add(new Awarded(player, achievement.key())));
     }
@@ -323,8 +345,11 @@ class AchievementsTest {
             achievements.progress(ALICE, "ghasts:every-stop", 4);
             achievements.flush();
 
+            // Closed and reopened over the same file and the same database, because that is what a
+            // restart is — and this store has two halves, so both have to survive it.
+            openedDatabase.close();
             Achievements reopened = new Achievements(directory.resolve("achievements.yml"),
-                    clock::get);
+                    database(), clock::get);
             reopened.load();
 
             assertThat(reopened.all()).hasSize(2);
@@ -336,7 +361,9 @@ class AchievementsTest {
         @Test
         @DisplayName("a missing file is simply nothing earned yet")
         void survivesAMissingFile() {
-            Achievements fresh = new Achievements(directory.resolve("nothing.yml"), clock::get);
+            Achievements fresh = new Achievements(directory.resolve("nothing.yml"),
+                    Database.open(directory.resolve("never-used.db"), CoreSchema.CORE, () -> false),
+                    clock::get);
             assertThatCode(fresh::load).doesNotThrowAnyException();
             assertThat(fresh.all()).isEmpty();
         }

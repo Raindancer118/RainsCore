@@ -1,5 +1,8 @@
 package de.raindancer.core.world.farm;
 
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,13 +31,31 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  */
 class FarmWorldStateTest {
 
+    private Database openedDatabase;
+
+    /** One database per test, opened on first use so the temporary directory already exists. */
+    private Database database() {
+        if (openedDatabase == null || !openedDatabase.isUsable()) {
+            openedDatabase = Database.open(serverDirectory.resolve("core.db"), CoreSchema.CORE,
+                    () -> false);
+        }
+        return openedDatabase;
+    }
+
+    @AfterEach
+    void closeDatabase() {
+        if (openedDatabase != null) {
+            openedDatabase.close();
+        }
+    }
+
     @TempDir
     Path serverDirectory;
     private FarmWorldState state;
 
     @BeforeEach
     void setUp() {
-        state = new FarmWorldState(serverDirectory.resolve("farmworlds.yml"));
+        state = new FarmWorldState(serverDirectory.resolve("farmworlds.yml"), database());
     }
 
     // ------------------------------------------------------------------ what is remembered
@@ -76,7 +97,11 @@ class FarmWorldStateTest {
             state.recordRegenerated("farmworld", Instant.ofEpochSecond(1_700_000_000));
             state.flush();
 
-            FarmWorldState reopened = new FarmWorldState(serverDirectory.resolve("farmworlds.yml"));
+            // Closed and reopened over the same file and database, because that is what a restart
+            // is — and this store has two halves, so both have to survive it.
+            openedDatabase.close();
+            FarmWorldState reopened = new FarmWorldState(
+                    serverDirectory.resolve("farmworlds.yml"), database());
             reopened.load();
 
             WorldSet set = reopened.byName("farmworld").orElseThrow();
@@ -144,7 +169,9 @@ class FarmWorldStateTest {
         @Test
         @DisplayName("a missing file is simply no farm worlds")
         void survivesAMissingFile() {
-            FarmWorldState fresh = new FarmWorldState(serverDirectory.resolve("nothing.yml"));
+            FarmWorldState fresh = new FarmWorldState(serverDirectory.resolve("nothing.yml"),
+                    Database.open(serverDirectory.resolve("never-used.db"), CoreSchema.CORE,
+                            () -> false));
             assertThatCode(fresh::load).doesNotThrowAnyException();
             assertThat(fresh.all()).isEmpty();
         }

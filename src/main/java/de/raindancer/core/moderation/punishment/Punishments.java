@@ -2,17 +2,18 @@ package de.raindancer.core.moderation.punishment;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
-import de.raindancer.core.data.store.YamlStore;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
+import de.raindancer.core.data.sql.Database;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -42,17 +43,24 @@ public final class Punishments {
 
     private static final LogChannel log = Log.of("moderation");
 
-    private final Path file;
-    private final YamlStore store;
+    private final Database database;
     private final LongSupplier clock;
     private final java.util.Map<UUID, CopyOnWriteArrayList<Punishment>> byPlayer =
             new ConcurrentHashMap<>();
-    private final AtomicBoolean dirty = new AtomicBoolean();
+
+    /**
+     * Which punishments have changed and need writing.
+     *
+     * <p>Ids rather than a single dirty flag, because this table only ever grows: a server that has
+     * been running for a year has every ban it ever handed out in here, and rewriting all of them
+     * every two minutes to save the one that just changed is work that grows without bound. A
+     * handful of ids is what actually changed.
+     */
+    private final Set<String> changed = ConcurrentHashMap.newKeySet();
 
     /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
-    public Punishments(Path file, LongSupplier clock) {
-        this.file = file;
-        this.store = new YamlStore(file);
+    public Punishments(Database database, LongSupplier clock) {
+        this.database = database;
         this.clock = clock;
     }
 
@@ -78,7 +86,7 @@ public final class Punishments {
 
         Punishment given = Punishment.given(target, kind, moderator, reason, now, length);
         recordsOf(target).add(given);
-        dirty.set(true);
+        mark(given);
         log.info("{} was {} by {} for '{}' ({})", target, kind.past(), moderator, given.reason(),
                 given.length());
         return given;
@@ -95,17 +103,24 @@ public final class Punishments {
             return false;
         }
         replace(target, existing.get(), existing.get().lifted(moderator, reason, now()));
-        dirty.set(true);
         log.info("{}'s {} was lifted by {} ('{}')", target, kind.name().toLowerCase(java.util.Locale.ROOT),
                 moderator, reason);
         return true;
     }
 
+    /**
+     * Swaps one record for an updated one, and marks it as needing writing.
+     *
+     * <p>The marking happens here rather than at each call site: every way a punishment changes goes
+     * through this method, and one caller forgetting to mark is a lift that applies until the next
+     * restart and then quietly comes back.
+     */
     private void replace(UUID target, Punishment old, Punishment updated) {
         CopyOnWriteArrayList<Punishment> records = recordsOf(target);
         int at = records.indexOf(old);
         if (at >= 0) {
             records.set(at, updated);
+            mark(updated);
         }
     }
 
@@ -163,96 +178,157 @@ public final class Punishments {
 
     // ---------------------------------------------------------------------------- the file
 
+    /** Whether anything is waiting to be written. */
     public boolean isDirty() {
-        return dirty.get();
+        return !changed.isEmpty();
     }
 
+    /**
+     * Reads every punishment the server has ever handed out.
+     *
+     * <p>All of them, not only the ones in force: "has this player been banned before" is the
+     * question a moderator actually asks, and it cannot be answered from a table of what applies
+     * right now.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void load() {
         byPlayer.clear();
-        if (!store.exists()) {
-            dirty.set(false);
+        changed.clear();
+        if (!database.isUsable()) {
+            // Deliberately loud: without this table every ban on the server has silently stopped
+            // applying, which somebody has to know about now rather than when a banned player
+            // reappears.
+            log.fatal("The punishment table is not available. Nobody is banned or muted this "
+                    + "session until this is fixed.");
             return;
         }
-        YamlConfiguration yaml = store.read();
-        if (!store.problems().isEmpty()) {
-            // Deliberately loud: a moderation file that will not load means every ban on the server
-            // has silently stopped applying, which somebody has to know about now.
-            log.fatal("Could not read {} ({}). Nobody is banned or muted this session until this is "
-                    + "fixed.", file, String.join("; ", store.problems()));
-            return;
-        }
-        ConfigurationSection section = yaml.getConfigurationSection("punishments");
-        if (section == null) {
-            dirty.set(false);
-            return;
-        }
-        for (String id : section.getKeys(false)) {
-            ConfigurationSection entry = section.getConfigurationSection(id);
-            if (entry == null) {
-                continue;
+        int read = database.read(connection -> {
+            int found = 0;
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT id, target, kind, moderator, reason, given_at, ends_at,
+                           lifter, lifter_reason, lifted_at
+                    FROM punishment""");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    try {
+                        Punishment punishment = readOne(rows);
+                        recordsOf(punishment.target()).add(punishment);
+                        found++;
+                    } catch (RuntimeException broken) {
+                        // One unreadable row — a kind this version no longer has, a UUID somebody
+                        // edited by hand. The rest of the table is still worth having.
+                        log.warn("A punishment row could not be read and was skipped ({})",
+                                broken.getMessage());
+                    }
+                }
             }
-            try {
-                Punishment punishment = read(id, entry);
-                recordsOf(punishment.target()).add(punishment);
-            } catch (RuntimeException broken) {
-                log.warn("{}: punishment '{}' could not be read and was skipped ({})",
-                        file.getFileName(), id, broken.getMessage());
-            }
+            return found;
+        }).orElse(-1);
+        if (read < 0) {
+            log.fatal("The punishments could not be read. Nobody is banned or muted this session "
+                    + "until this is fixed.");
         }
-        dirty.set(false);
     }
 
-    private static Punishment read(String id, ConfigurationSection entry) {
-        return new Punishment(id,
-                UUID.fromString(entry.getString("target", "")),
-                PunishmentKind.valueOf(entry.getString("kind", "BAN")),
-                uuid(entry.getString("moderator")),
-                entry.getString("reason"),
-                Instant.ofEpochMilli(entry.getLong("given-at")),
-                instant(entry, "ends-at"),
-                uuid(entry.getString("lifted-by")),
-                entry.getString("lift-reason"),
-                instant(entry, "lifted-at"));
+    private static Punishment readOne(ResultSet rows) throws java.sql.SQLException {
+        return new Punishment(
+                rows.getString("id"),
+                UUID.fromString(rows.getString("target")),
+                PunishmentKind.valueOf(rows.getString("kind")),
+                uuid(rows.getString("moderator")),
+                rows.getString("reason"),
+                Instant.ofEpochMilli(rows.getLong("given_at")),
+                instantOrNull(rows, "ends_at"),
+                uuid(rows.getString("lifter")),
+                rows.getString("lifter_reason"),
+                instantOrNull(rows, "lifted_at"));
     }
 
-    private static Instant instant(ConfigurationSection entry, String key) {
-        return entry.contains(key) ? Instant.ofEpochMilli(entry.getLong(key)) : null;
+    /** A time column that may be absent — SQLite answers 0 for NULL, so the flag has to be read. */
+    private static Instant instantOrNull(ResultSet rows, String column) throws java.sql.SQLException {
+        long millis = rows.getLong(column);
+        return rows.wasNull() ? null : Instant.ofEpochMilli(millis);
     }
 
     private static UUID uuid(String value) {
         return value == null || value.isBlank() ? null : UUID.fromString(value);
     }
 
-    /** Writes, if anything changed. Via a temporary file, so a kill mid-write cannot truncate it. */
+    /**
+     * Writes whatever changed, in one transaction.
+     *
+     * <p>Only the rows that changed, and all of them together: a moderator extending a mute lifts
+     * the old one and adds a new one, and a reader that saw one without the other would see a player
+     * as unpunished for the moment in between.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void flush() {
-        if (!dirty.compareAndSet(true, false)) {
+        if (changed.isEmpty() || !database.isUsable()) {
             return;
         }
-        var snapshot = List.copyOf(byPlayer.values());
-        boolean written = store.write(yaml -> {
-            for (List<Punishment> records : snapshot) {
-                for (Punishment punishment : List.copyOf(records)) {
-                    String path = "punishments." + punishment.id() + ".";
-                    yaml.set(path + "target", punishment.target().toString());
-                    yaml.set(path + "kind", punishment.kind().name());
-                    yaml.set(path + "reason", punishment.reason());
-                    yaml.set(path + "given-at", punishment.givenAt().toEpochMilli());
-                    if (punishment.moderator() != null) {
-                        yaml.set(path + "moderator", punishment.moderator().toString());
-                    }
-                    if (punishment.endsAt() != null) {
-                        yaml.set(path + "ends-at", punishment.endsAt().toEpochMilli());
-                    }
-                    punishment.liftedBy().ifPresent(by -> yaml.set(path + "lifted-by", by.toString()));
-                    punishment.liftReason().ifPresent(why -> yaml.set(path + "lift-reason", why));
-                    if (punishment.liftedAt() != null) {
-                        yaml.set(path + "lifted-at", punishment.liftedAt().toEpochMilli());
-                    }
+        // Taken before the write, so a punishment handed out while it runs is left marked and caught
+        // by the next flush rather than being cleared without having been written.
+        Set<String> writing = Set.copyOf(changed);
+        List<Punishment> rows = byPlayer.values().stream()
+                .flatMap(List::stream)
+                .filter(punishment -> writing.contains(punishment.id()))
+                .toList();
+
+        boolean written = database.write(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO punishment (id, target, kind, moderator, reason, given_at,
+                                            ends_at, lifter, lifter_reason, lifted_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        lifter        = excluded.lifter,
+                        lifter_reason = excluded.lifter_reason,
+                        lifted_at     = excluded.lifted_at,
+                        ends_at       = excluded.ends_at""")) {
+                for (Punishment punishment : rows) {
+                    statement.setString(1, punishment.id());
+                    statement.setString(2, punishment.target().toString());
+                    statement.setString(3, punishment.kind().name());
+                    statement.setString(4, asText(punishment.moderator()));
+                    statement.setString(5, punishment.reason());
+                    statement.setLong(6, punishment.givenAt().toEpochMilli());
+                    setMillisOrNull(statement, 7, punishment.endsAt());
+                    statement.setString(8, asText(punishment.lifter()));
+                    statement.setString(9, punishment.lifterReason());
+                    setMillisOrNull(statement, 10, punishment.liftedAt());
+                    statement.executeUpdate();
                 }
             }
         });
-        if (!written) {
-            dirty.set(true);
+        if (written) {
+            // Removed rather than cleared, so anything that arrived during the write stays marked.
+            changed.removeAll(writing);
         }
+    }
+
+    /** Says a punishment needs writing. */
+    private void mark(Punishment punishment) {
+        if (punishment != null) {
+            changed.add(punishment.id());
+        }
+    }
+
+    /** How many punishments are waiting to be written. */
+    public int waitingToBeWritten() {
+        return changed.size();
+    }
+
+    private static void setMillisOrNull(PreparedStatement statement, int at, Instant when)
+            throws java.sql.SQLException {
+        if (when == null) {
+            statement.setNull(at, java.sql.Types.INTEGER);
+        } else {
+            statement.setLong(at, when.toEpochMilli());
+        }
+    }
+
+    private static String asText(UUID id) {
+        return id == null ? null : id.toString();
     }
 }

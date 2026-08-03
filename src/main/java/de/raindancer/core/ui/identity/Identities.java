@@ -2,15 +2,15 @@ package de.raindancer.core.ui.identity;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
-import de.raindancer.core.data.store.YamlStore;
+import de.raindancer.core.data.sql.Database;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.nio.file.Path;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -66,14 +66,13 @@ public final class Identities {
         }
     }
 
-    private final Path file;
-    private final YamlStore store;
+    private final Database database;
     private final Map<UUID, Identity> identities = new ConcurrentHashMap<>();
-    private final AtomicBoolean dirty = new AtomicBoolean();
+    /** Which players have changed, so a save writes one row rather than every row. */
+    private final Set<UUID> changed = ConcurrentHashMap.newKeySet();
 
-    public Identities(Path file) {
-        this.file = file;
-        this.store = new YamlStore(file);
+    public Identities(Database database) {
+        this.database = database;
     }
 
     // ---------------------------------------------------------------------------- reading
@@ -178,7 +177,7 @@ public final class Identities {
     /** Forgets everything about a player. */
     public void clear(UUID player) {
         if (player != null && identities.remove(player) != null) {
-            dirty.set(true);
+            changed.add(player);
         }
     }
 
@@ -206,78 +205,108 @@ public final class Identities {
         } else {
             identities.put(player, updated);
         }
-        dirty.set(true);
+        changed.add(player);
         return true;
     }
 
-    // ---------------------------------------------------------------------------- the file
+    // ------------------------------------------------------------------------ the database
 
+    /** Whether anything is waiting to be written. */
     public boolean isDirty() {
-        return dirty.get();
+        return !changed.isEmpty();
     }
 
+    /**
+     * Reads everybody's prefix, suffix and colour.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void load() {
         identities.clear();
-        if (!store.exists()) {
-            dirty.set(false);
+        changed.clear();
+        if (!database.isUsable()) {
+            log.error("The identity table is not available; nobody has a prefix this session.");
             return;
         }
-        YamlConfiguration yaml = store.read();
-        if (!store.problems().isEmpty()) {
-            log.error("Could not read {} ({}); nobody has a prefix this session.",
-                    file, String.join("; ", store.problems()));
-            return;
-        }
-        ConfigurationSection section = yaml.getConfigurationSection("players");
-        if (section == null) {
-            dirty.set(false);
-            return;
-        }
-        for (String id : section.getKeys(false)) {
-            ConfigurationSection entry = section.getConfigurationSection(id);
-            if (entry == null) {
-                continue;
-            }
-            try {
-                Identity identity = new Identity(
-                        entry.getString("prefix", ""),
-                        entry.getString("suffix", ""),
-                        entry.getString("nametag-prefix", ""),
-                        entry.getString("colour", ""),
-                        entry.getString("subtitle", ""));
-                if (!identity.isBlank()) {
-                    identities.put(UUID.fromString(id), identity);
+        boolean read = database.read(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT player, prefix, suffix, nametag_prefix, colour, subtitle
+                    FROM identity""");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String player = rows.getString("player");
+                    try {
+                        Identity identity = new Identity(
+                                orEmpty(rows.getString("prefix")),
+                                orEmpty(rows.getString("suffix")),
+                                orEmpty(rows.getString("nametag_prefix")),
+                                orEmpty(rows.getString("colour")),
+                                orEmpty(rows.getString("subtitle")));
+                        if (!identity.isBlank()) {
+                            identities.put(UUID.fromString(player), identity);
+                        }
+                    } catch (RuntimeException broken) {
+                        // One unreadable player is one player without a prefix, not a server where
+                        // nobody has one.
+                        log.warn("The identity of '{}' could not be read and was skipped ({})",
+                                player, broken.getMessage());
+                    }
                 }
-            } catch (RuntimeException broken) {
-                // One unreadable player is one player without a prefix, not a file nobody can load.
-                log.warn("{}: '{}' could not be read and was skipped ({})",
-                        file.getFileName(), id, broken.getMessage());
             }
+            return true;
+        }).orElse(false);
+        if (!read) {
+            log.error("The identities could not be read; nobody has a prefix this session.");
         }
-        dirty.set(false);
     }
 
-    /** Writes, if anything changed. Via a temporary file, so a kill mid-write cannot truncate it. */
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    /**
+     * Writes whatever changed.
+     *
+     * <p>A player whose identity is now blank has their row deleted rather than being written as five
+     * empty strings: the table is then a list of people who have something set, which is the question
+     * anything reading it asks.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void flush() {
-        if (!dirty.compareAndSet(true, false)) {
+        if (changed.isEmpty() || !database.isUsable()) {
             return;
         }
-        boolean written = store.write(yaml -> identities.forEach((player, identity) -> {
-            String path = "players." + player + ".";
-            put(yaml, path + "prefix", identity.prefix());
-            put(yaml, path + "suffix", identity.suffix());
-            put(yaml, path + "nametag-prefix", identity.nametagPrefix());
-            put(yaml, path + "colour", identity.colour());
-            put(yaml, path + "subtitle", identity.subtitle());
-        }));
-        if (!written) {
-            dirty.set(true);
-        }
-    }
-
-    private static void put(YamlConfiguration yaml, String path, String value) {
-        if (!value.isEmpty()) {
-            yaml.set(path, value);
+        Set<UUID> writing = Set.copyOf(changed);
+        boolean written = database.write(connection -> {
+            try (PreparedStatement upsert = connection.prepareStatement("""
+                    INSERT INTO identity (player, prefix, suffix, nametag_prefix, colour, subtitle)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(player) DO UPDATE SET
+                        prefix = excluded.prefix, suffix = excluded.suffix,
+                        nametag_prefix = excluded.nametag_prefix, colour = excluded.colour,
+                        subtitle = excluded.subtitle""");
+                 PreparedStatement remove =
+                         connection.prepareStatement("DELETE FROM identity WHERE player = ?")) {
+                for (UUID player : writing) {
+                    Identity identity = identities.get(player);
+                    if (identity == null) {
+                        remove.setString(1, player.toString());
+                        remove.executeUpdate();
+                        continue;
+                    }
+                    upsert.setString(1, player.toString());
+                    upsert.setString(2, identity.prefix());
+                    upsert.setString(3, identity.suffix());
+                    upsert.setString(4, identity.nametagPrefix());
+                    upsert.setString(5, identity.colour());
+                    upsert.setString(6, identity.subtitle());
+                    upsert.executeUpdate();
+                }
+            }
+        });
+        if (written) {
+            changed.removeAll(writing);
         }
     }
 

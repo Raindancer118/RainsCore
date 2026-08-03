@@ -2,17 +2,17 @@ package de.raindancer.core.world.poi;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
-import de.raindancer.core.data.store.YamlStore;
+import de.raindancer.core.data.sql.Database;
 import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,15 +43,16 @@ public final class PoiStore {
 
     private static final LogChannel log = Log.of("poi");
 
-    private final Path file;
-    private final YamlStore store;
+    private final Database database;
     private final Map<String, Poi> places = new ConcurrentHashMap<>();
-    private final AtomicBoolean dirty = new AtomicBoolean();
+    /** Which places have changed, so a save writes one row rather than every row. */
+    private final Set<String> changed = ConcurrentHashMap.newKeySet();
+    /** Which places were deleted and still have a row to remove. */
+    private final Set<String> deleted = ConcurrentHashMap.newKeySet();
     private final List<String> problems = new ArrayList<>();
 
-    public PoiStore(Path file) {
-        this.file = file;
-        this.store = new YamlStore(file);
+    public PoiStore(Database database) {
+        this.database = database;
     }
 
     // ---------------------------------------------------------------------------- writing
@@ -62,7 +63,8 @@ public final class PoiStore {
             return;
         }
         places.put(place.id(), place);
-        dirty.set(true);
+        changed.add(place.id());
+        deleted.remove(place.id());
     }
 
     /** Forgets one. Answers whether there was anything to forget. */
@@ -70,7 +72,7 @@ public final class PoiStore {
         if (id == null || places.remove(id) == null) {
             return false;
         }
-        dirty.set(true);
+        forget(id);
         return true;
     }
 
@@ -84,10 +86,20 @@ public final class PoiStore {
                 .map(Poi::id)
                 .toList();
         theirs.forEach(places::remove);
-        if (!theirs.isEmpty()) {
-            dirty.set(true);
-        }
+        theirs.forEach(this::forget);
         return theirs.size();
+    }
+
+    /**
+     * Notes that a place is gone and its row has to go too.
+     *
+     * <p>Taken off the changed list at the same time: a place saved and then deleted before the next
+     * write must not be written and then deleted, which would leave the row behind if the delete half
+     * failed.
+     */
+    private void forget(String id) {
+        changed.remove(id);
+        deleted.add(id);
     }
 
     // ---------------------------------------------------------------------------- reading
@@ -167,100 +179,107 @@ public final class PoiStore {
     // ---------------------------------------------------------------------------- the file
 
     /** Whether anything has changed since the last write. An idle server writes nothing. */
+    /** Whether anything is waiting to be written. */
     public boolean isDirty() {
-        return dirty.get();
+        return !changed.isEmpty() || !deleted.isEmpty();
     }
 
     /** Reads the file. A missing one is an empty store, which is what a first run is. */
+    /**
+     * Reads every place on the server.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void load() {
         places.clear();
+        changed.clear();
+        deleted.clear();
         synchronized (this) {
             problems.clear();
         }
-        if (!store.exists()) {
-            dirty.set(false);
+        if (!database.isUsable()) {
+            note("the database is not available, so no places were loaded");
             return;
         }
-        YamlConfiguration yaml = store.read();
-        if (!store.problems().isEmpty()) {
-            // Not fatal: a broken file means the plugins start with nothing rather than not at all,
-            // and the file is left untouched so whoever fixes it still has their data.
-            carry();
-            return;
-        }
-        ConfigurationSection section = yaml.getConfigurationSection("places");
-        if (section == null) {
-            dirty.set(false);
-            return;
-        }
-        for (String id : section.getKeys(false)) {
-            ConfigurationSection entry = section.getConfigurationSection(id);
-            if (entry == null) {
-                continue;
+        boolean read = database.read(connection -> {
+            Map<String, Map<String, String>> tags = readTags(connection);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT id, name, kind, owner, world, x, y, z, yaw, pitch, icon, label, shared
+                    FROM place""");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String id = rows.getString("id");
+                    try {
+                        Poi place = readOne(rows, tags.getOrDefault(id, Map.of()));
+                        places.put(place.id(), place);
+                    } catch (RuntimeException broken) {
+                        // One bad row is one lost place, not a lost server. The rest still load.
+                        note("'" + id + "' could not be read and was skipped ("
+                                + broken.getMessage() + ")");
+                    }
+                }
             }
-            try {
-                Poi place = read(id, entry);
-                places.put(place.id(), place);
-            } catch (RuntimeException broken) {
-                // One bad entry is one lost place, not a lost file. The rest still load.
-                note("'" + id + "' could not be read and was skipped (" + broken.getMessage() + ")");
-            }
+            return true;
+        }).orElse(false);
+        if (!read) {
+            note("the places could not be read");
         }
-        dirty.set(false);
     }
 
     /**
-     * Takes over what the file itself was wrong about.
+     * Every place's tags, in one query.
      *
-     * <p>Separate from {@link #note} because the store has already written those to the log; saying
-     * it twice makes one broken file look like two.
+     * <p>Rather than one query per place, which on a server with a few thousand homes is a few
+     * thousand queries to open a menu.
      */
-    private void carry() {
-        List<String> fromFile = store.problems();
-        synchronized (this) {
-            problems.addAll(fromFile);
+    private static Map<String, Map<String, String>> readTags(java.sql.Connection connection)
+            throws java.sql.SQLException {
+        Map<String, Map<String, String>> tags = new LinkedHashMap<>();
+        try (PreparedStatement statement =
+                     connection.prepareStatement("SELECT place, name, value FROM place_tag");
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                tags.computeIfAbsent(rows.getString("place"), key -> new LinkedHashMap<>())
+                        .put(rows.getString("name"), rows.getString("value"));
+            }
         }
+        return tags;
+    }
+
+    private static Poi readOne(ResultSet rows, Map<String, String> tags)
+            throws java.sql.SQLException {
+        String name = rows.getString("name");
+        String world = rows.getString("world");
+        if (name == null || world == null) {
+            throw new IllegalArgumentException("it has no name or no world");
+        }
+        Poi.Builder built = Poi.builder(name, world,
+                        rows.getDouble("x"), rows.getDouble("y"), rows.getDouble("z"))
+                .id(rows.getString("id"))
+                .kind(rows.getString("kind"))
+                .facing(rows.getFloat("yaw"), rows.getFloat("pitch"))
+                .label(rows.getString("label"))
+                .shared(rows.getBoolean("shared"));
+        String owner = rows.getString("owner");
+        if (owner != null && !owner.isBlank()) {
+            built.owner(UUID.fromString(owner));
+        }
+        String icon = rows.getString("icon");
+        if (icon != null && !icon.isBlank()) {
+            // A block renamed between versions, or one a newer server knows about, is "no icon"
+            // rather than a row that will not load.
+            built.icon(Material.matchMaterial(icon));
+        }
+        tags.forEach(built::tag);
+        return built.build();
     }
 
     private void note(String problem) {
         synchronized (this) {
             problems.add(problem);
         }
-        log.warn("{}: {}", file.getFileName(), problem);
-    }
-
-    private static Poi read(String id, ConfigurationSection entry) {
-        String name = entry.getString("name");
-        String world = entry.getString("world");
-        if (name == null || world == null) {
-            throw new IllegalArgumentException("it has no name or no world");
-        }
-        Map<String, String> tags = new LinkedHashMap<>();
-        ConfigurationSection tagged = entry.getConfigurationSection("tags");
-        if (tagged != null) {
-            for (String key : tagged.getKeys(false)) {
-                tags.put(key, String.valueOf(tagged.get(key)));
-            }
-        }
-        Poi.Builder built = Poi.builder(name, world,
-                        entry.getDouble("x"), entry.getDouble("y"), entry.getDouble("z"))
-                .id(id)
-                .kind(entry.getString("kind", "place"))
-                .facing((float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"))
-                .label(entry.getString("label"))
-                .shared(entry.getBoolean("shared"));
-        String owner = entry.getString("owner");
-        if (owner != null && !owner.isBlank()) {
-            built.owner(UUID.fromString(owner));
-        }
-        String icon = entry.getString("icon");
-        if (icon != null && !icon.isBlank()) {
-            // A block renamed between versions, or one a newer server knows about, is "no icon"
-            // rather than an entry that will not load.
-            built.icon(Material.matchMaterial(icon));
-        }
-        tags.forEach(built::tag);
-        return built.build();
+        log.warn("{}: {}", database.file() == null ? "places" : database.file().getFileName(),
+                problem);
     }
 
     /**
@@ -271,43 +290,78 @@ public final class PoiStore {
      * gets truncated.
      */
     public void flush() {
-        if (!dirty.compareAndSet(true, false)) {
+        if (!isDirty() || !database.isUsable()) {
             return;
         }
-        // Taken before the write rather than inside it, so a place saved while the disk is busy is
-        // in the next flush rather than half in this one.
-        List<Poi> snapshot = List.copyOf(places.values());
-        boolean written = store.write(yaml -> {
-            for (Poi place : snapshot) {
-                String path = "places." + place.id() + ".";
-                yaml.set(path + "name", place.name());
-                yaml.set(path + "kind", place.kind());
-                yaml.set(path + "world", place.world());
-                yaml.set(path + "x", place.x());
-                yaml.set(path + "y", place.y());
-                yaml.set(path + "z", place.z());
-                if (place.yaw() != 0f || place.pitch() != 0f) {
-                    yaml.set(path + "yaw", place.yaw());
-                    yaml.set(path + "pitch", place.pitch());
+        // Taken before the write rather than inside it, so a place saved while the disk is busy is in
+        // the next flush rather than half in this one.
+        Set<String> writing = Set.copyOf(changed);
+        Set<String> removing = Set.copyOf(deleted);
+        List<Poi> rows = writing.stream().map(places::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        boolean written = database.write(connection -> {
+            try (PreparedStatement remove =
+                         connection.prepareStatement("DELETE FROM place WHERE id = ?")) {
+                for (String id : removing) {
+                    remove.setString(1, id);
+                    remove.executeUpdate();
                 }
-                if (place.owner() != null) {
-                    yaml.set(path + "owner", place.owner().toString());
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO place (id, name, kind, owner, world, x, y, z, yaw, pitch,
+                                       icon, label, shared)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name, kind = excluded.kind, owner = excluded.owner,
+                        world = excluded.world, x = excluded.x, y = excluded.y, z = excluded.z,
+                        yaw = excluded.yaw, pitch = excluded.pitch, icon = excluded.icon,
+                        label = excluded.label, shared = excluded.shared""");
+                 PreparedStatement clearTags =
+                         connection.prepareStatement("DELETE FROM place_tag WHERE place = ?");
+                 PreparedStatement addTag = connection.prepareStatement(
+                         "INSERT INTO place_tag (place, name, value) VALUES (?, ?, ?)")) {
+                for (Poi place : rows) {
+                    statement.setString(1, place.id());
+                    statement.setString(2, place.name());
+                    statement.setString(3, place.kind());
+                    statement.setString(4, place.owner() == null ? null : place.owner().toString());
+                    statement.setString(5, place.world());
+                    statement.setDouble(6, place.x());
+                    statement.setDouble(7, place.y());
+                    statement.setDouble(8, place.z());
+                    statement.setFloat(9, place.yaw());
+                    statement.setFloat(10, place.pitch());
+                    statement.setString(11, place.icon() == null ? null : place.icon().name());
+                    // Only a label that is actually one. Poi.label() answers the *name* when no
+                    // label was set, so storing what it returns would turn "no label" into a label
+                    // equal to the name — and the place that comes back would differ from the one
+                    // that went in, for ever, on the very first save.
+                    statement.setString(12,
+                            place.label().equals(place.name()) ? null : place.label());
+                    statement.setBoolean(13, place.isShared());
+                    statement.executeUpdate();
+
+                    // Replaced wholesale rather than merged: a tag the caller removed has to
+                    // disappear, and working out which ones went is more code than rewriting three
+                    // rows. Safe because it is inside the same transaction as the place itself.
+                    clearTags.setString(1, place.id());
+                    clearTags.executeUpdate();
+                    for (Map.Entry<String, String> tag : place.tags().entrySet()) {
+                        addTag.setString(1, place.id());
+                        addTag.setString(2, tag.getKey());
+                        addTag.setString(3, tag.getValue());
+                        addTag.executeUpdate();
+                    }
                 }
-                if (place.icon() != null) {
-                    yaml.set(path + "icon", place.icon().name());
-                }
-                if (place.label() != null && !place.label().equals(place.name())) {
-                    yaml.set(path + "label", place.label());
-                }
-                if (place.isShared()) {
-                    yaml.set(path + "shared", true);
-                }
-                place.tags().forEach((key, value) -> yaml.set(path + "tags." + key, value));
             }
         });
-        if (!written) {
-            // Left dirty, so the next flush tries again rather than believing it succeeded.
-            dirty.set(true);
+        if (written) {
+            // Removed rather than cleared, so anything saved during the write stays marked for the
+            // next one rather than being forgotten.
+            changed.removeAll(writing);
+            deleted.removeAll(removing);
         }
     }
 }

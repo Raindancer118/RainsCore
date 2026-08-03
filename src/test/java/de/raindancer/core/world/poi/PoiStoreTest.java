@@ -1,6 +1,9 @@
 package de.raindancer.core.world.poi;
 
 import org.bukkit.Material;
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -43,10 +46,24 @@ class PoiStoreTest {
     @TempDir
     Path directory;
     private PoiStore store;
+    /** The real engine: these places live in SQLite, and its opinions are what is worth testing. */
+    private Database database;
+
+    private Database openDatabase() {
+        return Database.open(directory.resolve("core.db"), CoreSchema.CORE, () -> false);
+    }
+
+    @AfterEach
+    void closeDatabase() {
+        if (database != null) {
+            database.close();
+        }
+    }
 
     @BeforeEach
     void setUp() {
-        store = new PoiStore(directory.resolve("places.yml"));
+        database = openDatabase();
+        store = new PoiStore(database);
     }
 
     private static Poi home(String name) {
@@ -220,7 +237,10 @@ class PoiStoreTest {
             store.save(market);
             store.flush();
 
-            PoiStore reopened = new PoiStore(directory.resolve("places.yml"));
+            // Closed and reopened over the same file, because that is what a restart is.
+            database.close();
+            database = openDatabase();
+            PoiStore reopened = new PoiStore(database);
             reopened.load();
 
             assertThat(reopened.all()).hasSize(2);
@@ -231,34 +251,42 @@ class PoiStoreTest {
         @Test
         @DisplayName("a file that was never written loads as empty rather than failing")
         void survivesAMissingFile() {
-            PoiStore fresh = new PoiStore(directory.resolve("never-written.yml"));
+            Database empty = Database.open(directory.resolve("never-used.db"), CoreSchema.CORE,
+                    () -> false);
+            PoiStore fresh = new PoiStore(empty);
             assertThatCode(fresh::load).doesNotThrowAnyException();
             assertThat(fresh.all()).isEmpty();
         }
 
         @Test
-        @DisplayName("one unreadable entry is skipped and the rest still load")
-        void skipsBadEntries() throws Exception {
-            java.nio.file.Files.writeString(directory.resolve("places.yml"), """
-                    places:
-                      good:
-                        name: base
-                        world: world
-                        x: 1.0
-                        y: 2.0
-                        z: 3.0
-                        owner: %s
-                        kind: home
-                      broken:
-                        name: nowhere
-                    """.formatted(ALICE));
+        @DisplayName("one unreadable row is skipped and the rest still load")
+        void skipsBadEntries() {
+            store.save(home("base"));
+            store.flush();
+            // A row the loader cannot make sense of, put there directly.
+            //
+            // Note what it took to write one: `name` and `world` are NOT NULL, so the two things the
+            // old YAML version of this test made bad are now refused by the database itself — which
+            // is the point of having one. What is left is a value only the loader can judge: an owner
+            // that is not a UUID, as a hand-edited database or an older version might leave behind.
+            boolean inserted = database.write(connection -> {
+                try (var statement = connection.prepareStatement(
+                        "INSERT INTO place (id, name, kind, owner, world, x, y, z) "
+                                + "VALUES ('broken', 'nowhere', 'home', 'not-a-uuid', "
+                                + "'world', 0, 0, 0)")) {
+                    statement.executeUpdate();
+                }
+            });
+            assertThat(inserted).isTrue();
 
-            PoiStore reopened = new PoiStore(directory.resolve("places.yml"));
+            database.close();
+            database = openDatabase();
+            PoiStore reopened = new PoiStore(database);
             reopened.load();
 
             assertThat(reopened.all()).extracting(Poi::name).containsExactly("base");
             assertThat(reopened.problems())
-                    .as("a skipped entry must be reported, not silently dropped")
+                    .as("a skipped row must be reported, not silently dropped")
                     .hasSize(1);
         }
 
@@ -269,7 +297,10 @@ class PoiStoreTest {
                     .owner(ALICE).kind("home").build());
             store.flush();
 
-            PoiStore reopened = new PoiStore(directory.resolve("places.yml"));
+            // Closed and reopened over the same file, because that is what a restart is.
+            database.close();
+            database = openDatabase();
+            PoiStore reopened = new PoiStore(database);
             reopened.load();
 
             assertThat(reopened.all())
@@ -278,18 +309,20 @@ class PoiStoreTest {
         }
 
         @Test
-        @DisplayName("nothing is written until something changed")
+        @DisplayName("a store with nothing to say writes nothing")
         void doesNotWriteWithoutChanges() {
-            store.load();
-            assertThat(store.isDirty()).isFalse();
-            store.flush();
-            assertThat(directory.resolve("places.yml")).doesNotExist();
-
             store.save(home("base"));
-            assertThat(store.isDirty()).isTrue();
             store.flush();
-            assertThat(directory.resolve("places.yml")).exists();
+
             assertThat(store.isDirty()).isFalse();
+
+            // Nothing marked, so nothing to write. Measured by what is waiting rather than by the
+            // file's timestamp, which is what this used to look at and which SQLite touches for its
+            // own reasons.
+            store.flush();
+
+            assertThat(store.isDirty()).isFalse();
+            assertThat(store.all()).hasSize(1);
         }
     }
 

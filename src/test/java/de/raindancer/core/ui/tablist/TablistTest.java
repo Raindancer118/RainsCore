@@ -5,6 +5,8 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -31,6 +33,24 @@ class TablistTest {
     private static final UUID BOB = UUID.nameUUIDFromBytes("bob".getBytes());
     private static final UUID CAROL = UUID.nameUUIDFromBytes("carol".getBytes());
 
+    private Database openedDatabase;
+
+    /** One database per test, opened on first use so the temporary directory already exists. */
+    private Database database() {
+        if (openedDatabase == null || !openedDatabase.isUsable()) {
+            openedDatabase = Database.open(directory.resolve("core.db"), CoreSchema.CORE,
+                    () -> false);
+        }
+        return openedDatabase;
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void closeDatabase() {
+        if (openedDatabase != null) {
+            openedDatabase.close();
+        }
+    }
+
     @TempDir
     Path directory;
     private Identities identities;
@@ -38,7 +58,7 @@ class TablistTest {
 
     @BeforeEach
     void setUp() {
-        identities = new Identities(directory.resolve("identities.yml"));
+        identities = new Identities(database());
         model = new TablistModel(identities);
     }
 

@@ -3,6 +3,9 @@ package de.raindancer.core.world.warp;
 import de.raindancer.core.world.poi.Poi;
 import de.raindancer.core.world.poi.PoiStore;
 import org.bukkit.Material;
+import de.raindancer.core.data.sql.CoreSchema;
+import de.raindancer.core.data.sql.Database;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -37,6 +40,24 @@ class WarpsTest {
     private static final UUID ALICE = UUID.nameUUIDFromBytes("alice".getBytes());
     private static final UUID BOB = UUID.nameUUIDFromBytes("bob".getBytes());
 
+    private Database openedDatabase;
+
+    /** One database for the test, opened on first use so @TempDir is already there. */
+    private Database database() {
+        if (openedDatabase == null || !openedDatabase.isUsable()) {
+            openedDatabase = Database.open(directory.resolve("core.db"), CoreSchema.CORE,
+                    () -> false);
+        }
+        return openedDatabase;
+    }
+
+    @AfterEach
+    void closeDatabase() {
+        if (openedDatabase != null) {
+            openedDatabase.close();
+        }
+    }
+
     @TempDir
     Path directory;
     private AtomicLong clock;
@@ -46,7 +67,7 @@ class WarpsTest {
     @BeforeEach
     void setUp() {
         clock = new AtomicLong(1_000_000L);
-        places = new PoiStore(directory.resolve("places.yml"));
+        places = new PoiStore(database());
         places.load();
         // Every world exists except the one the "world is gone" test asks about. Injected rather
         // than asking Bukkit, which is not there.
@@ -297,7 +318,10 @@ class WarpsTest {
         warps.setCategory("spawn", "town");
         places.flush();
 
-        PoiStore reopened = new PoiStore(directory.resolve("places.yml"));
+        // Closed and reopened over the same file, because that is what a restart is: a connection
+        // that stayed open would prove only that the in-memory copy is still there.
+        openedDatabase.close();
+        PoiStore reopened = new PoiStore(database());
         reopened.load();
         Warps again = new Warps(reopened, clock::get, world -> true);
 

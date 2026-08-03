@@ -2,6 +2,7 @@ package de.raindancer.core.content.achievement;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.data.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -11,7 +12,10 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,10 +68,24 @@ public final class Achievements {
     /** How far along somebody is with one they are working towards. */
     private final Map<UUID, Map<String, Integer>> progress = new ConcurrentHashMap<>();
     private final List<BiConsumer<UUID, Achievement>> listeners = new CopyOnWriteArrayList<>();
+    private final Database database;
+    /** Set when a definition changed and the file needs rewriting. */
     private final AtomicBoolean dirty = new AtomicBoolean();
+    /** Which players' rows need writing — the database half. */
+    private final Set<UUID> changedPlayers = ConcurrentHashMap.newKeySet();
 
-    /** @param clock milliseconds; injected so "when was this earned" can be tested */
-    public Achievements(Path file, LongSupplier clock) {
+    /**
+     * @param clock milliseconds; injected so "when was this earned" can be tested
+     * @param file     where the achievement <em>definitions</em> live: what they are called, what they
+     *                 are worth, what they look like. Written by whoever runs the server and read at
+     *                 startup, so a file with comments in it is the right home for them —
+     *                 {@link #defineIfAbsent} exists precisely so a plugin's defaults do not undo the
+     *                 owner's edits
+     * @param database where <em>who earned what</em> lives. Written while players are on, never
+     *                 edited by hand, and the half that a kill mid-save would otherwise cost somebody
+     */
+    public Achievements(Path file, Database database, LongSupplier clock) {
+        this.database = database;
         this.file = file;
         this.store = new YamlStore(file);
         this.clock = clock;
@@ -149,7 +167,7 @@ public final class Achievements {
         if (already != null) {
             return false;
         }
-        dirty.set(true);
+        changedPlayers.add(player);
         announce(player, achievement);
         return true;
     }
@@ -159,7 +177,7 @@ public final class Achievements {
         if (player == null || key == null || earnedBy(player).remove(normalise(key)) == null) {
             return false;
         }
-        dirty.set(true);
+        changedPlayers.add(player);
         return true;
     }
 
@@ -206,7 +224,7 @@ public final class Achievements {
         }
         String normalised = normalise(key);
         int updated = progressOf(player).merge(normalised, Math.max(0, by), Integer::sum);
-        dirty.set(true);
+        changedPlayers.add(player);
         checkGoal(player, normalised, updated);
     }
 
@@ -217,7 +235,7 @@ public final class Achievements {
         }
         String normalised = normalise(key);
         progressOf(player).put(normalised, Math.max(0, to));
-        dirty.set(true);
+        changedPlayers.add(player);
         checkGoal(player, normalised, Math.max(0, to));
     }
 
@@ -277,8 +295,9 @@ public final class Achievements {
 
     // ---------------------------------------------------------------------------- the file
 
+    /** Whether either half is waiting to be written. */
     public boolean isDirty() {
-        return dirty.get();
+        return dirty.get() || !changedPlayers.isEmpty();
     }
 
     public void load() {
@@ -296,8 +315,64 @@ public final class Achievements {
             return;
         }
         readDefinitions(yaml.getConfigurationSection("achievements"));
-        readPlayers(yaml.getConfigurationSection("players"));
         dirty.set(false);
+        loadPlayers();
+    }
+
+    /**
+     * Reads who has earned what, out of the database.
+     *
+     * <p>Separate from the definitions on purpose: what an achievement <em>is</em> comes from a file
+     * somebody wrote, and who <em>earned</em> it is something the server recorded. The two have
+     * different owners and different failure modes, so they have different homes.
+     */
+    private void loadPlayers() {
+        earned.clear();
+        progress.clear();
+        changedPlayers.clear();
+        if (!database.isUsable()) {
+            log.error("The achievement tables are not available; nobody's achievements are known "
+                    + "this session.");
+            return;
+        }
+        boolean read = database.read(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT player, achievement, earned_at FROM achievement_earned");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    UUID player = playerOf(rows.getString("player"));
+                    if (player != null) {
+                        earnedBy(player).put(rows.getString("achievement"),
+                                Instant.ofEpochMilli(rows.getLong("earned_at")));
+                    }
+                }
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT player, achievement, sofar FROM achievement_progress");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    UUID player = playerOf(rows.getString("player"));
+                    if (player != null) {
+                        progressOf(player).put(rows.getString("achievement"), rows.getInt("sofar"));
+                    }
+                }
+            }
+            return true;
+        }).orElse(false);
+        if (!read) {
+            log.error("The earned achievements could not be read; nobody's are known this session.");
+        }
+    }
+
+    /** A player id, or null when the row holds something that is not one. */
+    private static UUID playerOf(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (RuntimeException notAUuid) {
+            // One unreadable row is one player's achievement, not everybody's.
+            log.warn("An achievement row for '{}' was skipped: that is not a player id.", value);
+            return null;
+        }
     }
 
     private void readDefinitions(ConfigurationSection section) {
@@ -333,39 +408,22 @@ public final class Achievements {
         }
     }
 
-    private void readPlayers(ConfigurationSection section) {
-        if (section == null) {
-            return;
-        }
-        for (String id : section.getKeys(false)) {
-            ConfigurationSection entry = section.getConfigurationSection(id);
-            if (entry == null) {
-                continue;
-            }
-            try {
-                UUID player = UUID.fromString(id);
-                ConfigurationSection got = entry.getConfigurationSection("earned");
-                if (got != null) {
-                    for (String key : got.getKeys(false)) {
-                        earnedBy(player).put(unescape(key),
-                                Instant.ofEpochMilli(got.getLong(key)));
-                    }
-                }
-                ConfigurationSection towards = entry.getConfigurationSection("progress");
-                if (towards != null) {
-                    for (String key : towards.getKeys(false)) {
-                        progressOf(player).put(unescape(key), towards.getInt(key));
-                    }
-                }
-            } catch (RuntimeException broken) {
-                log.warn("{}: player '{}' was skipped ({})",
-                        file.getFileName(), id, broken.getMessage());
-            }
-        }
-    }
 
     /** Writes, if anything changed. Via a temporary file, so a kill mid-write cannot truncate it. */
+    /**
+     * Writes both halves: the definitions to their file, and who earned what to the database.
+     *
+     * <p>Two halves with two conditions, so a server where nobody has changed a definition does not
+     * rewrite the definitions file every two minutes to record that somebody earned something.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void flush() {
+        flushDefinitions();
+        flushPlayers();
+    }
+
+    private void flushDefinitions() {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
@@ -386,13 +444,57 @@ public final class Achievements {
                     yaml.set(path + "hidden", true);
                 }
             }
-            earned.forEach((player, got) -> got.forEach((key, when) ->
-                    yaml.set("players." + player + ".earned." + escape(key), when.toEpochMilli())));
-            progress.forEach((player, towards) -> towards.forEach((key, count) ->
-                    yaml.set("players." + player + ".progress." + escape(key), count)));
         });
         if (!written) {
             dirty.set(true);
+        }
+    }
+
+    /**
+     * Writes the players whose achievements changed.
+     *
+     * <p>Everything a player has is rewritten rather than the one thing that changed: a revoke has to
+     * take a row away, and working out which rows went is more code than replacing the handful a
+     * player has. All inside one transaction, so nobody is ever seen mid-rewrite.
+     */
+    private void flushPlayers() {
+        if (changedPlayers.isEmpty() || !database.isUsable()) {
+            return;
+        }
+        Set<UUID> writing = Set.copyOf(changedPlayers);
+        boolean written = database.write(connection -> {
+            try (PreparedStatement clearEarned = connection.prepareStatement(
+                         "DELETE FROM achievement_earned WHERE player = ?");
+                 PreparedStatement clearProgress = connection.prepareStatement(
+                         "DELETE FROM achievement_progress WHERE player = ?");
+                 PreparedStatement addEarned = connection.prepareStatement(
+                         "INSERT INTO achievement_earned (player, achievement, earned_at) "
+                                 + "VALUES (?, ?, ?)");
+                 PreparedStatement addProgress = connection.prepareStatement(
+                         "INSERT INTO achievement_progress (player, achievement, sofar) "
+                                 + "VALUES (?, ?, ?)")) {
+                for (UUID player : writing) {
+                    clearEarned.setString(1, player.toString());
+                    clearEarned.executeUpdate();
+                    clearProgress.setString(1, player.toString());
+                    clearProgress.executeUpdate();
+                    for (Map.Entry<String, Instant> got : earnedBy(player).entrySet()) {
+                        addEarned.setString(1, player.toString());
+                        addEarned.setString(2, got.getKey());
+                        addEarned.setLong(3, got.getValue().toEpochMilli());
+                        addEarned.executeUpdate();
+                    }
+                    for (Map.Entry<String, Integer> towards : progressOf(player).entrySet()) {
+                        addProgress.setString(1, player.toString());
+                        addProgress.setString(2, towards.getKey());
+                        addProgress.setInt(3, towards.getValue());
+                        addProgress.executeUpdate();
+                    }
+                }
+            }
+        });
+        if (written) {
+            changedPlayers.removeAll(writing);
         }
     }
 

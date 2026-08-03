@@ -181,6 +181,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private InventoryViews inventoryViews;
     private Inventories inventories;
     private Databases databases;
+    /** False while the stores are being read, true once players can be on. */
+    private volatile boolean watchingThreads;
     private Audit audit;
     private PackServer packServer;
 
@@ -206,13 +208,28 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         scoreboards = new Scoreboards(new FastBoardFactory());
         bossBars = new BossBars(new BukkitBarViewers());
 
-        places = new PoiStore(getDataFolder().toPath().resolve("places.yml"));
+        // Before every store, because each of them is handed one. Opening a database applies its
+        // schema, so a subsystem given one whose tables are not there yet fails a query at a time in
+        // a different place each time.
+        //
+        // Loading on this thread is deliberate and is the one exemption: a plugin must not report
+        // itself as enabled before its data has arrived, so the stores are read before onEnable
+        // returns. Nothing is being stalled that anybody can see, because nobody is on yet.
+        //
+        // The guard is therefore armed at the end of onEnable rather than switched off. Passing a
+        // supplier that always answers false would have disabled it for the whole run — a safety net
+        // that never fires, which is worse than none because it reads as proof.
+        databases = new Databases(getDataFolder().toPath(),
+                () -> watchingThreads && getServer().isPrimaryThread());
+        audit = new Audit(databases.audit(), System::currentTimeMillis);
+
+        places = new PoiStore(databases.core());
         places.load();
 
-        identities = new Identities(getDataFolder().toPath().resolve("identities.yml"));
+        identities = new Identities(databases.core());
         identities.load();
 
-        punishments = new Punishments(getDataFolder().toPath().resolve("punishments.yml"),
+        punishments = new Punishments(databases.core(),
                 System::currentTimeMillis);
         punishments.load();
         punishmentGuard = new PunishmentGuard(punishments, System::currentTimeMillis);
@@ -232,6 +249,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         lootFiller = new LootFiller(items, itemFactory);
 
         achievements = new Achievements(getDataFolder().toPath().resolve("achievements.yml"),
+                databases.core(),
                 System::currentTimeMillis);
         achievements.load();
 
@@ -243,7 +261,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         warps = new Warps(places, System::currentTimeMillis);
 
         FarmWorldState farmState = new FarmWorldState(
-                getDataFolder().toPath().resolve("farmworlds.yml"));
+                getDataFolder().toPath().resolve("farmworlds.yml"), databases.core());
         farmState.load();
         farmWorlds = new FarmWorlds(this, farmState);
         for (var set : farmState.all()) {
@@ -274,12 +292,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         vanish = new Vanish(new BukkitVanishSink(this));
         getServer().getPluginManager().registerEvents(
                 new VanishListener(this, vanish, "rainscore.vanish.see"), this);
-        // Before anything that stores anything. Opening a database applies its schema, and a
-        // subsystem handed one whose tables are not there yet fails a query at a time.
-        databases = new Databases(getDataFolder().toPath(),
-                () -> getServer().isPrimaryThread());
-        audit = new Audit(databases.audit(), System::currentTimeMillis);
-
         inventoryViews = new InventoryViews(watcher -> {
             org.bukkit.entity.Player looking =
                     getServer().getPlayer(java.util.UUID.fromString(watcher));
@@ -316,6 +328,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         resourcePacks = new ResourcePacks(getDataFolder().toPath().resolve("packs"),
                 new BukkitPackSink());
         startResourcePacks(settings.current());
+
+        // From here on, database work on a thread running the world is a mistake and is reported as
+        // one. Before here it was the startup read, which is allowed.
+        watchingThreads = true;
 
         getServer().getPluginManager().registerEvents(this, this);
         // One listener for every menu in every plugin: a menu is its inventory's holder, so this

@@ -2,6 +2,7 @@ package de.raindancer.core.world.farm;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.data.store.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -14,7 +15,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,11 +51,22 @@ public final class FarmWorldState {
     private final Map<String, Instant> madeAt = new ConcurrentHashMap<>();
     /** When a set was last <em>tried</em>, whether or not it worked. See {@link #due}. */
     private final Map<String, Instant> triedAt = new ConcurrentHashMap<>();
+    private final Database database;
+    /** Set when a farm world's definition changed and the file needs rewriting. */
     private final AtomicBoolean dirty = new AtomicBoolean();
+    /** Which sets' recorded times need writing — the database half. */
+    private final Set<String> changedTimes = ConcurrentHashMap.newKeySet();
 
-    public FarmWorldState(Path file) {
+    /**
+     * @param file     where the farm worlds are <em>defined</em>: which dimensions, what seed, how
+     *                 often to regenerate. Written by whoever runs the server
+     * @param database where <em>when each one was last made</em> is recorded. Written by the server
+     *                 itself, and the half that decides whether somebody walks into a stale world
+     */
+    public FarmWorldState(Path file, Database database) {
         this.file = file;
         this.store = new YamlStore(file);
+        this.database = database;
     }
 
     // ---------------------------------------------------------------------------- the sets
@@ -70,8 +85,10 @@ public final class FarmWorldState {
         String wanted = name.trim().toLowerCase(Locale.ROOT);
         boolean removed = sets.remove(wanted) != null;
         madeAt.remove(wanted);
+        triedAt.remove(wanted);
         if (removed) {
             dirty.set(true);
+            changedTimes.add(wanted);
         }
         return removed;
     }
@@ -100,8 +117,9 @@ public final class FarmWorldState {
 
     public void recordRegenerated(String name, Instant when) {
         if (name != null && when != null) {
-            madeAt.put(name.trim().toLowerCase(Locale.ROOT), when);
-            dirty.set(true);
+            String wanted = name.trim().toLowerCase(Locale.ROOT);
+            madeAt.put(wanted, when);
+            changedTimes.add(wanted);
         }
     }
 
@@ -118,7 +136,9 @@ public final class FarmWorldState {
     /** Records that a set was tried, whether or not it worked. */
     public void recordAttempt(String name, Instant when) {
         if (name != null && when != null) {
-            triedAt.put(name.trim().toLowerCase(Locale.ROOT), when);
+            String wanted = name.trim().toLowerCase(Locale.ROOT);
+            triedAt.put(wanted, when);
+            changedTimes.add(wanted);
         }
     }
 
@@ -200,13 +220,15 @@ public final class FarmWorldState {
 
     // ---------------------------------------------------------------------------- the file
 
+    /** Whether either half is waiting to be written. */
     public boolean isDirty() {
-        return dirty.get();
+        return dirty.get() || !changedTimes.isEmpty();
     }
 
     public void load() {
         sets.clear();
         madeAt.clear();
+        triedAt.clear();
         if (!store.exists()) {
             dirty.set(false);
             return;
@@ -242,10 +264,6 @@ public final class FarmWorldState {
                 }
                 WorldSet set = built.build();
                 sets.put(set.name(), set);
-                if (entry.contains("last-regenerated")) {
-                    madeAt.put(set.name(),
-                            Instant.ofEpochMilli(entry.getLong("last-regenerated")));
-                }
             } catch (RuntimeException broken) {
                 // A bad entry is one farm world lost, not a file nobody can load — and it must not
                 // take out the others, one of which somebody may be standing in.
@@ -254,10 +272,55 @@ public final class FarmWorldState {
             }
         }
         dirty.set(false);
+        loadTimes();
+    }
+
+    /**
+     * Reads when each set was last made and last attempted.
+     *
+     * <p>Out of the database rather than the file, because these are the server's own notes rather
+     * than anybody's configuration — and getting them back is what stops a farm world being
+     * regenerated on the first portal after every restart.
+     */
+    private void loadTimes() {
+        changedTimes.clear();
+        if (!database.isUsable()) {
+            log.error("The farm world table is not available; every set will look as though it has "
+                    + "never been made.");
+            return;
+        }
+        database.read(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT name, made_at, tried_at FROM farm_world");
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String name = rows.getString("name");
+                    long made = rows.getLong("made_at");
+                    if (!rows.wasNull()) {
+                        madeAt.put(name, Instant.ofEpochMilli(made));
+                    }
+                    long tried = rows.getLong("tried_at");
+                    if (!rows.wasNull()) {
+                        triedAt.put(name, Instant.ofEpochMilli(tried));
+                    }
+                }
+            }
+            return true;
+        });
     }
 
     /** Writes, if anything changed. Via a temporary file, so a kill mid-write cannot truncate it. */
+    /**
+     * Writes both halves: the definitions to their file, and the recorded times to the database.
+     *
+     * <p>Must be called off the server's threads.
+     */
     public void flush() {
+        flushDefinitions();
+        flushTimes();
+    }
+
+    private void flushDefinitions() {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
@@ -273,14 +336,51 @@ public final class FarmWorldState {
                     yaml.set(path + "seed", set.fixedSeed());
                 }
                 set.border().ifPresent(border -> yaml.set(path + "border", border));
-                Instant when = madeAt.get(set.name());
-                if (when != null) {
-                    yaml.set(path + "last-regenerated", when.toEpochMilli());
-                }
             }
         });
         if (!written) {
             dirty.set(true);
+        }
+    }
+
+    private void flushTimes() {
+        if (changedTimes.isEmpty() || !database.isUsable()) {
+            return;
+        }
+        Set<String> writing = Set.copyOf(changedTimes);
+        boolean written = database.write(connection -> {
+            try (PreparedStatement upsert = connection.prepareStatement("""
+                    INSERT INTO farm_world (name, made_at, tried_at) VALUES (?, ?, ?)
+                    ON CONFLICT(name) DO UPDATE SET
+                        made_at = excluded.made_at, tried_at = excluded.tried_at""");
+                 PreparedStatement remove =
+                         connection.prepareStatement("DELETE FROM farm_world WHERE name = ?")) {
+                for (String name : writing) {
+                    if (!sets.containsKey(name)) {
+                        // Undefined since. Its notes go with it, or a set later defined under the
+                        // same name would inherit a regeneration time it never had.
+                        remove.setString(1, name);
+                        remove.executeUpdate();
+                        continue;
+                    }
+                    upsert.setString(1, name);
+                    setMillisOrNull(upsert, 2, madeAt.get(name));
+                    setMillisOrNull(upsert, 3, triedAt.get(name));
+                    upsert.executeUpdate();
+                }
+            }
+        });
+        if (written) {
+            changedTimes.removeAll(writing);
+        }
+    }
+
+    private static void setMillisOrNull(PreparedStatement statement, int at, Instant when)
+            throws java.sql.SQLException {
+        if (when == null) {
+            statement.setNull(at, java.sql.Types.INTEGER);
+        } else {
+            statement.setLong(at, when.toEpochMilli());
         }
     }
 }
