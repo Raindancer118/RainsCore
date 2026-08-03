@@ -99,7 +99,7 @@ Everything below is reached through `RainsCore.get()`.
 | **`actionBars()`** | Owner, priority and lifetime per message, so plugins stop overwriting each other. What a refusal interrupts comes back when it expires. `countdown()` redraws itself — no repeating task to cancel. |
 | **`scoreboards()`** | The sidebar, arbitrated the same way. Packet-level underneath, so it does not flicker and does not fight other plugins over teams. Degrades to nothing if the server's internals are newer than the copied-in code. |
 | **`bossBars()`** | These *stack*, so it is a cap and a ranking rather than a winner. Also **shared bars**: one bar, an audience that changes — a flight's passengers get on and off, and leaving takes the bar with them. |
-| **`tablists()`** | Grouped by world, so the list says who is where. Configurable header and footer. |
+| **`tablists()`** | Grouped by world, so the list says who is where. **Sorted by rank** — your staff at the top, not wherever the alphabet put them — via scoreboard-team keys, the same lever Velocitab uses. Animated header and footer, and the ping written as a number beside each name, because 30ms and 130ms look identical in the five bars. |
 | **`resourcePacks()`** | Plugins contribute assets; Core builds **one** pack, serves it, and sends it. Reproducible zips (so clients cache rather than redownload), conflicts reported by name, and a built-in HTTP server you can turn off if you have your own. |
 
 ### Saying things
@@ -215,7 +215,7 @@ point: a player looking for a setting does not know which of nine jars owns it.
 ## Working on it
 
 ```bash
-mvn test        # 979 tests, no server needed
+mvn test        # 999 tests, no server needed
 mvn install     # to the local Maven repository
 ```
 

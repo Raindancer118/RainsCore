@@ -123,6 +123,31 @@ public record CoreConfig(
         @Describe("What sits below it. Empty lists how many players are in each world.")
         String tablistFooter,
 
+        @In("appearance/tablist") @Title("Show the ping as a number")
+        @Describe("Writes the latency on each line. The five bars at the right-hand end are drawn "
+                + "by the client and no server can remove them — but 30ms and 130ms look identical "
+                + "in them, which is the half worth having.")
+        boolean tablistShowPing,
+
+        @In("appearance/tablist") @Title("Sort by rank")
+        @Describe("Whether people with a rank are put above people without one. A plugin has to say "
+                + "what a rank is; with nothing set this changes nothing.")
+        boolean tablistSortByRank,
+
+        @In("appearance/tablist") @Title("Animated header frames")
+        @Describe("Extra header lines to cycle through, separated by | — the rules, an event, a "
+                + "vote that is running. Empty leaves the header still.")
+        String tablistHeaderFrames,
+
+        @In("appearance/tablist") @Title("Animated footer frames")
+        @Describe("The same for the footer, separated by |.")
+        String tablistFooterFrames,
+
+        @In("appearance/tablist") @Title("Refreshes per animation frame") @Range(min = 1, max = 40)
+        @Describe("How many refreshes each frame lasts. The list redraws about twice a second, so "
+                + "4 is roughly two seconds a frame; 1 is a strobe.")
+        int tablistFrameTicks,
+
         @In("appearance/tablist") @Title("Refresh every (ticks)") @Range(min = 10, max = 200)
         @Describe("How often the list is rebuilt. A player's ping changes continuously, so an "
                 + "event-only list would show a stale one for ever.")
@@ -277,7 +302,7 @@ public record CoreConfig(
             "▸",
             LogLevel.INFO, LogLevel.INFO, 14,
             15,
-            true, true, false, "", "", 40,
+            true, true, false, "", "", false, true, "", "", 4, 40,
             true, true, true, true, "",
             true, false, true, false, "Server pack", true, "0.0.0.0", 8123, "",
             true, true, true, true,

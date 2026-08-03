@@ -51,6 +51,12 @@ public final class Tablists {
     /** What the owner wrote instead of the built-in header, or empty for the built-in one. */
     private volatile String customHeader = "";
     private volatile String customFooter = "";
+    /** Extra frames the header and footer cycle through, and how long each lasts. */
+    private volatile Animated headerFrames = Animated.of("");
+    private volatile Animated footerFrames = Animated.of("");
+    /** Counts refreshes, which is what an animation is measured in. */
+    private final java.util.concurrent.atomic.AtomicLong tick =
+            new java.util.concurrent.atomic.AtomicLong();
 
     public Tablists(TablistModel model, String serverName) {
         this.model = model;
@@ -110,6 +116,23 @@ public final class Tablists {
         this.customFooter = miniMessage == null ? "" : miniMessage;
     }
 
+    /**
+     * Extra header lines to cycle through — the rules, an event, a vote that is running.
+     *
+     * <p>The tablist is one of the few places on a server with room to say something, and a header
+     * that never changes is one nobody reads twice.
+     *
+     * @param everyTicks how many refreshes each frame lasts; the list redraws about twice a second,
+     *                   so 4 is roughly two seconds and 1 is a strobe
+     */
+    public void headerFrames(java.util.List<String> frames, int everyTicks) {
+        this.headerFrames = Animated.of(frames).everyTicks(everyTicks);
+    }
+
+    public void footerFrames(java.util.List<String> frames, int everyTicks) {
+        this.footerFrames = Animated.of(frames).everyTicks(everyTicks);
+    }
+
     public TablistModel model() {
         return model;
     }
@@ -125,6 +148,17 @@ public final class Tablists {
             entries.add(new TablistEntry(player.getUniqueId(), player.getName(),
                     player.getWorld().getName(), player.getPing()));
         }
+
+        long now = tick.getAndIncrement();
+        // A frame, if there are any, otherwise whatever the plain header is. Frames win because a
+        // server that set them meant to: leaving the still header showing under an animation would
+        // be a setting that quietly does nothing.
+        String headerNow = headerFrames.isAnimated() || !headerFrames.frameAt(now).isEmpty()
+                ? headerFrames.frameAt(now) : customHeader;
+        String footerNow = footerFrames.isAnimated() || !footerFrames.frameAt(now).isEmpty()
+                ? footerFrames.frameAt(now) : customFooter;
+        String customHeader = headerNow;
+        String customFooter = footerNow;
 
         Component header = customHeader.isBlank()
                 ? model.header(entries, serverName)

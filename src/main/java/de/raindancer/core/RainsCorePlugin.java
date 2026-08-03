@@ -257,6 +257,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             }
         });
         applyNewSettings(settings.current());
+        // Re-applied on every change, so a toggle in the menu takes hold without a restart —
+        // which is the difference between a setting somebody uses and one they read about.
+        settings.onChange(this::applyNewSettings);
         chunks = new ChunkHolds(new BukkitChunkLoader(this));
         // A world by name, or null when it is not loaded — the seam that keeps every rule about
         // what is safe testable without a server.
@@ -336,6 +339,27 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects.enabled(config.effectsEnabled());
         effects.minimumGap(java.time.Duration.ofMillis(config.effectsRepeatGapMillis()));
         vanish.flightWhileVanished(config.vanishFlight());
+        if (tablists != null) {
+            tablists.model().showPing(config.tablistShowPing());
+            tablists.headerFrames(framesOf(config.tablistHeaderFrames()), config.tablistFrameTicks());
+            tablists.footerFrames(framesOf(config.tablistFooterFrames()), config.tablistFrameTicks());
+        }
+    }
+
+    /**
+     * Animation frames as a server owner writes them: one line, separated by a bar.
+     *
+     * <p>A list in a flat settings file has to be a string, and a bar is the one separator that does
+     * not appear in MiniMessage or in anything anybody would put in a header.
+     */
+    private static java.util.List<String> framesOf(String written) {
+        if (written == null || written.isBlank()) {
+            return java.util.List.of();
+        }
+        return java.util.Arrays.stream(written.split("\\|"))
+                .map(String::trim)
+                .filter(frame -> !frame.isEmpty())
+                .toList();
     }
 
     /**

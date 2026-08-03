@@ -126,7 +126,10 @@ public final class TablistModel {
         List<TablistGroup> groups = new ArrayList<>(worlds.size());
         for (String world : worlds) {
             List<TablistEntry> entries = new ArrayList<>(byWorld.get(world));
-            entries.sort(Comparator.comparing(TablistEntry::name, String.CASE_INSENSITIVE_ORDER));
+            // Rank first, heaviest at the top, then by name so two people of the same rank keep a
+            // stable order — a list that reshuffles on every refresh is unusable.
+            entries.sort(Comparator.<TablistEntry>comparingInt(this::rankOf).reversed()
+                    .thenComparing(TablistEntry::name, String.CASE_INSENSITIVE_ORDER));
             groups.add(new TablistGroup(world, worldLabel(world), worldSymbol(world),
                     List.copyOf(entries)));
         }
@@ -157,14 +160,63 @@ public final class TablistModel {
      * here — which is the point of having identities at all.
      */
     public Component line(TablistEntry entry) {
-        return identities.chatName(entry.player(), entry.name());
+        Component named = identities.chatName(entry.player(), entry.name());
+        return showPing ? named.append(ping(entry)) : named;
     }
 
     /** The same, with the world after it — for a server that would rather not group. */
     public Component lineWithWorld(TablistEntry entry) {
-        return line(entry)
+        Component named = identities.chatName(entry.player(), entry.name())
                 .append(MINI.deserialize("<dark_gray> · <gray>" + worldLabel(entry.world())));
+        return showPing ? named.append(ping(entry)) : named;
     }
+
+    /**
+     * Whether the latency is written on the line as a number.
+     *
+     * <p>The five-bar icon at the right-hand end is drawn by the client out of the latency the
+     * server sends it, and no packet removes it — so this adds the number rather than replacing the
+     * bars. That is the half worth having anyway: "is it me or the server" is not a question five
+     * bars can answer, and 30ms and 130ms look identical in them.
+     */
+    public void showPing(boolean show) {
+        this.showPing = show;
+    }
+
+    public boolean isShowingPing() {
+        return showPing;
+    }
+
+    /**
+     * The latency, in milliseconds, coloured by how bad it is.
+     *
+     * <p>A latency the server does not have yet comes through as negative — a player who has just
+     * joined, before the first keep-alive has come back — and is left off rather than shown as
+     * {@code 0ms}, which is a number that is simply wrong.
+     */
+    private Component ping(TablistEntry entry) {
+        if (entry.ping() < 0) {
+            return Component.empty();
+        }
+        return MINI.deserialize("<dark_gray> " + PING_SEPARATOR + " <" + pingColour(entry.ping())
+                + ">" + entry.ping() + "ms");
+    }
+
+    /** Green, yellow, red — so a list of forty players can be read without doing arithmetic. */
+    public static String pingColour(int milliseconds) {
+        if (milliseconds < 100) {
+            return "green";
+        }
+        if (milliseconds < 250) {
+            return "yellow";
+        }
+        return "red";
+    }
+
+    private volatile boolean showPing;
+
+    /** What separates a name from its latency. */
+    private static final String PING_SEPARATOR = "·";
 
     /** A group's heading. */
     public Component heading(TablistGroup group) {
@@ -256,13 +308,49 @@ public final class TablistModel {
      */
     public String sortKey(TablistEntry entry) {
         String rank = String.valueOf((char) ('a' + Math.min(9, worldRank(entry.world()))));
+        // The rank, inverted so that heavier sorts first — the client orders team names
+        // alphabetically and there is no other lever. Two characters, so a hundred ranks fit; more
+        // than that is a server with a hierarchy nobody could read off a list anyway.
+        int weight = Math.clamp(rankOf(entry), 0, 99);
+        String importance = String.format(Locale.ROOT, "%02d", 99 - weight);
         String name = entry.name().toLowerCase(Locale.ROOT);
         String unique = Integer.toHexString(entry.player().hashCode());
-        int room = MAX_SORT_KEY - rank.length() - 4;
+        int room = MAX_SORT_KEY - rank.length() - importance.length() - 4;
         String trimmed = name.length() > room ? name.substring(0, Math.max(0, room)) : name;
-        String key = rank + trimmed + unique;
+        String key = rank + importance + trimmed + unique;
         return key.length() > MAX_SORT_KEY ? key.substring(0, MAX_SORT_KEY) : key;
     }
+
+    /**
+     * How important somebody is, for the order of the list.
+     *
+     * <p>Injected rather than read from a permissions plugin: Core does not know what a rank is on
+     * any given server, and the one thing worse than an unsorted list is one sorted by somebody
+     * else's idea of seniority. Zero for everybody until a plugin says otherwise, which is exactly
+     * the behaviour there was before.
+     *
+     * @param ranks higher sorts nearer the top; 0 to 99
+     */
+    public void rankOf(java.util.function.ToIntFunction<TablistEntry> ranks) {
+        this.ranks = ranks == null ? entry -> 0 : ranks;
+    }
+
+    /**
+     * One player's rank, and never an exception.
+     *
+     * <p>The function usually ends up asking a permissions plugin, which may not have loaded, may
+     * have been reloaded, or may simply throw. A tablist that vanishes because a rank lookup failed
+     * is worse than one in the wrong order.
+     */
+    private int rankOf(TablistEntry entry) {
+        try {
+            return ranks.applyAsInt(entry);
+        } catch (RuntimeException failure) {
+            return 0;
+        }
+    }
+
+    private volatile java.util.function.ToIntFunction<TablistEntry> ranks = entry -> 0;
 
     private static String escape(String raw) {
         return MINI.escapeTags(raw);
