@@ -32,6 +32,10 @@ import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.tablist.TablistModel;
 import de.raindancer.core.tablist.Tablists;
+import de.raindancer.core.warp.Warps;
+import de.raindancer.core.world.FarmWorldPortalListener;
+import de.raindancer.core.world.FarmWorldState;
+import de.raindancer.core.world.FarmWorlds;
 import de.raindancer.core.util.Scheduling;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -77,6 +81,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      */
     private static final long TABLIST_PERIOD_TICKS = 40L;
 
+    /** How often farm worlds are asked whether any is due. Cheap; the regeneration is not. */
+    private static final long REGEN_CHECK_TICKS = 20L * 60L;
+
     private static volatile RainsCorePlugin instance;
 
     private SettingsStore<CoreConfig> settings;
@@ -100,6 +107,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private final SettingsRegistry registry = new SettingsRegistry();
     private SettingsNavigation navigation;
     private Tablists tablists;
+    private Warps warps;
+    private FarmWorlds farmWorlds;
 
     static RainsCorePlugin instance() {
         return instance;
@@ -143,6 +152,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         achievements.load();
 
         tablists = new Tablists(new TablistModel(identities), getServer().getMotd());
+        warps = new Warps(places, System::currentTimeMillis);
+
+        FarmWorldState farmState = new FarmWorldState(
+                getDataFolder().toPath().resolve("farmworlds.yml"));
+        farmState.load();
+        farmWorlds = new FarmWorlds(this, farmState);
+        for (var set : farmState.all()) {
+            farmWorlds.ensure(set);
+        }
+        getServer().getPluginManager().registerEvents(
+                new FarmWorldPortalListener(farmWorlds), this);
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -179,7 +199,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             punishments.flush();
             items.flush();
             achievements.flush();
+            farmWorlds.state().flush();
         });
+        // Its own, much slower timer: regenerating stops the server for as long as the disk takes,
+        // so it is checked once a minute rather than folded in with the saves.
+        Scheduling.globalTimer(this, REGEN_CHECK_TICKS, REGEN_CHECK_TICKS,
+                task -> farmWorlds.regenerateWhatIsDue());
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
                 .version(getPluginMeta().getVersion())
@@ -188,6 +213,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                         + registry.topics().visibleRoots().size() + " categories")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
+                .fact("Warps", warps.all().size() + " set")
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
                 .fact("Achievements", achievements.all().size() + " defined")
@@ -212,6 +238,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (identities != null) {
             identities.flush();
+        }
+        if (farmWorlds != null) {
+            farmWorlds.state().flush();
         }
         if (punishments != null) {
             punishments.flush();
@@ -350,6 +379,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Warps warps() {
+        return warps;
+    }
+
+    @Override
+    public FarmWorlds farmWorlds() {
+        return farmWorlds;
+    }
+
+    @Override
     public Tablists tablists() {
         return tablists;
     }
@@ -408,6 +447,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         itemAbilities.forget(player.getUniqueId());
         bossBars.forget(player.getUniqueId());
         tablists.forget(player);
+        warps.forget(player.getUniqueId());
     }
 
     /**

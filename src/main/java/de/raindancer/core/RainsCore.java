@@ -18,6 +18,8 @@ import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.tablist.Tablists;
+import de.raindancer.core.warp.Warps;
+import de.raindancer.core.world.FarmWorlds;
 import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
@@ -144,6 +146,18 @@ public interface RainsCore {
      * from {@link #identities()} — so a rank set once shows in chat, above the head and here.
      */
     Tablists tablists();
+
+    /**
+     * Named places anybody can be sent to. Stored as {@link #places()} entries, so a ghast line can
+     * fly somebody to a warp and a menu can list warps beside homes.
+     */
+    Warps warps();
+
+    /**
+     * Farm worlds: a set of three linked worlds — overworld, its own nether, its own end — that can
+     * be regenerated on a schedule without touching the main ones.
+     */
+    FarmWorlds farmWorlds();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();
