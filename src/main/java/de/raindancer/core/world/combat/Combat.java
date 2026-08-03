@@ -1,0 +1,279 @@
+package de.raindancer.core.world.combat;
+
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
+
+/**
+ * Who may hurt whom on this server.
+ *
+ * <h2>What this is for</h2>
+ * Turning PvP off, turning mobs off, or turning either off in one world and not another — without
+ * every plugin that wants it writing its own damage listener. Three plugins each cancelling
+ * {@code EntityDamageByEntityEvent} at their own priority is how one of them silently loses, and
+ * which one depends on load order.
+ *
+ * <h2>Two things it deliberately does not do</h2>
+ * <ul>
+ *   <li><b>It changes nothing until asked.</b> A library that switches PvP off the moment it is
+ *       installed has broken somebody's server, and they will not know which plugin did it.</li>
+ *   <li><b>It never refuses the world itself.</b> Falling, drowning, lava, a cactus — nobody is
+ *       behind those, and a plugin that stops them has turned off the game rather than a rule.</li>
+ * </ul>
+ *
+ * <h2>Where "who attacked" comes from</h2>
+ * Not from here. The server names whatever delivered the damage — an arrow, a wolf, a splash of
+ * potion, a block of TNT — and a rule written against that is a rule anybody can walk around by
+ * shooting instead of hitting. Following the chain back to a person is {@link CombatListener}'s job,
+ * and it is the part that is easy to get wrong; this class only decides what to do about the answer.
+ *
+ * <p>That split is also what makes the rules testable without a server, which matters because the
+ * rules have two opposite failure modes: too permissive is an argument between players, too strict is
+ * somebody unable to mine with their own TNT.
+ *
+ * <h2>Thread safety</h2>
+ * Safe from any thread, and read from every region thread on every hit. Nothing here allocates or
+ * locks: a damage event is one of the most frequent things a server does.
+ */
+public final class Combat {
+
+    private static final LogChannel log = Log.of("combat");
+
+    /** What the server allows, unless a world says otherwise. */
+    private volatile boolean playersMayHurtPlayers = true;
+    private volatile boolean playersMayHurtMobs = true;
+    private volatile boolean mobsMayHurtPlayers = true;
+
+    /** What one world allows, when it differs. Absent means "whatever the server says". */
+    private final Map<String, Rules> byWorld = new ConcurrentHashMap<>();
+
+    /**
+     * Anything else that may have the final say — a claim, an arena, a plugin's own rule.
+     *
+     * <p>Without this, a claims plugin wanting a duelling arena inside a peaceful world has to cancel
+     * this plugin's cancellation from a listener at a different priority, and then the two fight over
+     * one event for ever.
+     */
+    private final List<Function<Attack, Verdict>> alsoAsked = new CopyOnWriteArrayList<>();
+
+    /** What one world allows. Null in a field means "not set here". */
+    private record Rules(Boolean pvp, Boolean playersOnMobs, Boolean mobsOnPlayers) {
+
+        static final Rules NOTHING_SET = new Rules(null, null, null);
+
+        Rules withPvp(boolean allowed) {
+            return new Rules(allowed, playersOnMobs, mobsOnPlayers);
+        }
+
+        Rules withPlayersOnMobs(boolean allowed) {
+            return new Rules(pvp, allowed, mobsOnPlayers);
+        }
+
+        Rules withMobsOnPlayers(boolean allowed) {
+            return new Rules(pvp, playersOnMobs, allowed);
+        }
+
+        boolean isEmpty() {
+            return pvp == null && playersOnMobs == null && mobsOnPlayers == null;
+        }
+    }
+
+    // ------------------------------------------------------------------------ what is allowed
+
+    /** Whether one player may hurt another, anywhere the world does not say otherwise. */
+    public void pvp(boolean allowed) {
+        playersMayHurtPlayers = allowed;
+    }
+
+    /** The same, in one world only. */
+    public void pvp(String world, boolean allowed) {
+        change(world, rules -> rules.withPvp(allowed));
+    }
+
+    /**
+     * Whether players and mobs may hurt each other at all — both directions at once.
+     *
+     * <p>Both, because switching only one is nearly always a mistake: a server where players cannot
+     * kill mobs but mobs still kill players is a worse game rather than a gentler one. The two are
+     * separately settable for the case where somebody means it.
+     */
+    public void pve(boolean allowed) {
+        playersMayHurtMobs = allowed;
+        mobsMayHurtPlayers = allowed;
+    }
+
+    /** The same, in one world only. */
+    public void pve(String world, boolean allowed) {
+        change(world, rules -> rules.withPlayersOnMobs(allowed).withMobsOnPlayers(allowed));
+    }
+
+    /** Whether a player may hurt a mob — for a building server that still wants zombies dangerous. */
+    public void playersMayHurtMobs(boolean allowed) {
+        playersMayHurtMobs = allowed;
+    }
+
+    public void playersMayHurtMobs(String world, boolean allowed) {
+        change(world, rules -> rules.withPlayersOnMobs(allowed));
+    }
+
+    /** Whether a mob may hurt a player. */
+    public void mobsMayHurtPlayers(boolean allowed) {
+        mobsMayHurtPlayers = allowed;
+    }
+
+    public void mobsMayHurtPlayers(String world, boolean allowed) {
+        change(world, rules -> rules.withMobsOnPlayers(allowed));
+    }
+
+    /** Forgets a world's own rules, so it follows the server's again. */
+    public void clearWorld(String world) {
+        if (world != null) {
+            byWorld.remove(key(world));
+        }
+    }
+
+    /** Every world that has rules of its own. */
+    public List<String> worldsWithTheirOwnRules() {
+        List<String> named = new java.util.ArrayList<>(byWorld.keySet());
+        named.sort(String::compareTo);
+        return named;
+    }
+
+    private void change(String world, Function<Rules, Rules> how) {
+        if (world == null || world.isBlank()) {
+            return;
+        }
+        byWorld.compute(key(world), (ignored, rules) -> {
+            Rules changed = how.apply(rules == null ? Rules.NOTHING_SET : rules);
+            // Removed rather than kept as a row of nulls, so worldsWithTheirOwnRules() answers what
+            // it says it does.
+            return changed.isEmpty() ? null : changed;
+        });
+    }
+
+    /**
+     * World names are matched however they were typed.
+     *
+     * <p>A name written into a config file will not match the server's capitalisation, and a rule that
+     * silently does not apply is worse than one that is refused: nobody looks for a typo in something
+     * that appeared to work.
+     */
+    private static String key(String world) {
+        return world.trim().toLowerCase(Locale.ROOT);
+    }
+
+    // ------------------------------------------------------------------------------- asking
+
+    /** Whether one player may hurt another in this world. */
+    public boolean isPvpAllowed(String world) {
+        Boolean here = rulesFor(world).pvp();
+        return here != null ? here : playersMayHurtPlayers;
+    }
+
+    /** Whether players and mobs may hurt each other in this world, in either direction. */
+    public boolean isPveAllowed(String world) {
+        return isPlayerOnMobAllowed(world) && isMobOnPlayerAllowed(world);
+    }
+
+    public boolean isPlayerOnMobAllowed(String world) {
+        Boolean here = rulesFor(world).playersOnMobs();
+        return here != null ? here : playersMayHurtMobs;
+    }
+
+    public boolean isMobOnPlayerAllowed(String world) {
+        Boolean here = rulesFor(world).mobsOnPlayers();
+        return here != null ? here : mobsMayHurtPlayers;
+    }
+
+    private Rules rulesFor(String world) {
+        if (world == null || world.isBlank()) {
+            return Rules.NOTHING_SET;
+        }
+        Rules here = byWorld.get(key(world));
+        return here == null ? Rules.NOTHING_SET : here;
+    }
+
+    /**
+     * Whether this attack may go ahead.
+     *
+     * <p>The one call a listener makes. Never throws, and answers {@link Verdict#ALLOWED} for anything
+     * it does not understand — an attack nobody could untangle must not become a refusal nobody can
+     * explain.
+     */
+    public Verdict judge(Attack attack) {
+        if (attack == null || !attack.hasSomebodyBehindIt()) {
+            // Nobody to hold responsible: the world itself, or a listener that could not work out
+            // who did it. Not ours to refuse either way.
+            return Verdict.ALLOWED;
+        }
+        if (attack.isSelfInflicted()) {
+            // Never refused, and never handed to anybody else's rule either: whether somebody may
+            // hurt themselves is not a rule about other people, and refusing it makes them immortal
+            // to their own explosives.
+            return Verdict.ALLOWED;
+        }
+        if (attack.isMobVersusMob()) {
+            // The game playing itself. Refusing it breaks farms, iron golems and a dozen things
+            // nobody was asking about.
+            return Verdict.ALLOWED;
+        }
+
+        Verdict fromSomebodyElse = askTheOthers(attack);
+        if (fromSomebodyElse != null) {
+            return fromSomebodyElse;
+        }
+        if (attack.isPlayerVersusPlayer() && !isPvpAllowed(attack.world())) {
+            return Verdict.NO_PVP;
+        }
+        if (attack.isPlayerHurtingMob() && !isPlayerOnMobAllowed(attack.world())) {
+            return Verdict.NO_PVE;
+        }
+        if (attack.isMobHurtingPlayer() && !isMobOnPlayerAllowed(attack.world())) {
+            return Verdict.NO_PVE;
+        }
+        return Verdict.ALLOWED;
+    }
+
+    /**
+     * Adds something that may overrule the rules, in both directions.
+     *
+     * <p>Asked before the world's rules, so an arena inside a peaceful world works without a second
+     * listener fighting this one over the same event. Answer null to have no opinion.
+     *
+     * <p>Asked in the order they were added, and the first opinion wins — defined on purpose, because
+     * two plugins disagreeing must not give a different answer depending on load order.
+     */
+    public void alsoAsk(Function<Attack, Verdict> rule) {
+        if (rule != null) {
+            alsoAsked.add(rule);
+        }
+    }
+
+    /** How many extra rules there are. */
+    public int extraRules() {
+        return alsoAsked.size();
+    }
+
+    private Verdict askTheOthers(Attack attack) {
+        for (Function<Attack, Verdict> rule : alsoAsked) {
+            try {
+                Verdict said = rule.apply(attack);
+                if (said != null) {
+                    return said;
+                }
+            } catch (RuntimeException failure) {
+                // Ignored rather than taken as a refusal. A broken exemption must not silently switch
+                // PvP off for the whole server, and it must not switch it on either — so it is as
+                // though it had no opinion.
+                log.error(failure, "An extra combat rule threw and was ignored.");
+            }
+        }
+        return null;
+    }
+}

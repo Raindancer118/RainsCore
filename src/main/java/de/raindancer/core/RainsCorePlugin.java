@@ -66,6 +66,8 @@ import de.raindancer.core.world.safety.BukkitBlocks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.world.warp.Warps;
 import de.raindancer.core.world.farm.FarmWorldPortalListener;
+import de.raindancer.core.world.combat.Combat;
+import de.raindancer.core.world.combat.CombatListener;
 import de.raindancer.core.world.farm.FarmWorldState;
 import de.raindancer.core.world.farm.FarmWorlds;
 import de.raindancer.core.platform.util.Scheduling;
@@ -188,6 +190,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private InventoryViews inventoryViews;
     private Inventories inventories;
     private Databases databases;
+    private Combat combat;
     private Messages messages;
     /** False while the stores are being read, true once players can be on. */
     private volatile boolean watchingThreads;
@@ -360,6 +363,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Re-applied on every change, so a toggle in the menu takes hold without a restart —
         // which is the difference between a setting somebody uses and one they read about.
         settings.onChange(this::applyNewSettings);
+        combat = new Combat();
+        applyCombatSettings();
+        getServer().getPluginManager().registerEvents(
+                new CombatListener(combat, System::currentTimeMillis, messages), this);
+
         chunks = new ChunkHolds(new BukkitChunkLoader(this));
         // A world by name, or null when it is not loaded — the seam that keeps every rule about
         // what is safe testable without a server.
@@ -458,6 +466,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * about.
      */
     private void applyNewSettings(CoreConfig config) {
+        if (combat != null) {
+            // A change in the menu takes hold without a restart, which is the difference between a
+            // setting somebody uses and one they read about.
+            applyCombatSettings();
+        }
         effects.enabled(config.effectsEnabled());
         effects.minimumGap(java.time.Duration.ofMillis(config.effectsRepeatGapMillis()));
         vanish.flightWhileVanished(config.vanishFlight());
@@ -633,6 +646,20 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishmentGuard.enforce(PunishmentKind.MUTE, config.enforceMutes());
         punishmentGuard.enforce(PunishmentKind.FREEZE, config.enforceFreezes());
         punishmentGuard.appealMessage(config.appealMessage());
+    }
+
+    /**
+     * Reads the combat half of the settings onto the rules.
+     *
+     * <p>Only the server-wide switches. A world's own rule is set by whoever wants one — a plugin, or
+     * a command — and reading the settings must not wipe those: somebody who reloads the config would
+     * otherwise turn PvP back on inside an arena without touching anything to do with it.
+     */
+    private void applyCombatSettings() {
+        CoreConfig config = settings.current();
+        combat.pvp(config.combatPvp());
+        combat.playersMayHurtMobs(config.combatPlayersMayHurtMobs());
+        combat.mobsMayHurtPlayers(config.combatMobsMayHurtPlayers());
     }
 
     /** Reads the tablist's half of the settings onto it. */
@@ -822,6 +849,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Audit audit() {
         return audit;
+    }
+
+    @Override
+    public Combat combat() {
+        return combat;
     }
 
     @Override

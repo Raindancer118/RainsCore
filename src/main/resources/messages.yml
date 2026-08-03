@@ -144,6 +144,16 @@ menu:
   page-of: "<dark_gray>Page <page> of <pages>"
   previous-menu: "the previous menu"
 
+# ────────────────────────────────────────────────────── who may hurt whom
+combat:
+  # Told to the attacker, at most once every few seconds. The person being
+  # protected is not told anything: they did not do anything.
+  no-pvp: "<red>Players cannot hurt each other here."
+  no-pve: "<red>Fighting creatures is off here."
+  # When something else refused — a claim, an arena. Deliberately vague,
+  # because Core does not know which plugin said no or why.
+  protected: "<red>Something is protecting that."
+
 # ────────────────────────────────────────────────────────────── farm worlds
 farm-world:
   # Said to anybody standing in a farm world that is about to be made again.

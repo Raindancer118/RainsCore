@@ -26,6 +26,7 @@ import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.ChunkHolds;
 import de.raindancer.core.ui.effect.Effects;
 import de.raindancer.core.data.sql.Databases;
+import de.raindancer.core.world.combat.Combat;
 import de.raindancer.core.moderation.audit.Audit;
 import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.moderation.invsee.Inventories;
@@ -316,6 +317,25 @@ public interface RainsCore {
      * {@link Databases} says so loudly in the log if it does not.
      */
     Databases databases();
+
+    /**
+     * Who may hurt whom: PvP, and players against creatures.
+     *
+     * <p>Switchable per server and per world, and nothing is switched off until somebody asks — a
+     * library that changes how the game plays on arrival has broken somebody's server.
+     *
+     * <p>Working out <em>who</em> attacked is the part this does that a plugin should not repeat: the
+     * server names the arrow, the wolf, the lit TNT, the lingering cloud, and every one of those has
+     * somebody behind it. A rule written against the event rather than the person is a rule anybody
+     * can walk around by shooting instead of hitting.
+     *
+     * <p>A plugin with a more specific opinion — a claim, an arena, a duel — registers it with
+     * {@code alsoAsk} rather than adding a second damage listener. Two plugins cancelling the same
+     * event at different priorities is how one of them silently loses, and which one depends on load
+     * order. Both positions of an attack are carried for exactly this: a claim has to know where the
+     * damage landed <em>and</em> where it came from, or somebody stands outside and shoots in.
+     */
+    Combat combat();
 
     /**
      * Weighted loot tables, by tier — what comes out of a chest and how often. An entry may be a

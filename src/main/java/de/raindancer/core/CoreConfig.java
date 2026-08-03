@@ -34,6 +34,9 @@ import org.bukkit.Material;
                 description = "Watching somebody's inventory, and what a watcher may touch."),
         @Topic(path = "moderation/audit", title = "Audit Journal", icon = Material.WRITABLE_BOOK,
                 description = "The record of what moderators did, and how long it is kept."),
+        @Topic(path = "world/combat", title = "Who May Hurt Whom", icon = Material.IRON_SWORD,
+                description = "Whether players may fight each other, and whether they fight "
+                        + "creatures."),
         @Topic(path = "appearance/effects", title = "Sounds & Particles", icon = Material.NOTE_BLOCK,
                 description = "The cues every plugin plays, and how loud they are."),
         @Topic(path = "config/safety", title = "Safe Teleports", icon = Material.FEATHER,
@@ -279,6 +282,21 @@ public record CoreConfig(
                 + "actions stop, only the record of them.")
         boolean auditEnabled,
 
+        @In("world/combat") @Title("Players may hurt each other")
+        @Describe("PvP. Off means one player cannot damage another anywhere — a plugin may still "
+                + "allow it in one world, or in an arena.")
+        boolean combatPvp,
+
+        @In("world/combat") @Title("Players may hurt creatures")
+        @Describe("Off makes a building server: nothing a player does harms an animal or a monster.")
+        boolean combatPlayersMayHurtMobs,
+
+        @In("world/combat") @Title("Creatures may hurt players")
+        @Describe("Off makes monsters harmless. Separate from the setting above because turning "
+                + "only one off is usually a mistake — a server where zombies are dangerous and "
+                + "cannot be fought back is a worse game, not a gentler one.")
+        boolean combatMobsMayHurtPlayers,
+
         @In("moderation/audit") @Title("Keep the record for this many days")
         @Range(min = 1, max = 3650)
         @Describe("Older entries are deleted. These rows name real people and say what they did, "
@@ -335,7 +353,12 @@ public record CoreConfig(
             true, true, false, true,
             // Recording on, kept for ninety days: long enough to investigate something reported
             // weeks late, short enough not to be a standing archive of everybody's behaviour.
-            true, 90,
+            true,
+            // Nothing about combat switched off: a library that changes how the game plays the
+            // moment it is installed has broken somebody's server, and they will not know which
+            // plugin did it.
+            true, true, true,
+            90,
             true, 120,
             true, 1, 8);
 }
