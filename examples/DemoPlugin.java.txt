@@ -1,0 +1,70 @@
+package demo;
+
+import de.raindancer.core.RainsCore;
+import de.raindancer.core.actionbar.ActionBarPriority;
+import de.raindancer.core.banner.Banner;
+import de.raindancer.core.chat.Chat;
+import de.raindancer.core.items.CustomItem;
+import de.raindancer.core.items.ItemAbility;
+import de.raindancer.core.items.ItemTrigger;
+import de.raindancer.core.poi.Poi;
+import de.raindancer.core.settings.*;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Material;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.time.Duration;
+import java.util.List;
+
+/** An outside plugin, built exactly the way one really would be. */
+public final class DemoPlugin extends JavaPlugin {
+
+    @Settings(id = "demo", topics = @Topic(path = "config/demo", title = "Demo"))
+    public record DemoConfig(
+            @In("config/demo") @Title("Enabled") boolean enabled,
+            @In("config/demo") @Title("Cruise speed") @Range(min = 1, max = 10) int speed) {
+        public static final DemoConfig DEFAULTS = new DemoConfig(true, 4);
+    }
+
+    @Override
+    public void onEnable() {
+        RainsCore core = RainsCore.get();
+
+        SettingsStore<DemoConfig> settings = core.settingsFor(this, DemoConfig.class, DemoConfig.DEFAULTS);
+        boolean on = settings.current().enabled();
+
+        Chat chat = core.chatFor("Demo");
+        chat.ok(getServer().getConsoleSender(), "Speed is <n>", Chat.arg("n", settings.current().speed()));
+
+        core.itemAbilities().register(ItemAbility.builder("demo", "zap")
+                .on(ItemTrigger.RIGHT_CLICK)
+                .cooldown(Duration.ofSeconds(5))
+                .charges(3)
+                .does(use -> getLogger().info("zap by " + use.player()))
+                .build());
+
+        core.items().defineIfAbsent(CustomItem.builder("demo", "wand")
+                .material(Material.STICK)
+                .name("<gold>Wand")
+                .lore(List.of("<gray>Right-click to zap"))
+                .glowing(true)
+                .ability("demo:zap")
+                .recipe(List.of("- DIAMOND -", "- STICK -"))
+                .build());
+
+        core.achievements().defineIfAbsent(
+                de.raindancer.core.achievement.Achievement.builder("demo", "first-zap")
+                        .title("<gold>Zapper").description("Zap once").points(5).build());
+
+        core.places().save(Poi.builder("spawn", "world", 0, 64, 0).kind("landmark").build());
+
+        core.actionBars().countdown(getServer().getConsoleSender() == null ? null : null,
+                "demo", Duration.ofSeconds(3), ActionBarPriority.NORMAL,
+                left -> Component.text("Starting in " + left / 1000));
+
+        Banner.of(getName(), "a demo that builds on RainsCore")
+                .version("1.0.0").by("Raindancer118")
+                .fact("Enabled", String.valueOf(on))
+                .print(getComponentLogger());
+    }
+}

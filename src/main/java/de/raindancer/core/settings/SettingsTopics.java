@@ -67,7 +67,22 @@ public final class SettingsTopics {
     private final Map<String, SettingsTopic> byPath = new LinkedHashMap<>();
     private final List<SettingsTopic> roots = new ArrayList<>();
 
+    /**
+     * Whether declaring the same topic twice is a mistake or a merge.
+     *
+     * <p>Within one plugin it is a mistake — nobody means to write the same {@code @Topic} twice, and
+     * saying so at startup beats one of them silently winning. Across plugins it is the ordinary
+     * case and the entire point: claims and the ghast lines both declaring {@code config/limits} is
+     * how they end up sharing a page.
+     */
+    private final boolean merging;
+
     SettingsTopics(List<Topic> declared, String owner) {
+        this(declared, owner, false);
+    }
+
+    SettingsTopics(List<Topic> declared, String owner, boolean merging) {
+        this.merging = merging;
         for (Topic topic : declared) {
             declare(topic, owner);
         }
@@ -86,8 +101,19 @@ public final class SettingsTopics {
             throw new IllegalArgumentException(owner + " declares a topic with no path.");
         }
         SettingsTopic existing = byPath.get(path);
-        if (existing != null && existing.wasDeclared()) {
+        if (existing != null && existing.wasDeclared() && !merging) {
             throw new IllegalArgumentException(owner + " declares the topic '" + path + "' twice.");
+        }
+        if (existing != null && existing.wasDeclared()) {
+            // Merging: the second plugin gets to fill in what the first left blank, and to say
+            // nothing about what the first already described. Whoever bothered to write a
+            // description keeps it.
+            existing.describe(
+                    topic.title() == null || topic.title().isBlank()
+                            ? existing.title() : topic.title(),
+                    iconOr(topic.icon(), existing.icon()),
+                    topic.description());
+            return;
         }
         if (existing != null) {
             // Made earlier as somebody's ancestor, now declared properly: keep its place in the tree
