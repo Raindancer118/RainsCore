@@ -99,15 +99,23 @@ class WildernessIsNotProtectedTest {
     }
 
     @Test
-    @DisplayName("a server that forces a flag off means it everywhere, claim or not")
-    void aforcedFlagStillWins() {
+    @DisplayName("even a forced-off flag stops at the border")
+    void aforcedFlagIsStillOnlyAboutClaims() {
         LandPolicies policies = LandPolicies.builtIn();
         policies.policy(LandFlag.EXPLOSIONS, FlagPolicy.FORCED_OFF);
 
+        // The one case that was left reaching outside, on the argument that FORCED_OFF reads as "never,
+        // anywhere". It does read that way, and it still stops here: a flag reaching past every border is
+        // exactly what must not be possible. A flag says what happens INSIDE a claim and nothing else, and a
+        // server that wants a rule for the whole world has the world's own gamerules for it.
         assertThat(new FlagRules(policies)
                 .isAllowed(null, LandFlag.EXPLOSIONS, LandAudience.VISITOR, null))
-                .as("an admin who says 'never, anywhere' is the one case where open ground is refused — that "
-                        + "is a decision somebody made rather than a default being misread")
+                .as("no flag may affect unclaimed ground, whatever its policy")
+                .isTrue();
+
+        assertThat(new FlagRules(policies)
+                .isAllowed(strict("strict"), LandFlag.EXPLOSIONS, LandAudience.VISITOR, null))
+                .as("and inside a claim forced-off still means off, or the policy would mean nothing")
                 .isFalse();
     }
 

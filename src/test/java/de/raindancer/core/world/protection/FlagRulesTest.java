@@ -198,20 +198,42 @@ class FlagRulesTest {
         }
     }
 
+    /**
+     * Unclaimed ground stays vanilla — whatever the default, whatever the policy.
+     *
+     * <p>This block used to say the opposite in two ways, and both were wrong on a live server. It read the
+     * flag's <em>default</em> for open ground, and that value is what a new claim starts with: explosions off so
+     * a new claim does not blow up, PvP off so it is safe, monster spawning off so it stays quiet. Read as the
+     * answer for wilderness, eleven flags switched themselves off across the whole world — no hostile mobs
+     * anywhere, no PvP, no TNT, no fire spread — and nothing said so.
+     *
+     * <p>It also let {@code FORCED_OFF} through, on the reading that it means "never, anywhere". It does read
+     * that way, and it stops at the border anyway: a flag is a property of claimed ground, and a flag reaching
+     * past every border is the thing that must not be possible. A server that wants a rule for the whole world
+     * has the world's own gamerules for it.
+     */
     @Nested
     @DisplayName("on unprotected ground")
     class Unprotected {
 
         @Test
-        void readsTheServerDefault() {
-            policies.flagDefault(LandFlag.PVP, true);
-            assertThat(flags.isAllowed(null, LandFlag.PVP, LandAudience.VISITOR)).isTrue();
+        @DisplayName("the default is not an answer for open ground")
+        void thedefaultIsAboutClaimsOnly() {
+            policies.flagDefault(LandFlag.PVP, false);
+            assertThat(flags.isAllowed(null, LandFlag.PVP, LandAudience.VISITOR))
+                    .as("a default of false here is what switched PvP off for the entire server")
+                    .isTrue();
         }
 
         @Test
-        void aForcedOffFlagIsStillOff() {
-            policies.policy(LandFlag.PVP, FlagPolicy.FORCED_OFF);
-            assertThat(flags.isAllowed(null, LandFlag.PVP, LandAudience.VISITOR)).isFalse();
+        @DisplayName("nor is a policy an admin set")
+        void nopolicyReachesOutside() {
+            for (FlagPolicy policy : FlagPolicy.values()) {
+                policies.policy(LandFlag.PVP, policy);
+                assertThat(flags.isAllowed(null, LandFlag.PVP, LandAudience.VISITOR))
+                        .as(policy + " must not change what happens on unclaimed ground")
+                        .isTrue();
+            }
         }
     }
 }

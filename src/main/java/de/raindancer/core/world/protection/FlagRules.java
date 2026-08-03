@@ -53,6 +53,22 @@ public final class FlagRules {
      * somebody from their own rules, never from the server's.
      */
     public boolean isAllowed(ProtectedArea area, LandFlag flag, LandAudience audience, UUID who) {
+        // No area, no flag. A flag is a property of a piece of claimed ground, and unclaimed ground has none —
+        // so nothing here applies to it, whatever the flag's default is and whatever policy an admin set.
+        //
+        // Before this, the AVAILABLE branch returned the flag's DEFAULT for open ground, and that value is what
+        // a new claim starts with: explosions off so a new claim does not blow up, PvP off so it is safe,
+        // monster spawning off so it stays quiet. Read as the answer for wilderness, eleven flags switched
+        // themselves off across the entire world — no hostile mobs anywhere, no PvP, no TNT, no fire spread —
+        // with nothing in any log.
+        //
+        // FORCED_OFF stops here too, deliberately. It reads as "never, anywhere", and that was the argument for
+        // letting it through; but a flag reaching past every border is exactly what must not be possible, and an
+        // admin who wants a rule for the whole world has the world's own gamerules for it. A flag says what
+        // happens INSIDE a claim, and only that.
+        if (area == null) {
+            return true;
+        }
         FlagPolicy decided = policy.policy(flag);
         if (decided == FlagPolicy.AVAILABLE && area != null && who != null
                 && area.isExemptFromFlags(who)) {
@@ -66,17 +82,9 @@ public final class FlagRules {
             case DISABLED -> true;
             case FORCED_ON -> true;
             case FORCED_OFF -> false;
-            // No area is open ground, and open ground is allowed. The default is what a NEW CLAIM starts
-            // with — explosions off so a new claim does not blow up, PvP off so it is safe, fire spread off so
-            // it does not burn — and returning it here read those three as the rule for the whole world. So TNT,
-            // PvP and fire were all switched off everywhere, inside claims and out, with nothing in any log.
-            //
-            // Same principle as LandVerdict.UNKNOWN one level down: with no provider Core will not claim ground
-            // is unprotected, and with no area it will not claim ground is protected. A server that means
-            // "never, anywhere" says so with FORCED_OFF above, which is a decision somebody made.
-            case AVAILABLE -> area == null
-                    || area.flagOverride(flag, tierFor(flag, audience))
-                            .orElseGet(() -> policy.flagDefault(flag));
+            // The area is never null here — that is answered above, before any policy is read.
+            case AVAILABLE -> area.flagOverride(flag, tierFor(flag, audience))
+                    .orElseGet(() -> policy.flagDefault(flag));
         };
     }
 
