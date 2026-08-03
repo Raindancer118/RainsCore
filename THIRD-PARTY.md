@@ -9,7 +9,7 @@ one is a copy rather than a merge.
 - **Where** `src/main/java/de/raindancer/core/internal/fastboard/`
 - **Upstream** <https://github.com/MrMicky-FR/FastBoard> — version 2.2.0
 - **Author** MrMicky
-- **Licence** MIT
+- **License** MIT
 - **Copied** 2026-08-03
 - **Changed** the package, from `fr.mrmicky.fastboard` to
   `de.raindancer.core.internal.fastboard`. Nothing else — no local edits, so upgrading is
@@ -26,7 +26,7 @@ one is a copy rather than a merge.
   support, and its Adventure variant is generic over `net.kyori.adventure.text.Component` — the same
   class Adventure 5.2 ships, so it is binary-compatible with what Paper 26.2 provides.
 
-The MIT licence requires that the copyright notice travels with the code. Each copied file still
+The MIT license requires that the copyright notice travels with the code. Each copied file still
 carries MrMicky's header, and that must stay.
 
 ### Upgrading
