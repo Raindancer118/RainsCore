@@ -88,7 +88,12 @@ public final class Icons {
 
     /** The same, by id — for a player who is not online and may never have been seen. */
     public static ItemStack head(UUID who, String name, String... lore) {
-        return head(who == null ? null : Bukkit.getOfflinePlayer(who), name, List.of(lore));
+        return head(who, name, List.of(lore));
+    }
+
+    /** The same for a lore built up as a list, which is what any head with conditional lines has. */
+    public static ItemStack head(UUID who, String name, List<String> lore) {
+        return head(who == null ? null : Bukkit.getOfflinePlayer(who), name, lore);
     }
 
     /**
