@@ -1,4 +1,4 @@
-package de.raindancer.core.moderation.invsee;
+package de.raindancer.core.data.nbt;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
@@ -38,13 +38,27 @@ public interface ItemBytes {
     /** One item as the bytes a save file would hold. */
     byte[] toBytes(ItemStack item);
 
+    /**
+     * Whether this is nothing worth writing down.
+     *
+     * <p>Here rather than at the call sites because answering it touches the server. {@code Material.isAir}
+     * resolves through Paper's registry, so a caller that asks it directly cannot be tested without a
+     * running server — and the callers are loaders and stores, which is exactly the code that has to be.
+     *
+     * <p>It matters that air is caught: {@code serializeAsBytes} happily encodes an air stack, so without
+     * this a list of nine items and forty-five empty slots is stored as fifty-four entries.
+     */
+    default boolean isNothing(ItemStack item) {
+        return item == null || item.getType().isAir() || item.getAmount() <= 0;
+    }
+
     /** One item back, or empty when the bytes were not an item this server can make. */
     Optional<ItemStack> fromBytes(byte[] bytes);
 
     /** The real one. */
     final class OfTheServer implements ItemBytes {
 
-        private static final LogChannel log = Log.of("invsee");
+        private static final LogChannel log = Log.of("nbt");
 
         @Override
         @SuppressWarnings("deprecation")

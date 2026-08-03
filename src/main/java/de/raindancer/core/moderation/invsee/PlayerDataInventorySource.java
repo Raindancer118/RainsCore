@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.invsee;
 
+import de.raindancer.core.data.nbt.ItemBytes;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.nbt.Nbt;

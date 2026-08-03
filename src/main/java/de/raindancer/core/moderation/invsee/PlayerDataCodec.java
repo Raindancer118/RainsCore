@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.invsee;
 
+import de.raindancer.core.data.nbt.ItemBytes;
 import de.raindancer.core.data.nbt.Nbt;
 import de.raindancer.core.data.nbt.Tag;
 
