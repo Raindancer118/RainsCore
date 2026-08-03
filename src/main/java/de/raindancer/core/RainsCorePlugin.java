@@ -1,6 +1,7 @@
 package de.raindancer.core;
 
 import de.raindancer.core.actionbar.ActionBars;
+import de.raindancer.core.achievement.Achievements;
 import de.raindancer.core.banner.Banner;
 import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.chat.Brand;
@@ -12,6 +13,8 @@ import de.raindancer.core.chat.Style;
 import de.raindancer.core.gui.MenuListener;
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.items.CustomItems;
+import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
@@ -77,6 +80,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private PoiStore places;
     private Identities identities;
     private Punishments punishments;
+    private CustomItems items;
+    private ItemFactory itemFactory;
+    private Achievements achievements;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -112,6 +118,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishments = new Punishments(getDataFolder().toPath().resolve("punishments.yml"),
                 System::currentTimeMillis);
         punishments.load();
+
+        items = new CustomItems(getDataFolder().toPath().resolve("items.yml"));
+        items.load();
+        itemFactory = new ItemFactory(this);
+
+        achievements = new Achievements(getDataFolder().toPath().resolve("achievements.yml"),
+                System::currentTimeMillis);
+        achievements.load();
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -137,6 +151,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             places.flush();
             identities.flush();
             punishments.flush();
+            items.flush();
+            achievements.flush();
         });
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
@@ -147,6 +163,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
+                .fact("Items", items.all().size() + " defined")
+                .fact("Achievements", achievements.all().size() + " defined")
                 .fact("Scheduler", Scheduling.isFolia() ? "Folia, regionised" : "Paper");
         for (String problem : places.problems()) {
             banner.warning("places.yml: " + problem);
@@ -171,6 +189,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (punishments != null) {
             punishments.flush();
+        }
+        if (items != null) {
+            items.flush();
+        }
+        if (achievements != null) {
+            achievements.flush();
         }
         if (bossBars != null) {
             bossBars.shutdown();
@@ -288,6 +312,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Scoreboards scoreboards() {
         return scoreboards;
+    }
+
+    @Override
+    public CustomItems items() {
+        return items;
+    }
+
+    @Override
+    public ItemFactory itemFactory() {
+        return itemFactory;
+    }
+
+    @Override
+    public Achievements achievements() {
+        return achievements;
     }
 
     @Override

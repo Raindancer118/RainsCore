@@ -7,6 +7,9 @@ import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
 import de.raindancer.core.bossbar.BossBars;
 import de.raindancer.core.identity.Identities;
+import de.raindancer.core.achievement.Achievements;
+import de.raindancer.core.items.CustomItems;
+import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
@@ -105,6 +108,21 @@ public interface RainsCore {
      * somebody something and remember that it did.
      */
     Punishments punishments();
+
+    /**
+     * Every custom item any plugin has defined, so one plugin's item can be given, recognised or
+     * listed by another — and by a command and a menu.
+     */
+    CustomItems items();
+
+    /** Turns a definition into an actual stack, and recognises one again by the key inside it. */
+    ItemFactory itemFactory();
+
+    /**
+     * Custom achievements: what a player has done and what they are working towards. Not vanilla
+     * advancements, which cannot express "claim your first plot" at all.
+     */
+    Achievements achievements();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();
