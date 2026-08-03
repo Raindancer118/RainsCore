@@ -174,6 +174,216 @@ public final class Messages {
         }
     }
 
+    /**
+     * Adds the keys this version introduced to a file that predates them, and changes nothing else.
+     *
+     * <p>{@link #writeIfMissing} is right the first time and useless every time after: a server that
+     * upgrades across a release keeps a file that simply does not mention the new messages. Nothing
+     * breaks, because every read falls back to the wording in the jar, but an owner opening the file
+     * cannot see the new lines, let alone reword them. After one release here that was over a hundred.
+     *
+     * <p>The rules, each of which is a way this could go wrong:
+     * <ul>
+     *   <li><b>An existing key is never touched</b>, whatever its value. Somebody who set a message to
+     *       an empty string wanted silence, and filling it back in is the merge undoing a decision.</li>
+     *   <li><b>A key the jar no longer has is left alone.</b> It may be a leftover, or something a fork
+     *       reads. It is reported through {@link #problems()}, never removed.</li>
+     *   <li><b>Nothing is written when nothing is missing</b>, down to the file's timestamp.</li>
+     *   <li><b>A file that will not parse is left exactly as it is.</b> Half a parse is somebody
+     *       mid-edit, or a write cut short by a full disk, and rewriting from it loses the rest.</li>
+     *   <li><b>The old file is copied aside first.</b> This is the one place the plugin edits something
+     *       a person wrote, and being able to undo it is the difference between a merge owners accept
+     *       and one they turn off.</li>
+     * </ul>
+     *
+     * <p>The merge is done on the text rather than by re-dumping the parsed tree, which would be a few
+     * lines shorter and would throw away every comment in the file along with the owner's spacing and
+     * quoting style. A messages.yml is mostly comments explaining what each key does.
+     *
+     * @return how many keys were added; {@code -1} if there was no file and the bundled one was
+     *         written whole; {@code -2} if the file could not be read and was left alone
+     */
+    public int mergeMissing(InputStream bundledDefaults) {
+        if (file == null || bundledDefaults == null) {
+            return -2;
+        }
+        if (!Files.isRegularFile(file)) {
+            return writeIfMissing(bundledDefaults) ? -1 : -2;
+        }
+
+        Map<String, Object> fromJar = new LinkedHashMap<>();
+        try (InputStream stream = bundledDefaults) {
+            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8));
+            flatten(yaml, "", fromJar);
+        } catch (IOException | RuntimeException broken) {
+            log.error("The bundled messages.yml could not be read; {} was left untouched.",
+                    file.getFileName());
+            return -2;
+        }
+
+        String text;
+        Map<String, Object> owned = new LinkedHashMap<>();
+        try {
+            text = Files.readString(file);
+            YamlConfiguration yaml = new YamlConfiguration();
+            yaml.loadFromString(text);
+            flatten(yaml, "", owned);
+        } catch (Exception broken) {
+            // Deliberately not repaired. Somebody is mid-edit, or the disk filled during a write, and
+            // a rewrite from half a parse loses whatever is not in the half that parsed.
+            log.warn("{} could not be read ({}), so no new messages were merged into it. Fix the file "
+                    + "and restart; nothing was changed.", file.getFileName(), broken.getMessage());
+            return -2;
+        }
+
+        List<String> added = new ArrayList<>();
+        for (String key : fromJar.keySet()) {
+            if (!owned.containsKey(key)) {
+                added.add(key);
+            }
+        }
+        if (added.isEmpty()) {
+            return 0;
+        }
+
+        List<String> lines = new ArrayList<>(List.of(text.split("\n", -1)));
+        for (String key : added) {
+            insert(lines, key, fromJar.get(key));
+        }
+
+        try {
+            Path backup = file.resolveSibling(file.getFileName() + "."
+                    + java.time.LocalDateTime.now().format(
+                            java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".bak");
+            Files.copy(file, backup);
+            Files.writeString(file, String.join("\n", lines));
+            log.info("Added {} new message(s) to {}; your wording was kept and the previous file is "
+                    + "beside it as {}.", added.size(), file.getFileName(), backup.getFileName());
+        } catch (IOException failure) {
+            log.warn("Could not update {} ({}); the built-in wording is used for the new messages.",
+                    file.getFileName(), failure.getMessage());
+            return -2;
+        }
+        return added.size();
+    }
+
+    /**
+     * Puts one key into the file's text, under whichever part of its path already exists.
+     *
+     * <p>{@code claim.flag.pvp} in a file that has a {@code claim:} section but no {@code flag:} under
+     * it appends {@code flag:} to the end of {@code claim:} and {@code pvp:} under that — so an added
+     * key lands with its relatives rather than at the bottom under a second copy of a heading that is
+     * already there. A duplicate heading is not a cosmetic problem: SnakeYAML rejects the file outright
+     * on the next load, which turns "you have new messages" into "you have no messages".
+     */
+    private static void insert(List<String> lines, String key, Object value) {
+        String[] parts = key.split("\\.");
+
+        // The deepest ancestor that is already written, and where its last line is.
+        int depth = 0;
+        int after = lines.size();
+        int indent = 0;
+        for (int part = 1; part < parts.length; part++) {
+            String ancestor = String.join(".", List.of(parts).subList(0, part));
+            int header = lineOf(lines, ancestor);
+            if (header < 0) {
+                break;
+            }
+            depth = part;
+            indent = indentOf(lines.get(header)) + 2;
+            after = endOfSection(lines, header, indentOf(lines.get(header)));
+        }
+
+        List<String> written = new ArrayList<>();
+        for (int part = depth; part < parts.length - 1; part++) {
+            written.add(" ".repeat(indent) + parts[part] + ":");
+            indent += 2;
+        }
+        written.addAll(render(" ".repeat(indent), parts[parts.length - 1], value));
+        lines.addAll(after, written);
+    }
+
+    /** The line index of a dotted path's own line, or {@code -1}. */
+    private static int lineOf(List<String> lines, String path) {
+        String[] parts = path.split("\\.");
+        int at = 0;
+        int depth = 0;
+        int inside = -1;
+        for (int line = 0; line < lines.size(); line++) {
+            String text = lines.get(line);
+            if (text.isBlank() || text.stripLeading().startsWith("#")) {
+                continue;
+            }
+            int indent = indentOf(text);
+            if (indent != depth * 2) {
+                if (indent < depth * 2 && at > 0) {
+                    return -1;      // the section we were in ended without the key
+                }
+                continue;
+            }
+            String name = text.strip();
+            int colon = name.indexOf(':');
+            if (colon < 0) {
+                continue;
+            }
+            if (!name.substring(0, colon).strip().equals(parts[at])) {
+                continue;
+            }
+            inside = line;
+            at++;
+            if (at == parts.length) {
+                return inside;
+            }
+            depth++;
+        }
+        return -1;
+    }
+
+    /** One past the last line belonging to the section whose header is at {@code header}. */
+    private static int endOfSection(List<String> lines, int header, int headerIndent) {
+        int end = header + 1;
+        for (int line = header + 1; line < lines.size(); line++) {
+            String text = lines.get(line);
+            if (text.isBlank()) {
+                continue;       // trailing blanks belong to whatever comes next, not to this section
+            }
+            if (indentOf(text) <= headerIndent) {
+                break;
+            }
+            end = line + 1;
+        }
+        return end;
+    }
+
+    private static int indentOf(String line) {
+        int spaces = 0;
+        while (spaces < line.length() && line.charAt(spaces) == ' ') {
+            spaces++;
+        }
+        return spaces;
+    }
+
+    /** A key and its value as YAML lines, quoted the way the bundled file quotes things. */
+    private static List<String> render(String indent, String name, Object value) {
+        if (value instanceof List<?> items) {
+            List<String> out = new ArrayList<>();
+            out.add(indent + name + ":");
+            for (Object item : items) {
+                out.add(indent + "  - " + quoted(item));
+            }
+            return out;
+        }
+        return List.of(indent + name + ": " + quoted(value));
+    }
+
+    private static String quoted(Object value) {
+        if (value instanceof Boolean || value instanceof Number) {
+            return String.valueOf(value);
+        }
+        return "\"" + String.valueOf(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
     // ---------------------------------------------------------------------------- reading
 
     /**

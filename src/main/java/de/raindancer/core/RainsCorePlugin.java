@@ -267,11 +267,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 () -> watchingThreads && getServer().isPrimaryThread());
         audit = new Audit(databases.audit(), System::currentTimeMillis);
 
-        // Before anything that says anything. The file is written out on the first start and never
-        // over the owner's edits afterwards; a key it has not got falls back to the jar's wording, so
-        // a file from three versions ago customises less rather than blanking messages out.
+        // Before anything that says anything. The file is written out on the first start, and on every
+        // start after that only the keys this version added are appended to it — the owner's wording,
+        // ordering and comments are left exactly as they are, and the previous file is copied aside
+        // first. A key that is missing anyway falls back to the jar's wording, so the merge failing
+        // costs the owner the chance to reword the new lines rather than the lines themselves.
         messages = new Messages(getDataFolder().toPath().resolve("messages.yml"));
-        messages.writeIfMissing(getResource("messages.yml"));
+        messages.mergeMissing(getResource("messages.yml"));
         messages.load(getResource("messages.yml"));
         if (!messages.problems().isEmpty()) {
             log.warn("messages.yml: {}", String.join("; ", messages.problems()));
