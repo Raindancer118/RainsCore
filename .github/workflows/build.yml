@@ -1,0 +1,59 @@
+name: Build
+
+# Every push, on every branch — the point is that a jar exists for whatever is on GitHub right now,
+# not only for main. A pull request builds too, so the jar is there before the merge rather than after.
+on:
+  push:
+  pull_request:
+  # Lets a build be kicked off by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Must be 25: paper-api 26.2 ships Java 25 class files, so an older JDK cannot read the
+      # dependency at all — it fails while resolving rather than while compiling, which reads as a
+      # broken repository instead of a wrong JDK.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build and run tests
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      # Named after the commit so a downloaded jar can always be traced back to the source it was built
+      # from. A jar called "RainsCore.jar" in a downloads folder is a jar nobody can identify a week later.
+      - name: Upload the library jar
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RainsCore-${{ github.sha }}
+          path: |
+            target/RainsCore-*.jar
+            !target/RainsCore-*-shaded.jar
+            !target/original-*.jar
+          if-no-files-found: error
+          retention-days: 30
+
+      # Uploaded on failure as well, which is the case they are actually needed for: a red build with no
+      # report is a red build somebody has to reproduce locally before they can start reading it.
+      - name: Publish the test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ github.sha }}
+          path: target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 7
