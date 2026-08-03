@@ -24,13 +24,13 @@ import de.raindancer.core.identity.Identities;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.FastBoardFactory;
 import de.raindancer.core.scoreboard.Scoreboards;
+import de.raindancer.core.settings.SettingsChatInput;
+import de.raindancer.core.settings.SettingsCommand;
+import de.raindancer.core.settings.SettingsNavigation;
+import de.raindancer.core.settings.SettingsRegistry;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.util.Scheduling;
-import io.papermc.paper.command.brigadier.BasicCommand;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -68,9 +68,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     private static volatile RainsCorePlugin instance;
 
-    /** The command a chat button points at. Namespaced, so it cannot collide with anybody's. */
-    private static final String CLICK_COMMAND = "click";
-
     private SettingsStore<CoreConfig> settings;
     private Chat chat;
     private ActionBars actionBars;
@@ -88,6 +85,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
+    /** The same, merged into one tree for the menu and the command. */
+    private final SettingsRegistry registry = new SettingsRegistry();
+    private SettingsNavigation navigation;
 
     static RainsCorePlugin instance() {
         return instance;
@@ -133,10 +133,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
         // command would be a button that did something nobody intended.
-        String namespaced = getName().toLowerCase(Locale.ROOT) + ":" + CLICK_COMMAND;
-        buttons = new ChatButtons(clickActions, namespaced);
+        // Namespaced deliberately: /rainscore:rcclick always resolves to this plugin's command
+        // whatever else a server has installed. The name is fixed in RainsCoreBootstrap, which is
+        // where it has to be registered.
+        buttons = new ChatButtons(clickActions, getName().toLowerCase(Locale.ROOT) + ":rcclick");
         chat = chatFor("Core");
-        registerClickCommand();
+        navigation = new SettingsNavigation(registry);
+        // The commands are registered by RainsCoreBootstrap, before this runs. Paper fires the
+        // COMMANDS lifecycle event during bootstrap, so a handler registered here would never fire
+        // at all — silently, which is how both commands were dead until a live server was tried.
+        getServer().getPluginManager().registerEvents(
+                new SettingsChatInput(this, navigation, chat, chat.brand()), this);
 
         getServer().getPluginManager().registerEvents(this, this);
         // One listener for every menu in every plugin: a menu is its inventory's holder, so this
@@ -161,8 +168,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
                 .version(getPluginMeta().getVersion())
                 .by("Raindancer118")
-                .fact("Settings", settings.schema().settings().size() + " across "
-                        + settings.schema().topics().visibleRoots().size() + " topics")
+                .fact("Settings", registry.keys().size() + " across "
+                        + registry.topics().visibleRoots().size() + " categories")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
@@ -222,42 +229,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * other plugin's hands to serve an implementation detail would be rude. Here only the namespaced
      * form exists, which is the only one a button ever uses.
      */
-    private void registerClickCommand() {
-        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
-                event.registrar().register(CLICK_COMMAND,
-                        "Runs a button you clicked in chat.", new ClickCommand()));
-    }
-
-    /** The command behind every chat button. Never typed by a person on purpose. */
-    private final class ClickCommand implements BasicCommand {
-
-        @Override
-        public void execute(CommandSourceStack source, String[] args) {
-            CommandSender sender = source.getSender();
-            if (!(sender instanceof Player clicker)) {
-                chat.no(sender, "Only a player can click a button.");
-                return;
-            }
-            if (args.length != 1) {
-                // Somebody typed it by hand. There is nothing useful to offer them.
-                chat.warn(clicker, "That is not something to type.");
-                return;
-            }
-            handleClick(clicker, args[0], chat);
-        }
-
-        /**
-         * Deliberately no completions.
-         *
-         * <p>Completing tokens would list every pending button on the server, which is exactly the
-         * thing being kept out of players' reach.
-         */
-        @Override
-        public java.util.Collection<String> suggest(CommandSourceStack source, String[] args) {
-            return java.util.List.of();
-        }
-    }
-
     /**
      * Points the logger at the data folder and at whatever the settings currently say.
      *
@@ -358,6 +329,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public SettingsNavigation settingsNavigation() {
+        return navigation;
+    }
+
+    @Override
     public ChatButtons buttons() {
         return buttons;
     }
@@ -381,12 +357,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // runs rather than the first time somebody changes something.
         store.save();
         stores.put(schema.id(), store);
+        registry.add(store);
         return store;
     }
 
     /** Every plugin's settings, for the combined GUI. */
     public Map<String, SettingsStore<?>> stores() {
         return Map.copyOf(stores);
+    }
+
+    /** Every plugin's settings merged into one tree — what the menu and the command walk. */
+    public SettingsRegistry settingsRegistry() {
+        return registry;
     }
 
     // ------------------------------------------------------------------------ housekeeping

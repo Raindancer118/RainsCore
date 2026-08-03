@@ -14,6 +14,7 @@ import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
+import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import org.bukkit.plugin.Plugin;
@@ -130,6 +131,12 @@ public interface RainsCore {
      * advancements, which cannot express "claim your first plot" at all.
      */
     Achievements achievements();
+
+    /**
+     * Every plugin's settings as one tree, with the rules about what a screen shows and what a
+     * click does — what {@code /settings} and the settings menu both walk.
+     */
+    SettingsNavigation settingsNavigation();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();
