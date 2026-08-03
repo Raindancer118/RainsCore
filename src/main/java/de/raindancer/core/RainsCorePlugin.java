@@ -18,7 +18,11 @@ import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.loot.LootFiller;
 import de.raindancer.core.loot.LootTables;
+import de.raindancer.core.moderation.PunishmentGuard;
+import de.raindancer.core.moderation.PunishmentKind;
+import de.raindancer.core.moderation.PunishmentListener;
 import de.raindancer.core.moderation.Punishments;
+import de.raindancer.core.moderation.VanillaBanBridge;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
 import de.raindancer.core.platform.BukkitBarViewers;
@@ -98,6 +102,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private PoiStore places;
     private Identities identities;
     private Punishments punishments;
+    private PunishmentGuard punishmentGuard;
+    private VanillaBanBridge banBridge;
     private CustomItems items;
     private ItemFactory itemFactory;
     private ItemAbilities itemAbilities;
@@ -145,6 +151,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishments = new Punishments(getDataFolder().toPath().resolve("punishments.yml"),
                 System::currentTimeMillis);
         punishments.load();
+        punishmentGuard = new PunishmentGuard(punishments, System::currentTimeMillis);
+        banBridge = new VanillaBanBridge(punishments);
+        applyModerationSettings();
+        settings.onChange(config -> applyModerationSettings());
+        getServer().getPluginManager().registerEvents(
+                new PunishmentListener(punishmentGuard), this);
 
         items = new CustomItems(getDataFolder().toPath().resolve("items.yml"));
         items.load();
@@ -296,6 +308,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * other plugin's hands to serve an implementation detail would be rude. Here only the namespaced
      * form exists, which is the only one a button ever uses.
      */
+    /**
+     * Reads the moderation half of the settings onto the guard.
+     *
+     * <p>Recording and enforcing are separate switches on purpose: the record is useful on its own —
+     * it is the history a moderator reads — and a server driving punishments from somewhere else
+     * should be able to keep its own behaviour without losing it.
+     */
+    private void applyModerationSettings() {
+        CoreConfig config = settings.current();
+        punishmentGuard.enabled(config.enforcePunishments());
+        punishmentGuard.enforce(PunishmentKind.MUTE, config.enforceMutes());
+        punishmentGuard.enforce(PunishmentKind.FREEZE, config.enforceFreezes());
+        punishmentGuard.appealMessage(config.appealMessage());
+    }
+
     /** Reads the tablist's half of the settings onto it. */
     private void applyTablistSettings() {
         CoreConfig config = settings.current();
@@ -398,6 +425,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Punishments punishments() {
         return punishments;
+    }
+
+    @Override
+    public PunishmentGuard punishmentGuard() {
+        return punishmentGuard;
+    }
+
+    @Override
+    public VanillaBanBridge banBridge() {
+        return banBridge;
     }
 
     @Override

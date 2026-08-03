@@ -13,7 +13,9 @@ import de.raindancer.core.items.ItemAbilities;
 import de.raindancer.core.items.ItemFactory;
 import de.raindancer.core.loot.LootFiller;
 import de.raindancer.core.loot.LootTables;
+import de.raindancer.core.moderation.PunishmentGuard;
 import de.raindancer.core.moderation.Punishments;
+import de.raindancer.core.moderation.VanillaBanBridge;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsNavigation;
@@ -115,6 +117,21 @@ public interface RainsCore {
      * somebody something and remember that it did.
      */
     Punishments punishments();
+
+    /**
+     * What actually stops a punished player, and what they are told.
+     *
+     * <p>Here rather than in whichever plugin owns the moderation commands, because any plugin can
+     * call {@link Punishments#punish} — the claims module freezing somebody's hands should not have
+     * to write its own listeners for that to mean anything.
+     */
+    PunishmentGuard punishmentGuard();
+
+    /**
+     * Keeps our bans and the server's own {@code banned-players.json} saying the same thing, in
+     * both directions.
+     */
+    VanillaBanBridge banBridge();
 
     /**
      * Every custom item any plugin has defined, so one plugin's item can be given, recognised or

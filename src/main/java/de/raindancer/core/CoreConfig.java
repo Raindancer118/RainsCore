@@ -28,6 +28,9 @@ import org.bukkit.Material;
                 description = "How long a clickable button in chat stays good for."),
         @Topic(path = "appearance/tablist", title = "Tablist", icon = Material.PLAYER_HEAD,
                 description = "The player list: what it says, and how it is sorted."),
+        @Topic(path = "moderation", title = "Moderation", icon = Material.IRON_AXE,
+                description = "Whether punishments are acted on, and what a punished player is "
+                        + "told. The record is kept either way."),
 })
 public record CoreConfig(
 
@@ -113,7 +116,29 @@ public record CoreConfig(
         @In("appearance/tablist") @Title("Refresh every (ticks)") @Range(min = 10, max = 200)
         @Describe("How often the list is rebuilt. A player's ping changes continuously, so an "
                 + "event-only list would show a stale one for ever.")
-        int tablistRefreshTicks
+        int tablistRefreshTicks,
+
+        @In("moderation") @Title("Enforce punishments")
+        @Describe("Whether bans, mutes and freezes actually stop anybody. Off still records them, "
+                + "for a server that acts on them from somewhere else.")
+        boolean enforcePunishments,
+
+        @In("moderation") @Title("Enforce mutes")
+        @Describe("Whether a muted player is stopped from talking.")
+        boolean enforceMutes,
+
+        @In("moderation") @Title("Enforce freezes")
+        @Describe("Whether a frozen player is stopped from building and breaking.")
+        boolean enforceFreezes,
+
+        @In("moderation") @Title("Mirror bans to the server's ban list")
+        @Describe("Writes every ban to banned-players.json as well, so vanilla tooling agrees and "
+                + "the ban keeps working if this plugin is ever removed.")
+        boolean mirrorBans,
+
+        @In("moderation") @Title("Appeal message")
+        @Describe("The line under a ban telling somebody how to appeal. Empty leaves it out.")
+        String appealMessage
 
 ) {
 
@@ -133,5 +158,6 @@ public record CoreConfig(
             "▸",
             LogLevel.INFO, LogLevel.INFO, 14,
             15,
-            true, true, false, "", "", 40);
+            true, true, false, "", "", 40,
+            true, true, true, true, "");
 }
