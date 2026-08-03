@@ -163,6 +163,77 @@ farm-world:
 tablist:
   nobody-on: "<dark_gray>nobody is on"
 
+# ─────────────────────────────────────────────── world protection: land
+#
+#  Neutral on purpose. Core protects "an area"; it does not know whether the
+#  area is a claim, an arena, a plot or a spawn region. Whichever plugin owns
+#  the ground reads better than this and should say so —
+#
+#      messages.define("land.flag.pvp.description",
+#              "Players may damage each other inside this claim");
+#
+#  A `define` sits below this file, so a server owner's own edit still wins.
+land:
+  # Said on the action bar when somebody is refused. Throttled to once every
+  # second and a half, because holding a mouse button down produces one of
+  # these per tick.
+  denied: "<red>You may not <white><permission></white> in <white><claim></white>."
+  pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
+
+  audience:
+    owner:
+      name: "Owners"
+      description: "Whoever is responsible for this ground"
+    trusted:
+      name: "Trusted"
+      description: "People who have been given a say here"
+    visitor:
+      name: "Visitors"
+      description: "Everybody else"
+
+  flag:
+    pvp: {name: "PvP", description: "Players may damage each other"}
+    monster-spawning: {name: "Monster spawning", description: "Hostile mobs may spawn naturally"}
+    animal-spawning: {name: "Animal spawning", description: "Passive mobs may spawn naturally"}
+    spawner-spawning: {name: "Spawner spawning", description: "Monster spawners keep working"}
+    monster-entry: {name: "Monster entry", description: "Hostile mobs may walk in"}
+    monster-targeting: {name: "Monster targeting", description: "Hostile mobs may target players inside"}
+    explosions: {name: "Explosions", description: "Creepers, TNT and beds may damage blocks"}
+    explosion-damage: {name: "Explosion damage", description: "Explosions may hurt players and mobs — separate from block damage"}
+    mob-damage: {name: "Mob damage", description: "Mobs may hurt players and other mobs"}
+    fire-spread: {name: "Fire spread", description: "Fire may spread and burn blocks"}
+    leaf-decay: {name: "Leaf decay", description: "Leaves decay when their tree is cut"}
+    enderman-grief: {name: "Enderman grief", description: "Endermen may pick up blocks"}
+    mob-grief: {name: "Mob grief", description: "Mobs may change blocks (ravagers, silverfish, sheep …)"}
+    pistons-from-outside: {name: "Outside pistons", description: "Pistons outside may move blocks inside"}
+    fluids-from-outside: {name: "Outside fluids", description: "Water and lava may flow in from outside"}
+    snow-ice-form: {name: "Snow & ice", description: "Snow and ice may form or melt"}
+    fall-damage: {name: "Fall damage", description: "Players take fall damage"}
+    hunger: {name: "Hunger", description: "Players lose food"}
+    item-drop-on-death: {name: "Keep inventory", description: "Players keep their items on death — off means vanilla"}
+    elytra-flight: {name: "Elytra", description: "Players may fly with an elytra"}
+    ender-pearl-in: {name: "Ender pearls", description: "Players may pearl in"}
+    teleport-in: {name: "Teleport in", description: "Players may teleport in"}
+
+  action:
+    enter: {name: "Enter", description: "Walk or teleport in"}
+    build: {name: "Build", description: "Place blocks"}
+    break: {name: "Break", description: "Break blocks"}
+    containers: {name: "Containers", description: "Open chests, barrels, furnaces, hoppers …"}
+    doors: {name: "Doors & gates", description: "Open doors, trapdoors and fence gates"}
+    redstone: {name: "Buttons & levers", description: "Use buttons, levers and pressure plates"}
+    beds: {name: "Beds & anchors", description: "Sleep in beds and use respawn anchors"}
+    workstations: {name: "Workstations", description: "Use crafting tables, anvils, enchanting tables …"}
+    animals: {name: "Animals", description: "Interact with and leash passive mobs"}
+    damage-animals: {name: "Hurt animals", description: "Damage or kill passive mobs"}
+    vehicles: {name: "Vehicles", description: "Place, enter and break boats and minecarts"}
+    item-frames: {name: "Frames & stands", description: "Modify item frames and armour stands"}
+    farmland: {name: "Farmland", description: "Trample crops and till soil"}
+    buckets: {name: "Buckets", description: "Fill and empty buckets"}
+    ignite: {name: "Fire", description: "Use flint and steel or fire charges"}
+    item-pickup: {name: "Item pickup", description: "Pick up dropped items"}
+    trade: {name: "Villager trading", description: "Trade with villagers"}
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Nothing else here on purpose.
 #

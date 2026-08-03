@@ -1,0 +1,223 @@
+package de.raindancer.core.world.protection;
+
+import io.papermc.paper.event.entity.EntityMoveEvent;
+import org.bukkit.Location;
+import org.bukkit.entity.Animals;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mob;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Slime;
+import org.bukkit.entity.WaterMob;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityTargetEvent;
+
+import java.util.Optional;
+
+/**
+ * Mob behaviour inside claims: spawning, entry and targeting.
+ * <p>
+ * Entry prevention works on {@link EntityMoveEvent} (Paper) — the mob is stopped at the border rather
+ * than being teleported or killed, which keeps pathfinding sane and avoids surprise mob farms.
+ */
+public final class MobControlListener implements Listener {
+
+
+    private final Land land;
+
+    public MobControlListener(Land land) {
+        this.land = land;
+    }
+
+    private boolean flagDenied(Location location, LandFlag flag) {
+        if (!land.landFlags().isEnforced(flag)) {
+            return false;
+        }
+        return !land.landFlags().isAllowedAt(location, flag);
+    }
+
+    /**
+     * The same question as {@link #denied}, but about a creature rather than a block.
+     * <p>
+     * A player's claim is resolved the way the border tracker resolves it, tolerance included. Asking
+     * for their exact block instead means somebody standing on their own roof — inside the claim for
+     * every other purpose — loses the protection the flag promises them.
+     */
+    private boolean deniedFor(Entity victim, LandFlag flag) {
+        if (!land.landFlags().isEnforced(flag)) {
+            return false;
+        }
+        if (victim instanceof Player player) {
+            ProtectedArea tracked = land.areaAround(player).orElse(null);
+            return !land.landFlags().isAllowedForTracked(tracked, player.getLocation(), flag, player);
+        }
+        return !land.landFlags().isAllowedFor(victim, flag);
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onSpawn(CreatureSpawnEvent event) {
+        CreatureSpawnEvent.SpawnReason reason = event.getSpawnReason();
+        LivingEntity entity = event.getEntity();
+        Location location = entity.getLocation();
+
+        if (reason == CreatureSpawnEvent.SpawnReason.SPAWNER) {
+            if (flagDenied(location, LandFlag.SPAWNER_SPAWNING)) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        // Only natural-ish spawns are governed; eggs, breeding and commands stay in the owner's control.
+        if (!isNaturalReason(reason)) {
+            return;
+        }
+        if (isHostile(entity)) {
+            if (flagDenied(location, LandFlag.MONSTER_SPAWNING)) {
+                event.setCancelled(true);
+            }
+        } else if (entity instanceof Animals || entity instanceof WaterMob) {
+            if (flagDenied(location, LandFlag.ANIMAL_SPAWNING)) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    /**
+     * Whether two spots belong to the same claim, so a step between them is not an entry.
+     *
+     * <p>Both being unclaimed does <em>not</em> count as the same ground: a monster walking across open
+     * land has not entered anything, and answering true there would make every step outside a claim look
+     * internal to it.
+     */
+    private boolean sameGround(Location from, Location to) {
+        String fromArea = land.areaAt(from).map(ProtectedArea::id).orElse(null);
+        String toArea = land.areaAt(to).map(ProtectedArea::id).orElse(null);
+        return fromArea != null && fromArea.equals(toArea);
+    }
+
+    private boolean isNaturalReason(CreatureSpawnEvent.SpawnReason reason) {
+        return switch (reason) {
+            case NATURAL, REINFORCEMENTS, VILLAGE_INVASION, VILLAGE_DEFENSE, PATROL, RAID, SILVERFISH_BLOCK,
+                 SLIME_SPLIT, TRAP, LIGHTNING, JOCKEY, MOUNT, DROWNED, SPELL -> true;
+            default -> false;
+        };
+    }
+
+    private boolean isHostile(Entity entity) {
+        return entity instanceof Monster || entity instanceof Slime
+                || entity.getType() == org.bukkit.entity.EntityType.GHAST
+                || entity.getType() == org.bukkit.entity.EntityType.PHANTOM
+                || entity.getType() == org.bukkit.entity.EntityType.HOGLIN
+                || entity.getType() == org.bukkit.entity.EntityType.SHULKER
+                || entity.getType() == org.bukkit.entity.EntityType.ENDER_DRAGON
+                || entity.getType() == org.bukkit.entity.EntityType.WITHER
+                || entity.getType() == org.bukkit.entity.EntityType.SLIME
+                || entity.getType() == org.bukkit.entity.EntityType.MAGMA_CUBE;
+    }
+
+    /** Stops hostile mobs at the border when MONSTER_ENTRY is denied. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEntityMove(EntityMoveEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.MONSTER_ENTRY)) {
+            return;
+        }
+        if (!event.hasChangedBlock()) {
+            return;
+        }
+        LivingEntity entity = event.getEntity();
+        if (!isHostile(entity)) {
+            return;
+        }
+        if (land.landFlags().isAllowedAt(event.getTo(), LandFlag.MONSTER_ENTRY)) {
+            return;
+        }
+        // A mob already inside — spawned there, or there before the flag flipped — is allowed to walk
+        // back out. "Inside" now means the same claim or the same town, so a mob crossing between two
+        // streets of one town is not treated as entering it afresh.
+        if (sameGround(event.getFrom(), event.getTo())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    /**
+     * Stops hostile mobs from taking aim at players.
+     * <p>
+     * Listens to {@link EntityTargetEvent} rather than the LivingEntity subtype so every acquisition path
+     * is covered, and enforces the flag unconditionally — including retaliation. An earlier version made
+     * an exception for {@code TARGET_ATTACKED_ENTITY} so players could still be fought back against, but
+     * that meant the flag silently stopped working the moment somebody hit a mob, which is not what
+     * "monsters may not target players" says.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onTarget(EntityTargetEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.MONSTER_TARGETING)) {
+            return;
+        }
+        if (!(event.getTarget() instanceof Player player) || !isHostile(event.getEntity())) {
+            return;
+        }
+        if (deniedFor(player, LandFlag.MONSTER_TARGETING)) {
+            event.setTarget(null);
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Drops a target a mob was already holding when it crosses into the claim.
+     * <p>
+     * Cancelling the target event only blocks new acquisitions; a mob that locked on outside would
+     * otherwise keep chasing its victim across the border.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityMoveClearTarget(EntityMoveEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.MONSTER_TARGETING) || !event.hasChangedBlock()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Mob mob) || !isHostile(mob)) {
+            return;
+        }
+        if (!(mob.getTarget() instanceof Player hunted)) {
+            return;
+        }
+        // The victim's claim decides, exactly as when the target was first acquired, so a mob that walks
+        // into a claim protecting its quarry drops them.
+        if (deniedFor(hunted, LandFlag.MONSTER_TARGETING)) {
+            mob.setTarget(null);
+        }
+    }
+
+    /** Mobs hurting players or other mobs, governed separately from PvP. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onMobDamage(EntityDamageByEntityEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.MOB_DAMAGE)) {
+            return;
+        }
+        Entity damager = event.getDamager();
+        // Only mob-caused damage; player damage is covered by PvP and the permission checks.
+        if (damager instanceof Player) {
+            return;
+        }
+        if (damager instanceof Projectile projectile) {
+            if (projectile.getShooter() instanceof Player) {
+                return;
+            }
+            if (!(projectile.getShooter() instanceof LivingEntity)) {
+                return;
+            }
+        } else if (!(damager instanceof LivingEntity)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof LivingEntity victim)) {
+            return;
+        }
+        if (deniedFor(victim, LandFlag.MOB_DAMAGE)) {
+            event.setCancelled(true);
+        }
+    }
+}

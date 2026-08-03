@@ -1,9 +1,9 @@
-package de.raindancer.core.land;
+package de.raindancer.core.world.protection;
 
 import java.util.Locale;
 import java.util.Optional;
 
-/** How a server admin exposes a {@link ClaimFlag} to claim owners. */
+/** How a server admin exposes a {@link LandFlag} to claim owners. */
 public enum FlagPolicy {
 
     /** Owners may toggle the flag freely. */

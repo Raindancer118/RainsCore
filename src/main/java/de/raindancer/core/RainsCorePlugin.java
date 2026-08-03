@@ -70,6 +70,12 @@ import de.raindancer.core.world.combat.Combat;
 import de.raindancer.core.world.combat.CombatListener;
 import de.raindancer.core.world.farm.FarmWorldState;
 import de.raindancer.core.world.farm.FarmWorlds;
+import de.raindancer.core.world.protection.BlockProtectionListener;
+import de.raindancer.core.world.protection.EnvironmentProtectionListener;
+import de.raindancer.core.world.protection.InteractionProtectionListener;
+import de.raindancer.core.world.protection.Land;
+import de.raindancer.core.world.protection.LandPolicies;
+import de.raindancer.core.world.protection.MobControlListener;
 import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -180,6 +186,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatPrompts prompts;
     private Warps warps;
     private FarmWorlds farmWorlds;
+    private Land land;
+    private LandPolicies landPolicies;
     private ResourcePacks resourcePacks;
     private ChunkHolds chunks;
     private Safety safety;
@@ -303,6 +311,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         getServer().getPluginManager().registerEvents(
                 new FarmWorldPortalListener(farmWorlds), this);
+        // World protection. Registered here with nothing to protect: the ground itself comes from whichever
+        // plugin owns regions, and it registers a LandProvider once it is enabled. Until then every question
+        // answers UNKNOWN rather than "nothing is protected" — see Land and LandVerdict.
+        landPolicies = LandPolicies.builtIn();
+        land = new Land(landPolicies, messages, System::currentTimeMillis);
+        getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
+        getServer().getPluginManager().registerEvents(new InteractionProtectionListener(land, messages), this);
+        getServer().getPluginManager().registerEvents(new EnvironmentProtectionListener(land), this);
+        getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
+
         clickActions = new ClickActions(System::currentTimeMillis);
         // Deliberately empty: Core registers no commands at all, so it has no callback command to
         // point buttons at until a plugin registers one and says what it called it. Until then
@@ -813,6 +831,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Land land() {
+        return land;
+    }
+
+    @Override
     public Safety safety() {
         return safety;
     }
@@ -938,6 +961,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         tablists.forget(player);
         warps.forget(player.getUniqueId());
         effects.forget(player.getUniqueId());
+        land.forget(player.getUniqueId());
         if (combatListener != null) {
             combatListener.forget(player.getUniqueId());
         }

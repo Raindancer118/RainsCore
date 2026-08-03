@@ -1,5 +1,8 @@
 package de.raindancer.core.ui.messages;
 
+import de.raindancer.core.world.protection.LandAction;
+import de.raindancer.core.world.protection.LandAudience;
+import de.raindancer.core.world.protection.LandFlag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -56,16 +59,41 @@ class EveryKeyIsDefinedTest {
      * the file's unused-key half stays honest: without this, every one of these would look like a
      * line nothing uses.
      */
-    private static final Set<String> BUILT_AT_RUNTIME = Set.of(
-            // PunishmentGuard appends "-temporary" to the mute and freeze keys.
-            "punishment.muted-temporary",
-            "punishment.frozen-temporary",
-            // Written out only in the units a Duration happens to have.
-            "punishment.length.forever",
-            "punishment.length.days",
-            "punishment.length.hours",
-            "punishment.length.minutes",
-            "punishment.length.seconds");
+    private static final Set<String> BUILT_AT_RUNTIME = builtAtRuntime();
+
+    private static Set<String> builtAtRuntime() {
+        Set<String> keys = new LinkedHashSet<>(Set.of(
+                // PunishmentGuard appends "-temporary" to the mute and freeze keys.
+                "punishment.muted-temporary",
+                "punishment.frozen-temporary",
+                // Written out only in the units a Duration happens to have.
+                "punishment.length.forever",
+                "punishment.length.days",
+                "punishment.length.hours",
+                "punishment.length.minutes",
+                "punishment.length.seconds"));
+
+        // Land carries no wording in its enums — see LandFlag's class comment. Every name and description
+        // is looked up through nameKey()/descriptionKey(), so a pattern over the source cannot see any of
+        // them.
+        //
+        // Generated from the enums rather than listed, which keeps the rule sharp in both directions: a key
+        // in the file that no constant produces is still reported as unused, and a constant whose key is
+        // missing from the file is still reported by the other half of this test.
+        for (LandFlag flag : LandFlag.values()) {
+            keys.add(flag.nameKey());
+            keys.add(flag.descriptionKey());
+        }
+        for (LandAction action : LandAction.values()) {
+            keys.add(action.nameKey());
+            keys.add(action.descriptionKey());
+        }
+        for (LandAudience audience : LandAudience.values()) {
+            keys.add(audience.nameKey());
+            keys.add(audience.descriptionKey());
+        }
+        return Set.copyOf(keys);
+    }
 
     /** Dotted paths that are not message keys at all, however much they look like ones. */
     private static final Pattern NOT_A_KEY = Pattern.compile(

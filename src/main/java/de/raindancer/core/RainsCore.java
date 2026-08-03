@@ -38,6 +38,7 @@ import de.raindancer.core.content.pack.ResourcePacks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.world.warp.Warps;
 import de.raindancer.core.world.farm.FarmWorlds;
+import de.raindancer.core.world.protection.Land;
 import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
@@ -210,6 +211,22 @@ public interface RainsCore {
      * builds it reproducibly, serves it, and reports the files two plugins both wanted.
      */
     ResourcePacks resourcePacks();
+
+    /**
+     * Who may do what on a piece of protected ground.
+     *
+     * <p>Core owns the question, the vocabulary and the enforcement; the ground itself comes from whichever
+     * plugin owns regions, which registers a {@code LandProvider} here. Ask this before putting a player
+     * somewhere or changing a block on their behalf — a warp into somebody's house, a teleport accepted
+     * across a border and a ghast line landing in a stranger's garden are all the same question, and before
+     * this each plugin either asked nobody or wrote its own answer.
+     *
+     * <p>With no provider registered, every question answers
+     * {@link de.raindancer.core.world.protection.LandVerdict#UNKNOWN} rather than "allowed". That
+     * distinction is the whole point: it is what stops a farm-world regeneration deleting somebody's house
+     * because the claims plugin happened not to be installed.
+     */
+    Land land();
 
     /**
      * Whether it is safe to put a player somewhere, and where to put them instead.
