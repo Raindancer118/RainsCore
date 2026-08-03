@@ -46,6 +46,67 @@ public enum LandFlag {
     EXPLOSIONS(Material.TNT, false),
     EXPLOSION_DAMAGE(Material.GUNPOWDER, false, true),
     MOB_DAMAGE(Material.BONE, true, true),
+
+    /**
+     * Whether a person may hurt the peaceful creatures here.
+     *
+     * <p>The other direction from {@link #MOB_DAMAGE}, and the one an owner asks for first: a pen full of cows
+     * that a visitor cannot start killing. Covers everything alive that is not a monster and not a player —
+     * animals, villagers, golems, tamed wolves, squid — because "which of those counts as livestock" is a
+     * question nobody wants to answer per creature.
+     *
+     * <p>A flag as well as {@link LandAction#DAMAGE_ANIMALS}, which is not a duplicate: the action is granted to
+     * named people, this is the ground's own rule for a whole tier. An owner who wants their farm safe from
+     * everybody but themselves sets this once instead of auditing every grant.
+     *
+     * <p>Audience aware, and the tier is the <em>attacker's</em> — that is the whole point.
+     */
+    HIT_MOBS(Material.PORKCHOP, true, true),
+
+    /**
+     * Whether a person may hurt the monsters here.
+     *
+     * <p>Separate from {@link #HIT_MOBS} because the two are wanted for opposite reasons. Hitting animals is
+     * switched off to protect a farm; hitting monsters is switched off to stop a claim being farmed — a spawn
+     * where nobody should be fighting, an arena where the mobs are scenery, a shop that does not want a skeleton
+     * fight in the doorway.
+     *
+     * <p>{@link #MONSTER_TARGETING} is the mirror of this and does not replace it: a monster that may not take
+     * aim at you can still be shot at, which is exactly how a claim with targeting off becomes a safe grinder.
+     */
+    HIT_MONSTERS(Material.IRON_SWORD, true, true),
+
+    /**
+     * Whether a person may lay hands on a creature here without hurting it.
+     *
+     * <p>Shearing a sheep, milking a cow, saddling a pig, opening a llama's chest, dyeing, breeding by hand,
+     * naming with a tag. None of it produces damage, so {@link #HIT_MOBS} never sees it: a flock can be sheared
+     * bare and a claim with every damage rule off has lost its wool.
+     *
+     * <p>A flag as well as {@link LandAction#ANIMALS}, for the same reason {@link #HIT_MOBS} is one alongside
+     * the damage permission — the grant is per person, this is per tier.
+     */
+    INTERACT_MOBS(Material.SHEARS, true, true),
+
+    /**
+     * Whether a person may pick things up off the ground here.
+     *
+     * <p>Wanted by two quite different places. A shop or a spawn where a dropped stack is not for whoever walks
+     * past first; and an arena or an event ground where the floor is meant to stay as it was laid out.
+     *
+     * <p>Distinct from {@link #ITEM_DROPS}, which decides whether a pile appears when somebody dies. This decides
+     * whether anybody may take one that is lying there, however it got there.
+     */
+    ITEM_PICKUP(Material.HOPPER, true, true),
+
+    /**
+     * Whether a person may collect experience orbs here.
+     *
+     * <p>The half of the same complaint that no permission covered: orbs are not items, so a claim that stopped
+     * people taking the drops still handed them the levels. An arena where a kill earns nothing, a grinder whose
+     * owner keeps the experience, a spawn where a dropped orb is not a race.
+     */
+    XP_PICKUP(Material.EXPERIENCE_BOTTLE, true, true),
     FIRE_SPREAD(Material.CAMPFIRE, false),
     LEAF_DECAY(Material.OAK_LEAVES, true),
     ENDERMAN_GRIEF(Material.ENDER_PEARL, false),

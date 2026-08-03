@@ -44,11 +44,26 @@ public enum LandFlagGroup {
      *
      * <p>A boat is an entity, which is why it is here rather than with the machinery — a spawn drowning in
      * abandoned boats and a spawn overrun with bred cows are the same complaint about the same kind of thing.
+     *
+     * <p>What a <em>person</em> may do to a creature — hit it, shear it — is here too, with the creature it is
+     * done to, rather than in {@link #PLAYER}: an owner protecting their farm goes looking for the animals, not
+     * for themselves. {@code MONSTER_TARGETING} stays in {@link #PLAYER} because its subject really is you.
      */
     ENTITIES(Material.ZOMBIE_HEAD,
             LandFlag.MONSTER_SPAWNING, LandFlag.ANIMAL_SPAWNING, LandFlag.SPAWNER_SPAWNING,
             LandFlag.MONSTER_ENTRY, LandFlag.MOB_GRIEF,
-            LandFlag.ENDERMAN_GRIEF, LandFlag.BREEDING, LandFlag.LEADS, LandFlag.BOATS),
+            LandFlag.ENDERMAN_GRIEF, LandFlag.BREEDING, LandFlag.LEADS, LandFlag.BOATS,
+            LandFlag.HIT_MOBS, LandFlag.HIT_MONSTERS, LandFlag.INTERACT_MOBS),
+
+    /**
+     * What may be taken off the ground here.
+     *
+     * <p>Its own group rather than folded into the creatures: an owner looking for "nobody may take my drops" is
+     * not thinking about mobs at all, and the two flags here are always wanted together — orbs are not items, so
+     * either alone leaves half the floor free for the taking.
+     */
+    PICKUP(Material.HOPPER,
+            LandFlag.ITEM_PICKUP, LandFlag.XP_PICKUP),
 
     /** Ways in and out that are not walking. */
     TRAVEL(Material.ENDER_PEARL,

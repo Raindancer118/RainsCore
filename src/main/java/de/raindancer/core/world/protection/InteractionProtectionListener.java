@@ -116,6 +116,13 @@ public final class InteractionProtectionListener implements Listener {
     public void onEntityInteract(PlayerInteractEntityEvent event) {
         // Both hands, for the same reason as onInteract: carrying the thing in the off-hand was a way
         // through every protection this listener applies.
+        // The flag first, and asked about every creature rather than only the ones with a permission of their
+        // own: the classifier says nothing about a snow golem or a tamed parrot, and "do not touch the animals"
+        // plainly means those too.
+        if (!mayInteractWith(event.getPlayer(), event.getRightClicked())) {
+            event.setCancelled(true);
+            return;
+        }
         LandAction required = InteractionClassifier.forEntityInteract(event.getRightClicked());
         if (required == null) {
             return;
@@ -127,6 +134,10 @@ public final class InteractionProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onEntityInteractAt(PlayerInteractAtEntityEvent event) {
+        if (!mayInteractWith(event.getPlayer(), event.getRightClicked())) {
+            event.setCancelled(true);
+            return;
+        }
         LandAction required = InteractionClassifier.forEntityInteract(event.getRightClicked());
         if (required == null) {
             return;
@@ -146,6 +157,10 @@ public final class InteractionProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onShear(PlayerShearEntityEvent event) {
+        if (!mayInteractWith(event.getPlayer(), event.getEntity())) {
+            event.setCancelled(true);
+            return;
+        }
         if (!land.allow(event.getPlayer(), event.getEntity().getLocation(), LandAction.ANIMALS)) {
             event.setCancelled(true);
         }
@@ -178,7 +193,34 @@ public final class InteractionProtectionListener implements Listener {
             return;
         }
         Item item = event.getItem();
+        // Silent, like the permission below it. A player standing over a pile they may not take produces one of
+        // these every tick, and a line per tick is worse than the pile staying put.
+        if (land.landFlags().isEnforced(LandFlag.ITEM_PICKUP)
+                && !land.landFlags().isAllowedAt(item.getLocation(), LandFlag.ITEM_PICKUP,
+                        player.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         if (!land.allowSilently(player, item.getLocation(), LandAction.ITEM_PICKUP)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Experience orbs, which no permission covered.
+     *
+     * <p>Orbs are not items, so a claim that stopped people taking the drops still handed them the levels — the
+     * half of the same complaint that had no answer. Silent for the same reason as the items above: an orb
+     * hovering by a player fires this repeatedly.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onExperiencePickup(com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent event) {
+        if (!land.landFlags().isEnforced(LandFlag.XP_PICKUP)) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (!land.landFlags().isAllowedAt(event.getExperienceOrb().getLocation(), LandFlag.XP_PICKUP,
+                player.getUniqueId())) {
             event.setCancelled(true);
         }
     }
@@ -198,6 +240,14 @@ public final class InteractionProtectionListener implements Listener {
             return;
         }
 
+        // The flag before the permission. A claim that has switched hitting off has switched it off for a whole
+        // tier, whatever any individual grant says — and a monster is nobody's protected livestock, so without
+        // this half there was no way to stop a stranger fighting in a spawn at all.
+        if (!mayHarm(attacker, victim)) {
+            event.setCancelled(true);
+            return;
+        }
+
         LandAction required = InteractionClassifier.forEntityDamage(victim);
         if (required == null) {
             return;
@@ -205,6 +255,52 @@ public final class InteractionProtectionListener implements Listener {
         if (!land.allow(attacker, victim.getLocation(), required)) {
             event.setCancelled(true);
         }
+    }
+
+    /**
+     * Whether this player may harm this creature here, by the ground's own rule.
+     *
+     * <p>Judged where the creature is and at the <em>attacker's</em> tier, which is the difference between this
+     * and every other audience-aware flag: PvP protects the person being hit, so the victim's standing decides;
+     * this restrains the person swinging, so theirs does. An owner keeps their own farm and their own arena.
+     *
+     * <p>Answers true for anything that is not a creature — item frames, boats, a player — so the permission
+     * checks and the PvP rule keep those.
+     */
+    private boolean mayHarm(Player attacker, Entity victim) {
+        LandFlag flag = InteractionClassifier.forCreatureDamage(victim);
+        if (flag == null || !land.landFlags().isEnforced(flag)) {
+            return true;
+        }
+        // The bypass is applied inside isAllowedAt, on behalf of the attacker.
+        if (land.landFlags().isAllowedAt(victim.getLocation(), flag, attacker.getUniqueId())) {
+            return true;
+        }
+        land.areaAt(victim.getLocation()).ifPresent(area -> refuse(attacker, area,
+                flag == LandFlag.HIT_MONSTERS ? "land.hit-monsters-refused" : "land.hit-mobs-refused"));
+        return false;
+    }
+
+    /**
+     * Whether this player may lay hands on this creature without hurting it.
+     *
+     * <p>Shearing, milking, saddling, dyeing, breeding by hand. None of it is damage, so {@link #mayHarm} never
+     * sees it — a flock can be sheared bare in a claim with every damage rule off.
+     */
+    private boolean mayInteractWith(Player player, Entity target) {
+        if (target instanceof Player || !(target instanceof LivingEntity)) {
+            return true;
+        }
+        if (!land.landFlags().isEnforced(LandFlag.INTERACT_MOBS)) {
+            return true;
+        }
+        if (land.landFlags().isAllowedAt(target.getLocation(), LandFlag.INTERACT_MOBS,
+                player.getUniqueId())) {
+            return true;
+        }
+        land.areaAt(target.getLocation())
+                .ifPresent(area -> refuse(player, area, "land.interact-mobs-refused"));
+        return false;
     }
 
     /**
@@ -245,6 +341,13 @@ public final class InteractionProtectionListener implements Listener {
         }
         if (affected instanceof Player hurt) {
             return pvpAllowed(thrower, hurt, false);
+        }
+        // Harm is harm however it arrives: a flag that stops somebody swinging at the cows has to stop them
+        // lobbing Harming II over the fence at them, which is the shape of bug this whole method exists for.
+        LandFlag flag = InteractionClassifier.forCreatureDamage(affected);
+        if (flag != null && land.landFlags().isEnforced(flag)
+                && !land.landFlags().isAllowedAt(affected.getLocation(), flag, thrower.getUniqueId())) {
+            return false;
         }
         return land.can(thrower, affected.getLocation(), LandAction.DAMAGE_ANIMALS);
     }

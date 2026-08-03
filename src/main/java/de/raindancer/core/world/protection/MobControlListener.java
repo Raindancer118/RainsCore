@@ -6,10 +6,8 @@ import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
-import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
-import org.bukkit.entity.Slime;
 import org.bukkit.entity.WaterMob;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -108,16 +106,9 @@ public final class MobControlListener implements Listener {
         };
     }
 
+    /** One answer for the whole package — see {@link InteractionClassifier#isHostile}. */
     private boolean isHostile(Entity entity) {
-        return entity instanceof Monster || entity instanceof Slime
-                || entity.getType() == org.bukkit.entity.EntityType.GHAST
-                || entity.getType() == org.bukkit.entity.EntityType.PHANTOM
-                || entity.getType() == org.bukkit.entity.EntityType.HOGLIN
-                || entity.getType() == org.bukkit.entity.EntityType.SHULKER
-                || entity.getType() == org.bukkit.entity.EntityType.ENDER_DRAGON
-                || entity.getType() == org.bukkit.entity.EntityType.WITHER
-                || entity.getType() == org.bukkit.entity.EntityType.SLIME
-                || entity.getType() == org.bukkit.entity.EntityType.MAGMA_CUBE;
+        return InteractionClassifier.isHostile(entity);
     }
 
     /** Stops hostile mobs at the border when MONSTER_ENTRY is denied. */

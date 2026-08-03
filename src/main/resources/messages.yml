@@ -185,6 +185,9 @@ land:
   leads-refused: "<red>You may not lead animals about in <white><claim></white>."
   boats-refused: "<red>Boats and minecarts may not be put down in <white><claim></white>."
   walk-in-refused: "<red>You may not go into <white><claim></white>."
+  hit-mobs-refused: "<red>You may not hurt the animals in <white><claim></white>."
+  hit-monsters-refused: "<red>You may not fight monsters in <white><claim></white>."
+  interact-mobs-refused: "<red>You may not handle the animals in <white><claim></white>."
 
   audience:
     owner:
@@ -205,6 +208,7 @@ land:
     border: {name: "Across the border", description: "What somebody outside can reach in with"}
     machinery: {name: "Machinery", description: "Whether what has been built here actually runs"}
     death: {name: "Dying here", description: "What happens to what you were carrying"}
+    pickup: {name: "Picking things up", description: "What may be taken off the ground here"}
     other: {name: "Everything else", description: "Rules not filed anywhere yet"}
 
   flag:
@@ -217,6 +221,11 @@ land:
     explosions: {name: "Explosions", description: "Creepers, TNT and beds may damage blocks"}
     explosion-damage: {name: "Explosion damage", description: "Explosions may hurt players and mobs — separate from block damage"}
     mob-damage: {name: "Mob damage", description: "Mobs may hurt players and other mobs"}
+    hit-mobs: {name: "Hurting animals", description: "Players may damage animals, villagers and other peaceful creatures"}
+    hit-monsters: {name: "Fighting monsters", description: "Players may damage hostile mobs"}
+    interact-mobs: {name: "Handling animals", description: "Players may shear, milk, saddle, dye and breed the creatures here"}
+    item-pickup: {name: "Picking up items", description: "Players may pick dropped items up off the ground"}
+    xp-pickup: {name: "Collecting experience", description: "Players may collect experience orbs"}
     fire-spread: {name: "Fire spread", description: "Fire may spread and burn blocks"}
     leaf-decay: {name: "Leaf decay", description: "Leaves decay when their tree is cut"}
     enderman-grief: {name: "Enderman grief", description: "Endermen may pick up blocks"}

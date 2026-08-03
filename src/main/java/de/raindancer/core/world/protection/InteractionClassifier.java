@@ -12,7 +12,12 @@ import org.bukkit.block.data.type.Switch;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Slime;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
 import org.bukkit.entity.WanderingTrader;
@@ -113,5 +118,39 @@ public final class InteractionClassifier {
             return LandAction.DAMAGE_ANIMALS;
         }
         return null;
+    }
+
+    /**
+     * The flag deciding whether a player may harm this creature, or {@code null} when it is not a creature.
+     *
+     * <p>Two flags rather than one because the reasons differ — see {@link LandFlag#HIT_MOBS} and
+     * {@link LandFlag#HIT_MONSTERS}. Players are neither: they go through PvP.
+     */
+    public static LandFlag forCreatureDamage(Entity entity) {
+        if (entity instanceof Player || !(entity instanceof LivingEntity)) {
+            return null;
+        }
+        return isHostile(entity) ? LandFlag.HIT_MONSTERS : LandFlag.HIT_MOBS;
+    }
+
+    /**
+     * Whether a creature is one the world sent to do harm.
+     *
+     * <p>Lives here rather than in a listener because three of them ask it — spawning, entry and now hitting —
+     * and a copy per listener is how "is a hoglin hostile" ends up answered differently in each.
+     *
+     * <p>The type checks beside {@code Monster} are not redundant: a ghast, a phantom, a shulker, a slime and both
+     * bosses are hostile without implementing that interface.
+     */
+    public static boolean isHostile(Entity entity) {
+        return entity instanceof Monster || entity instanceof Slime
+                || entity.getType() == EntityType.GHAST
+                || entity.getType() == EntityType.PHANTOM
+                || entity.getType() == EntityType.HOGLIN
+                || entity.getType() == EntityType.SHULKER
+                || entity.getType() == EntityType.ENDER_DRAGON
+                || entity.getType() == EntityType.WITHER
+                || entity.getType() == EntityType.SLIME
+                || entity.getType() == EntityType.MAGMA_CUBE;
     }
 }
