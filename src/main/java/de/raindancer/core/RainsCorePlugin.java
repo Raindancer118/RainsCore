@@ -369,6 +369,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Kept, because it holds one entry per player it has had to refuse and the quit handler has
         // to be able to drop them. A map that only grows is a leak on a server that runs for months.
         combatListener = new CombatListener(combat, System::currentTimeMillis, messages);
+        // The damage event fires in the victim's region, and the attacker may be standing in another —
+        // shooting across a boundary is ordinary. So the message goes out on their own thread.
+        combatListener.tellOn((player, task) -> Scheduling.entity(this, player, task));
         getServer().getPluginManager().registerEvents(combatListener, this);
 
         chunks = new ChunkHolds(new BukkitChunkLoader(this));

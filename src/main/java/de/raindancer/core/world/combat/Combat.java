@@ -218,20 +218,30 @@ public final class Combat {
             // to their own explosives.
             return Verdict.ALLOWED;
         }
-        if (attack.isMobVersusMob()) {
-            // The game playing itself. Refusing it breaks farms, iron golems and a dozen things
-            // nobody was asking about.
-            return Verdict.ALLOWED;
-        }
-
+        // Asked before anything else is decided, mob-versus-mob included. That was wrong at first:
+        // returning ALLOWED for two mobs before asking meant a claims plugin protecting somebody's
+        // livestock never got the chance — a zombie could kill the cows inside a claim and the claim
+        // would never hear about it.
         Verdict fromSomebodyElse = askTheOthers(attack);
         if (fromSomebodyElse != null) {
             return fromSomebodyElse;
+        }
+        if (attack.isMobVersusMob()) {
+            // Nobody else objected, so: the game playing itself. Refusing it here would break farms,
+            // iron golems and a dozen things nobody was asking about.
+            return Verdict.ALLOWED;
         }
         if (attack.isPlayerVersusPlayer() && !isPvpAllowed(attack.world())) {
             return Verdict.NO_PVP;
         }
         if (attack.isPlayerHurtingMob() && !isPlayerOnMobAllowed(attack.world())) {
+            if (attack.throughPet()) {
+                // Somebody's wolf fighting a zombie. Traced back to its owner, which is right for
+                // PvP — a wolf set on a player is that player's doing — but wrong here: refusing it
+                // means a pet cannot defend its owner on a server where players are not meant to
+                // hunt. The animal is doing what animals do.
+                return Verdict.ALLOWED;
+            }
             return Verdict.NO_PVE;
         }
         if (attack.isMobHurtingPlayer() && !isMobOnPlayerAllowed(attack.world())) {

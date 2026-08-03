@@ -19,7 +19,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PotionSplashEvent;
 import org.bukkit.projectiles.ProjectileSource;
 
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -40,11 +40,21 @@ import java.util.function.LongSupplier;
  *       PvP into "bring a dog";</li>
  *   <li>a block of <b>primed TNT</b> — whoever lit it, which may be somebody who has since left;</li>
  *   <li>a <b>lingering potion's cloud</b>, which is not the thrower and not a projectile either;</li>
- *   <li>a <b>fishing rod</b>, a firework, a llama's spit, a wither skull.</li>
+ *   <li>a <b>fishing rod</b>, a firework, a wind charge, a llama's spit, a wither skull — all
+ *       {@code Projectile}, so all one case;</li>
+ *   <li>a <b>bolt of lightning</b> from a channelling trident, which is not a projectile and not
+ *       alive: without following it, a trident is the cleanest way round a PvP rule in the game;</li>
+ *   <li>an evoker's <b>fangs</b> or its <b>vexes</b>, which are summoned rather than thrown.</li>
  * </ul>
  *
- * <p>Each of those has to be followed back to a person, and the chain can be more than one link long:
- * a wolf shot by an arrow fired by a player, or a skeleton's arrow — which is a mob, not nobody.
+ * <p>Each of those has to be followed back to whoever is responsible, and the chain can be more than
+ * one link long: a wolf shot by an arrow fired by a player.
+ *
+ * <p>The list is not from memory. Every type in Paper 26.2 that can name somebody behind it —
+ * {@code getShooter}, {@code getSource}, {@code getOwner}, {@code getCausingEntity} — was read off the
+ * API, and all of them are handled: {@code Projectile}, {@code AreaEffectCloud}, {@code TNTPrimed},
+ * {@code Tameable}, {@code EvokerFangs}, {@code Vex}, {@code LightningStrike}. The one deliberately
+ * left out is {@code Item#getThrower}, which is a dropped item and does not do damage.
  *
  * <h2>Two more things it gets right on purpose</h2>
  * <ul>
@@ -56,10 +66,16 @@ import java.util.function.LongSupplier;
  *       chat somebody has to leave to escape. So: throttled, and only ever to the person who did it.</li>
  * </ul>
  *
- * <h2>Priority</h2>
- * {@code LOW}, and {@code ignoreCancelled = true}. Low so that a plugin with a more specific opinion —
- * a claim, an arena — can still see the event and change its mind, and cancelled events are left
- * alone: something else already refused, and a second refusal is not worth a second message.
+ * <h2>Priority, in two passes</h2>
+ * Decided at {@code LOW}, explained at {@code MONITOR}. Low so a plugin with a more specific opinion —
+ * an arena inside a peaceful world — can still see the event and un-cancel it; monitor because that is
+ * the only point at which "was this refused" has an answer that will not change. Doing both at once was
+ * the first version, and it told people PvP was off while the hit landed.
+ *
+ * <p>Cancelled events are deliberately <em>not</em> ignored. Something else may have refused first — a
+ * claim at {@code LOWEST} — and a player refused in silence concludes the server is broken, so they are
+ * told {@code PROTECTED}: something is protecting that, and this does not claim to know whose rule it
+ * was.
  */
 public final class CombatListener implements Listener {
 
@@ -78,21 +94,85 @@ public final class CombatListener implements Listener {
     /** When each attacker was last told, so a held-down attack is one message and not forty. */
     private final ConcurrentHashMap<UUID, AtomicLong> lastTold = new ConcurrentHashMap<>();
 
+    /**
+     * What was decided at {@code LOW}, waiting for {@code MONITOR} to confirm it stuck.
+     *
+     * <p>Keyed by the event object, which is safe because the two handlers are the same dispatch of the
+     * same event: whatever is put in at {@code LOW} is taken out at {@code MONITOR}, on the same thread,
+     * a few microseconds later. Weak keys so that an event which somehow never reaches the monitor pass
+     * — a listener between the two that throws — is collected rather than kept for ever.
+     */
+    private final Map<EntityDamageByEntityEvent, Pending> pending =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /** One decision, waiting to be explained. */
+    private record Pending(Attack attack, Verdict verdict) {
+    }
+
+    /**
+     * Where a message to the attacker is sent from.
+     *
+     * <p>A seam, because the damage event fires in the victim's region and the attacker may be in
+     * another — so the message cannot simply be sent from here. Runs inline by default, which is what
+     * a test wants; the plugin replaces it with one that schedules against the player.
+     */
+    private volatile java.util.function.BiConsumer<Player, Runnable> tellOn =
+            (player, task) -> task.run();
+
     public CombatListener(Combat combat, LongSupplier clock, Messages messages) {
         this.combat = combat;
         this.clock = clock;
         this.messages = messages;
     }
 
+    /** Tells this where a message to a player should be sent from. */
+    public void tellOn(java.util.function.BiConsumer<Player, Runnable> tellOn) {
+        if (tellOn != null) {
+            this.tellOn = tellOn;
+        }
+    }
+
     // ---------------------------------------------------------------------------- the events
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    /**
+     * Decides, at {@code LOW}, and says nothing yet.
+     *
+     * <p>Low so that a plugin with a more specific opinion — an arena inside a peaceful world — can
+     * still see the event afterwards and un-cancel it. Which is exactly why the message does not go out
+     * here: telling somebody "PvP is off" and then letting the hit land is worse than saying nothing.
+     * The verdict is remembered and {@link #onDamageSettled} sends it once the event has stopped
+     * changing hands.
+     *
+     * <p>Not {@code ignoreCancelled}, either. Something else may already have refused this — a claim at
+     * {@code LOWEST} — and a player who is refused in silence concludes the server is broken. Judging a
+     * cancelled event costs nothing and gives them a reason.
+     */
+    @EventHandler(priority = EventPriority.LOW)
     public void onDamage(EntityDamageByEntityEvent event) {
         Attack attack = read(event.getDamager(), event.getEntity());
         Verdict verdict = combat.judge(attack);
         if (!verdict.allowed()) {
             event.setCancelled(true);
-            tell(attack, verdict);
+        }
+        if (!verdict.allowed() || event.isCancelled()) {
+            // Remembered for the monitor pass. Something else's refusal is worth explaining too, and
+            // PROTECTED is the honest word for it: this does not know whose rule it was.
+            pending.put(event, new Pending(attack, verdict.allowed() ? Verdict.PROTECTED : verdict));
+        }
+    }
+
+    /**
+     * Says why, at {@code MONITOR}, once nothing can change its mind.
+     *
+     * <p>{@code MONITOR} is the only priority at which "was this refused" has a stable answer. A
+     * message sent at {@code LOW} is a message sent before the arena plugin has had its say — and then
+     * the player is told they cannot while watching the hit land, which is the worst of both.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onDamageSettled(EntityDamageByEntityEvent event) {
+        Pending remembered = pending.remove(event);
+        if (remembered != null && event.isCancelled()) {
+            tell(remembered.attack(), remembered.verdict());
         }
     }
 
@@ -106,13 +186,21 @@ public final class CombatListener implements Listener {
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onSplash(PotionSplashEvent event) {
-        UUID thrower = personBehind(event.getPotion().getShooter(), 0).orElse(null);
-        if (thrower == null) {
+        Responsible thrower = whoIsBehind(event.getPotion().getShooter(), 0);
+        if (thrower.kind() == Attack.Fighter.NOBODY) {
+            return;
+        }
+        if (!doesHarm(event.getPotion())) {
+            // A splash of healing, or speed, or regeneration. Not an attack, and refusing it stops
+            // somebody helping their own side — which is a rule nobody asked for and cannot be
+            // explained to the player it happens to.
             return;
         }
         Verdict worst = Verdict.ALLOWED;
-        for (LivingEntity hit : event.getAffectedEntities()) {
-            Attack attack = between(Attack.Fighter.PLAYER, thrower,
+        // Copied, because setIntensity may change what getAffectedEntities answers and iterating a
+        // collection while changing it is the sort of failure that only happens with a crowd.
+        for (LivingEntity hit : java.util.List.copyOf(event.getAffectedEntities())) {
+            Attack attack = between(thrower.kind(), thrower.id(),
                     event.getPotion().getLocation(), hit);
             Verdict verdict = combat.judge(attack);
             if (!verdict.allowed()) {
@@ -121,9 +209,25 @@ public final class CombatListener implements Listener {
             }
         }
         if (!worst.allowed()) {
-            tell(between(Attack.Fighter.PLAYER, thrower, event.getPotion().getLocation(),
+            tell(between(thrower.kind(), thrower.id(), event.getPotion().getLocation(),
                     event.getEntity()), worst);
         }
+    }
+
+    /**
+     * Whether a potion does harm at all.
+     *
+     * <p>Read off the effects rather than a list of names: {@code PotionEffectType} says whether it is
+     * bad for you, and a list would need editing every time a version adds one.
+     */
+    private static boolean doesHarm(org.bukkit.entity.ThrownPotion potion) {
+        for (org.bukkit.potion.PotionEffect effect : potion.getEffects()) {
+            if (effect.getType().getEffectCategory()
+                    == org.bukkit.potion.PotionEffectType.Category.HARMFUL) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Forgets a player's throttle when they leave. */
@@ -137,19 +241,47 @@ public final class CombatListener implements Listener {
 
     /** Turns "this object damaged that one" into "this person attacked that one". */
     private Attack read(Entity damager, Entity victim) {
-        Optional<UUID> who = personBehind(damager, 0);
-        Attack.Fighter attacker = who.isPresent() ? Attack.Fighter.PLAYER : kindOf(damager);
-        UUID attackerId = who.orElseGet(() -> damager == null ? null : damager.getUniqueId());
+        Responsible attacker = whoIsBehind(damager, 0);
+        Responsible defender = whoIsBehind(victim, 0);
         Location from = damager == null ? null : damager.getLocation();
-        return between(attacker, attackerId, from, victim);
-    }
-
-    private Attack between(Attack.Fighter attacker, UUID attackerId, Location from, Entity victim) {
         Location where = victim == null ? null : victim.getLocation();
         String world = where != null ? where.getWorld().getName()
                 : from != null ? from.getWorld().getName() : "";
-        return new Attack(attacker, attackerId, kindOf(victim),
-                victim == null ? null : victim.getUniqueId(), world, at(where), at(from));
+        return new Attack(attacker.kind(), attacker.id(), defender.kind(), defender.id(),
+                world, attacker.throughPet(), at(where), at(from));
+    }
+
+    /**
+     * Who is behind something, and of what kind.
+     *
+     * <p>Both together, which was the correction. Answering only "which player, if any" left every
+     * other case to be guessed from the object that delivered the damage — and an arrow is not alive,
+     * so a skeleton's arrow came out as {@code NOBODY} and slipped past every rule. The kind has to
+     * come from whoever is <em>responsible</em>, not from what they used.
+     *
+     * @param kind who they are as far as the rules care
+     * @param id   which one, when there is one to name
+     */
+    private record Responsible(Attack.Fighter kind, UUID id, boolean throughPet) {
+
+        static final Responsible NOBODY = new Responsible(Attack.Fighter.NOBODY, null, false);
+
+        static Responsible player(UUID who) {
+            return new Responsible(Attack.Fighter.PLAYER, who, false);
+        }
+
+        static Responsible mob(UUID which) {
+            return new Responsible(Attack.Fighter.MOB, which, false);
+        }
+    }
+
+    private Attack between(Attack.Fighter attacker, UUID attackerId, Location from, Entity victim) {
+        Responsible defender = whoIsBehind(victim, 0);
+        Location where = victim == null ? null : victim.getLocation();
+        String world = where != null ? where.getWorld().getName()
+                : from != null ? from.getWorld().getName() : "";
+        return new Attack(attacker, attackerId, defender.kind(), defender.id(), world, false,
+                at(where), at(from));
     }
 
     private static Attack.At at(Location location) {
@@ -158,56 +290,95 @@ public final class CombatListener implements Listener {
     }
 
     /**
-     * Follows a chain of blame back to a person.
+     * Follows a chain of blame back to whoever is responsible.
      *
      * <p>Recursive, because the chain really can be several links long: a wolf hurt by an arrow fired
      * by a player. Bounded, because a chain that loops — which a badly-behaved plugin can construct by
      * setting an entity as its own shooter — would otherwise be an endless loop on the thread ticking
      * the world.
      *
-     * @return the person behind it, or empty when nobody is
+     * <p>A pet resolves to its <b>owner</b> on both sides, which is the point of tracing at all: a
+     * wolf set on somebody is its owner attacking, and somebody's wolf being killed is that person
+     * being attacked. Without the second half, "PvP off" means "kill their dog instead".
      */
-    private Optional<UUID> personBehind(Object thing, int depth) {
-        if (thing == null || depth > MAX_LINKS) {
-            if (depth > MAX_LINKS) {
-                log.warn("Gave up following an attack back after {} links; something is pointing at "
-                        + "itself.", MAX_LINKS);
-            }
-            return Optional.empty();
+    private Responsible whoIsBehind(Object thing, int depth) {
+        if (thing == null) {
+            return Responsible.NOBODY;
+        }
+        if (depth > MAX_LINKS) {
+            log.warn("Gave up following an attack back after {} links; something is pointing at "
+                    + "itself.", MAX_LINKS);
+            return Responsible.NOBODY;
         }
         if (thing instanceof Player player) {
-            return Optional.of(player.getUniqueId());
+            return Responsible.player(player.getUniqueId());
+        }
+        if (thing instanceof org.bukkit.OfflinePlayer offline) {
+            // What Tameable.getOwner() answers for an owner who is not online. AnimalTamer is the
+            // declared type and OfflinePlayer is what it is in practice; a tamer that is neither
+            // falls through to the mob case below rather than being lost.
+            return Responsible.player(offline.getUniqueId());
         }
         if (thing instanceof Projectile projectile) {
-            // An arrow, a trident, a snowball, a firework, a llama's spit. The shooter may itself be
-            // a projectile in silly cases, hence the recursion rather than one step.
-            return personBehind(projectile.getShooter(), depth + 1);
+            // An arrow, a trident, a snowball, a firework, a llama's spit. Whoever shot it is
+            // responsible — and when that is a skeleton, the answer is MOB rather than nobody.
+            return orElse(whoIsBehind(projectile.getShooter(), depth + 1), thing);
         }
         if (thing instanceof AreaEffectCloud cloud) {
             // What a lingering potion leaves behind. Not a projectile, and its source is the thrown
             // potion rather than the thrower — so this is the link a damage-only listener misses.
-            return personBehind(cloud.getSource(), depth + 1);
+            return orElse(whoIsBehind(cloud.getSource(), depth + 1), thing);
         }
         if (thing instanceof TNTPrimed tnt) {
             // Whoever lit it, which Paper remembers. They may have logged out since, which is fine:
             // a UUID is still who did it.
-            return personBehind(tnt.getSource(), depth + 1);
+            return orElse(whoIsBehind(tnt.getSource(), depth + 1), thing);
+        }
+        if (thing instanceof org.bukkit.entity.LightningStrike bolt) {
+            // A channelling trident in the rain, or a lightning rod somebody aimed. Not a projectile
+            // and not alive, so without this it is weather — and weather is nobody's doing, which
+            // makes a trident the cleanest way round a PvP rule in the game.
+            Responsible person = whoIsBehind(bolt.getCausingPlayer(), depth + 1);
+            return person.kind() != Attack.Fighter.NOBODY ? person
+                    : whoIsBehind(bolt.getCausingEntity(), depth + 1);
+        }
+        if (thing instanceof org.bukkit.entity.EvokerFangs fangs) {
+            // Summoned, and the summoner is who did it. An evoker's, normally — but a plugin can
+            // give a player one, and then it is a player attacking.
+            return orElse(whoIsBehind(fangs.getOwner(), depth + 1), thing);
+        }
+        if (thing instanceof org.bukkit.entity.Vex vex) {
+            // Summoned by an evoker. A mob either way in vanilla, but a plugin can summon one, and
+            // then the vex is that player attacking.
+            return orElse(whoIsBehind(vex.getOwner(), depth + 1), thing);
         }
         if (thing instanceof Tameable pet && pet.isTamed()) {
-            // A wolf set on somebody is its owner attacking. Without this, PvP off means "bring a
-            // dog", which is the oldest way round a PvP rule there is.
-            return personBehind(pet.getOwner(), depth + 1);
+            // A wolf set on somebody is its owner attacking, and somebody's wolf being hurt is that
+            // person being hurt. The oldest way round a PvP rule there is.
+            Responsible owner = whoIsBehind(pet.getOwner(), depth + 1);
+            return owner.kind() == Attack.Fighter.PLAYER
+                    ? new Responsible(owner.kind(), owner.id(), true)
+                    : orElse(owner, thing);
         }
-        if (thing instanceof org.bukkit.OfflinePlayer offline) {
-            // What Tameable.getOwner() answers for an owner who is not online.
-            return Optional.of(offline.getUniqueId());
+        if (thing instanceof Entity entity) {
+            return kindOf(entity) == Attack.Fighter.MOB
+                    ? Responsible.mob(entity.getUniqueId()) : Responsible.NOBODY;
         }
-        if (thing instanceof ProjectileSource source && source instanceof Entity entity
-                && !(entity instanceof Player)) {
-            // A skeleton's arrow: a mob, not nobody, and not to be followed further.
-            return Optional.empty();
+        return Responsible.NOBODY;
+    }
+
+    /**
+     * The answer from further up the chain, or the thing itself when nobody up there was named.
+     *
+     * <p>An arrow with no shooter is still an arrow: it may have come from a dispenser, or from a
+     * plugin. That is nobody's doing, and nobody's doing is allowed.
+     */
+    private static Responsible orElse(Responsible found, Object thing) {
+        if (found.kind() != Attack.Fighter.NOBODY) {
+            return found;
         }
-        return Optional.empty();
+        return thing instanceof Entity entity && kindOf(entity) == Attack.Fighter.MOB
+                ? Responsible.mob(entity.getUniqueId()) : Responsible.NOBODY;
     }
 
     /**
@@ -251,11 +422,14 @@ public final class CombatListener implements Listener {
             return;
         }
         Player attacker = org.bukkit.Bukkit.getPlayer(who);
-        if (attacker != null) {
-            Component said = messages.prefixed(verdict.reasonKey());
-            // Sent from this thread, which is the one that owns the attacker: the damage event fires
-            // in the attacker's own region.
-            attacker.sendMessage(said);
+        if (attacker == null) {
+            return;
         }
+        Component said = messages.prefixed(verdict.reasonKey());
+        // On the attacker's own thread, not this one. The damage event fires in the *victim's* region,
+        // and on Folia the attacker may be standing in another — shooting across a region boundary is
+        // ordinary. Touching them from here would be an IllegalStateException inside a damage event,
+        // which takes the tick with it.
+        tellOn.accept(attacker, () -> attacker.sendMessage(said));
     }
 }

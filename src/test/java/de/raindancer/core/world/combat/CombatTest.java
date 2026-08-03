@@ -427,4 +427,82 @@ class CombatTest {
         }
     }
 
+    /**
+     * The cases a second review found, each of which was allowed or refused the wrong way round.
+     */
+    @Nested
+    @DisplayName("attacks that are not what they look like")
+    class NotWhatTheyLook {
+
+        @Test
+        @DisplayName("a mob's arrow is a mob attacking, not the weather")
+        void aMobsProjectileIsStillAMob() {
+            combat.pve(false);
+
+            assertThat(combat.judge(Attack.byMob(ZOMBIE, ALICE, OVERWORLD)))
+                    .as("this is the one that mattered: an arrow is not alive, so working the kind "
+                            + "out from the projectile made a skeleton's shot NOBODY — and nobody's "
+                            + "doing is always allowed. Every archer on the server walked past PvE "
+                            + "being off")
+                    .isEqualTo(Verdict.NO_PVE);
+        }
+
+        @Test
+        @DisplayName("somebody's pet is that person, so killing it is PvP")
+        void aPetIsItsOwner() {
+            combat.pvp(false);
+
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)))
+                    .isEqualTo(Verdict.NO_PVP);
+        }
+
+        @Test
+        @DisplayName("but a pet fighting a mob is the animal doing it, not its owner hunting")
+        void aPetDefendingIsNotHunting() {
+            combat.playersMayHurtMobs(false);
+
+            assertThat(combat.judge(Attack.onMob(ALICE, ZOMBIE, OVERWORLD)))
+                    .as("Alice swinging at a zombie herself")
+                    .isEqualTo(Verdict.NO_PVE);
+            assertThat(combat.judge(Attack.onMob(ALICE, ZOMBIE, OVERWORLD)
+                    .throughAPet()).allowed())
+                    .as("Alice's wolf defending her against the same zombie. Traced to her, which is "
+                            + "right for PvP, and wrong here: on a server where people are not meant "
+                            + "to hunt, a pet still gets to defend its owner")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a pet is still its owner when it attacks a player, pet or not")
+        void aPetAttackingAPlayerIsStillPvp() {
+            combat.pvp(false);
+
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD).throughAPet()))
+                    .as("bring a dog is the oldest way round a PvP rule there is; the exception is "
+                            + "for fighting creatures, not for fighting people")
+                    .isEqualTo(Verdict.NO_PVP);
+        }
+
+        @Test
+        @DisplayName("an extra rule is asked about two mobs, so a claim can protect livestock")
+        void mobVersusMobReachesAnExtraRule() {
+            combat.alsoAsk(attack -> COW.equals(attack.victimId()) ? Verdict.PROTECTED : null);
+
+            assertThat(combat.judge(Attack.of(Attack.Fighter.MOB, ZOMBIE,
+                    Attack.Fighter.MOB, COW, OVERWORLD)))
+                    .as("answering ALLOWED for two mobs before asking meant a claim never heard "
+                            + "about the zombie killing the cows inside it")
+                    .isEqualTo(Verdict.PROTECTED);
+        }
+
+        @Test
+        @DisplayName("and two mobs are still allowed when nobody objects")
+        void mobVersusMobIsOtherwiseFine() {
+            combat.pve(false);
+
+            assertThat(combat.judge(Attack.of(Attack.Fighter.MOB, ZOMBIE,
+                    Attack.Fighter.MOB, COW, OVERWORLD)).allowed()).isTrue();
+        }
+    }
+
 }

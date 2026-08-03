@@ -20,12 +20,16 @@ import java.util.UUID;
  * @param victim     what is being hurt
  * @param victimId   who that is
  * @param world      where, so a server can allow in one world what it forbids in another
+ * @param throughPet whether the attacker acted through a tamed animal rather than in person. A
+ *                   wolf is still its owner attacking — that is the point of tracing owners — but it
+ *                   is not the owner *swinging*, and a rule about players fighting creatures should
+ *                   not stop a pet defending them
  * @param where      the spot the damage lands on — the victim. Null when the caller could not say
  * @param from       the spot it came from — the attacker. Null for the world itself, and for an
  *                   attacker whose position is not knowable
  */
 public record Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID victimId,
-                     String world, At where, At from) {
+                     String world, boolean throughPet, At where, At from) {
 
     /**
      * A point in the world, without dragging Bukkit into the rules.
@@ -83,33 +87,38 @@ public record Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID vic
 
     /** Damage from the world itself — falling, drowning, a cactus. */
     public static Attack fromNothing(Fighter victim, UUID victimId, String world) {
-        return new Attack(Fighter.NOBODY, null, victim, victimId, world, null, null);
+        return new Attack(Fighter.NOBODY, null, victim, victimId, world, false, null, null);
     }
 
     /** One person hitting another. */
     public static Attack between(UUID attacker, UUID victim, String world) {
-        return new Attack(Fighter.PLAYER, attacker, Fighter.PLAYER, victim, world, null, null);
+        return new Attack(Fighter.PLAYER, attacker, Fighter.PLAYER, victim, world, false, null, null);
     }
 
     /** A person hitting something alive that is not a person. */
     public static Attack onMob(UUID attacker, UUID mob, String world) {
-        return new Attack(Fighter.PLAYER, attacker, Fighter.MOB, mob, world, null, null);
+        return new Attack(Fighter.PLAYER, attacker, Fighter.MOB, mob, world, false, null, null);
     }
 
     /** Something alive hitting a person. */
     public static Attack byMob(UUID mob, UUID victim, String world) {
-        return new Attack(Fighter.MOB, mob, Fighter.PLAYER, victim, world, null, null);
+        return new Attack(Fighter.MOB, mob, Fighter.PLAYER, victim, world, false, null, null);
     }
 
     /** Two things alive, of whichever kinds — the general form, for a caller with no position. */
     public static Attack of(Fighter attacker, UUID attackerId, Fighter victim, UUID victimId,
                             String world) {
-        return new Attack(attacker, attackerId, victim, victimId, world, null, null);
+        return new Attack(attacker, attackerId, victim, victimId, world, false, null, null);
     }
 
     /** The same attack with the two positions filled in. */
     public Attack at(At where, At from) {
-        return new Attack(attacker, attackerId, victim, victimId, world, where, from);
+        return new Attack(attacker, attackerId, victim, victimId, world, throughPet, where, from);
+    }
+
+    /** The same attack, marked as having gone through somebody's pet. */
+    public Attack throughAPet() {
+        return new Attack(attacker, attackerId, victim, victimId, world, true, where, from);
     }
 
     /**
