@@ -341,9 +341,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
         getServer().getPluginManager().registerEvents(new InteractionProtectionListener(land, messages), this);
-        getServer().getPluginManager().registerEvents(new EnvironmentProtectionListener(land), this);
+        EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);
+        getServer().getPluginManager().registerEvents(environmentProtection, this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
         movementProtection = new MovementProtectionListener(land, messages);
+        // Told about each other after both exist, rather than one taking the other in its constructor: the
+        // damage listener has to be registered before this one, and a constructor argument would be a cycle.
+        environmentProtection.grounding(movementProtection);
         getServer().getPluginManager().registerEvents(movementProtection, this);
 
         // Who can be seen from outside a private area. On a timer rather than on every move: two players

@@ -49,8 +49,36 @@ public final class LandFlags {
         if (location == null || location.getWorld() == null) {
             return true;
         }
+        if (bypassed(who)) {
+            return true;
+        }
         ProtectedArea area = land.areaAt(location).orElse(null);
         return rules.isAllowed(area, flag, LandAudience.of(area, who), who);
+    }
+
+    /**
+     * Whether this player's bypass answers the question before any flag does.
+     *
+     * <p><b>Here, and only here.</b> The bypass used to be remembered by each listener for itself: the teleport
+     * gate checked it, the potion thrower checked it, and the flag questions that came straight through this
+     * class did not. So whether an admin's bypass held depended on which listener happened to be enforcing the
+     * flag — reported as "an admin could not ender-pearl inside a claim once the owner switched pearls off, and
+     * toggling the bypass fixed it", and true of far more than pearls. A bypass that has to be remembered in
+     * fourteen places is a bypass that works in thirteen.
+     *
+     * <p>About the <em>asker</em>, never about the area. Short-circuiting the resolver itself would switch the
+     * flag off for everybody on the server the moment one admin turned their bypass on.
+     *
+     * <p>It costs a set lookup and a permission check per question. Kept behind the null test on {@code who}
+     * because the block-level questions — fire spread, decay, pistons — have nobody to bypass on behalf of and
+     * are the ones asked thousands of times a second.
+     */
+    private boolean bypassed(UUID who) {
+        if (who == null) {
+            return false;
+        }
+        Player player = org.bukkit.Bukkit.getPlayer(who);
+        return player != null && land.isBypassing(player);
     }
 
     /** The answer for a creature, resolved where it is standing. */
@@ -59,6 +87,7 @@ public final class LandFlags {
             return true;
         }
         UUID who = entity instanceof Player player ? player.getUniqueId() : null;
+        // The bypass is applied by isAllowedAt below rather than twice here.
         return isAllowedAt(entity.getLocation(), flag, who);
     }
 
@@ -71,6 +100,9 @@ public final class LandFlags {
      */
     public boolean isAllowedForTracked(ProtectedArea tracked, Location location, LandFlag flag,
                                        Player player) {
+        if (player != null && land.isBypassing(player)) {
+            return true;
+        }
         UUID who = player == null ? null : player.getUniqueId();
         return rules.isAllowed(tracked, flag, LandAudience.of(tracked, who), who);
     }

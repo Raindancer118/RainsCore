@@ -41,8 +41,21 @@ public final class EnvironmentProtectionListener implements Listener {
 
     private final Land land;
 
+    /**
+     * Somebody the movement listener took out of the air, if there is one to ask.
+     *
+     * <p>Optional so the two listeners are not a cycle: Core builds this one first. Null simply means nobody is
+     * being caught, which is how it behaved before the grace existed.
+     */
+    private MovementProtectionListener grounding;
+
     public EnvironmentProtectionListener(Land land) {
         this.land = land;
+    }
+
+    /** Told about the listener that grounds gliders, so the fall it caused can be forgiven. */
+    public void grounding(MovementProtectionListener grounding) {
+        this.grounding = grounding;
     }
 
     /**
@@ -396,6 +409,13 @@ public final class EnvironmentProtectionListener implements Listener {
             return;
         }
         if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        // A fall the plugin caused by grounding a glider at a border. Forgiven whatever the flag says: the
+        // player did not choose to drop, and charging them for it turns "no elytra flight here" into a border
+        // that kills anybody who flies into it.
+        if (grounding != null && grounding.wasCaughtFalling(player.getUniqueId())) {
+            event.setCancelled(true);
             return;
         }
         if (deniedFor(player, LandFlag.FALL_DAMAGE)) {
