@@ -4,12 +4,15 @@ name: Build
 # not only for main. A pull request builds too, so the jar is there before the merge rather than after.
 on:
   push:
+    tags: ['v*']
+    branches: ['**']
   pull_request:
   # Lets a build be kicked off by hand from the Actions tab.
   workflow_dispatch:
 
+# write, because this workflow now cuts tags and releases. Everything else it does is read-only.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -33,6 +36,25 @@ jobs:
       - name: Build and run tests
         run: mvn --batch-mode --no-transfer-progress verify
 
+      # The version out of the pom, so a tag can be checked against what actually built rather than
+      # against a number somebody typed twice.
+      - name: Read the version and the jar
+        id: jar
+        run: |
+          set -euo pipefail
+          version="$(mvn --batch-mode --no-transfer-progress -q \
+            -Dexpression=project.version -DforceStdout help:evaluate)"
+          jar="$(find target -maxdepth 1 -name 'RainsCore-*.jar' \
+            ! -name '*-shaded.jar' ! -name 'original-*' | head -1)"
+          [ -n "$jar" ] || { echo "::error::no jar in target/"; exit 1; }
+          sha="$(sha256sum "$jar" | cut -d' ' -f1)"
+          echo "$sha  $(basename "$jar")" > "$jar.sha256"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "jar=$jar" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$jar")" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "RainsCore $version — $sha"
+
       # Named after the commit so a downloaded jar can always be traced back to the source it was built
       # from. A jar called "RainsCore.jar" in a downloads folder is a jar nobody can identify a week later.
       - name: Upload the library jar
@@ -47,6 +69,103 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # ── releases ────────────────────────────────────────────────────────────────────────────────
+      #
+      # The same shape as the modules repository next door: a rolling `latest` so there is one link that
+      # is always the newest build, and an immutable `build-N` so a jar from three pushes ago is still
+      # fetchable. `latest` is deleted and recreated rather than edited, because an edited release keeps
+      # its old assets and two jars with one name and different contents is the worst outcome here.
+      - name: Write the notes
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          {
+            printf '%s\n' \
+              "Automatic build of \`${{ github.ref_name }}\` @ \`${{ github.sha }}\`." \
+              "" \
+              "**Not a release** — it is whatever the branch happened to be. For a fixed version use a" \
+              "\`vX.Y.Z\` release." \
+              "" \
+              "\`${{ steps.jar.outputs.name }}\`" \
+              "\`sha256: ${{ steps.jar.outputs.sha }}\`" \
+              "" \
+              "### What changed"
+            git log -15 --no-merges --pretty='- %s' || true
+          } > notes.md
+
+      - name: Publish rolling "latest"
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete latest --yes --cleanup-tag --repo "${{ github.repository }}" || true
+          gh release create latest \
+            "${{ steps.jar.outputs.jar }}" "${{ steps.jar.outputs.jar }}.sha256" \
+            --repo "${{ github.repository }}" \
+            --title "Latest build (${{ steps.jar.outputs.version }})" \
+            --notes-file notes.md --prerelease
+
+      - name: Publish this build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "build-${{ github.run_number }}" \
+            "${{ steps.jar.outputs.jar }}" "${{ steps.jar.outputs.jar }}.sha256" \
+            --repo "${{ github.repository }}" \
+            --title "Build ${{ github.run_number }}" \
+            --notes-file notes.md --prerelease --target "${{ github.sha }}"
+
+      - name: Prune old builds, keeping the last 15
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          KEEP=15
+          mapfile -t builds < <(gh release list --repo "${{ github.repository }}" --limit 200 \
+            --json tagName --jq '.[] | select(.tagName | startswith("build-")) | .tagName')
+          echo "${#builds[@]} build release(s); keeping $KEEP"
+          [ "${#builds[@]}" -le "$KEEP" ] && exit 0
+          for tag in "${builds[@]:$KEEP}"; do
+            echo "removing $tag"
+            gh release delete "$tag" --yes --cleanup-tag --repo "${{ github.repository }}" || true
+          done
+
+      # A pushed vX.Y.Z tag cuts the permanent release. The tag has to agree with the pom: a release
+      # whose tag says 1.1.0 and whose jar says 1.0.0 is one nobody can reason about later.
+      - name: Publish a versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.jar.outputs.version }}
+          SHA256: ${{ steps.jar.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::$TAG says ${TAG#v} but the pom says $VERSION. Bump the pom or fix the tag."
+            exit 1
+          fi
+          printf '%s\n' \
+            "RainsCore $VERSION — the foundation every Rain's plugin is built on." \
+            "" \
+            "### Installing" \
+            "" \
+            "Drop \`${{ steps.jar.outputs.name }}\` into \`plugins/\` and restart. Every other Rain's" \
+            "plugin needs it there and none of them carries a copy: two copies would give the server two" \
+            "action bar owners, two item registries and two scoreboard arbiters." \
+            "" \
+            "\`sha256: $SHA256\`" \
+            "" \
+            "---" > release-notes.md
+          gh release create "$TAG" \
+            "${{ steps.jar.outputs.jar }}" "${{ steps.jar.outputs.jar }}.sha256" \
+            --repo "${{ github.repository }}" \
+            --title "RainsCore $VERSION" \
+            --notes-file release-notes.md --generate-notes
+
       # Uploaded on failure as well, which is the case they are actually needed for: a red build with no
       # report is a red build somebody has to reproduce locally before they can start reading it.
       - name: Publish the test report
@@ -57,3 +176,57 @@ jobs:
           path: target/surefire-reports/
           if-no-files-found: ignore
           retention-days: 7
+
+  # ── the download site ─────────────────────────────────────────────────────────────────────────────
+  #
+  # A self-hosted runner on saphira, the machine the site is on — so GitHub holds no key to anything and
+  # nothing is opened inbound. The same shelf the modules repository publishes to; each repository
+  # prunes only its own jars, or one would delete the other's on every push.
+  publish:
+    name: Publish to plugins.raindancer118.de
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, saphira]
+
+    steps:
+      - name: Fetch the jar this build produced
+        uses: actions/download-artifact@v4
+        with:
+          name: RainsCore-${{ github.sha }}
+          path: incoming
+
+      - name: Put it on the shelf and re-render the page
+        env:
+          SITE: /home/eragon/plugins
+          BUILD: core-${{ github.run_number }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          find incoming -name 'RainsCore-*.jar' ! -name '*-shaded.jar' ! -name 'original-*' \
+            -exec cp -f {} "$SITE/files/" \;
+
+          cd "$SITE/files"
+          for jar in RainsCore-*.jar; do
+            sha256sum "$jar" > "$jar.sha256"
+          done
+
+          # Only RainsCore's own older versions. The modules live on this shelf too and are not ours to
+          # remove — see the same note in the other repository's workflow.
+          keep=$(find . -maxdepth 1 -name 'RainsCore-*.jar' -newermt '-10 minutes' -printf '%f\n' | sort)
+          for jar in RainsCore-*.jar; do
+            [ -e "$jar" ] || continue
+            if ! printf '%s\n' "$keep" | grep -qxF "$jar"; then
+              echo "removing superseded $jar"
+              rm -f "$jar" "$jar.sha256"
+            fi
+          done
+
+          BUILD="$BUILD" COMMIT="$COMMIT" bash "$SITE/bin/render.sh"
+
+      - name: Check the site still answers
+        run: |
+          set -euo pipefail
+          code=$(docker run --rm --network webproxy curlimages/curl:latest \
+            -s -o /dev/null -w '%{http_code}' http://plugins/)
+          echo "index: HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::the site did not answer 200"; exit 1; }
