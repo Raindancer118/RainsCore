@@ -2,14 +2,13 @@ package de.raindancer.core.identity;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
@@ -68,11 +67,13 @@ public final class Identities {
     }
 
     private final Path file;
+    private final YamlStore store;
     private final Map<UUID, Identity> identities = new ConcurrentHashMap<>();
     private final AtomicBoolean dirty = new AtomicBoolean();
 
     public Identities(Path file) {
         this.file = file;
+        this.store = new YamlStore(file);
     }
 
     // ---------------------------------------------------------------------------- reading
@@ -217,15 +218,14 @@ public final class Identities {
 
     public void load() {
         identities.clear();
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
-            log.error(failure, "Could not read {}; nobody has a prefix this session.", file);
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
+            log.error("Could not read {} ({}); nobody has a prefix this session.",
+                    file, String.join("; ", store.problems()));
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("players");
@@ -262,26 +262,16 @@ public final class Identities {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        identities.forEach((player, identity) -> {
+        boolean written = store.write(yaml -> identities.forEach((player, identity) -> {
             String path = "players." + player + ".";
             put(yaml, path + "prefix", identity.prefix());
             put(yaml, path + "suffix", identity.suffix());
             put(yaml, path + "nametag-prefix", identity.nametagPrefix());
             put(yaml, path + "colour", identity.colour());
             put(yaml, path + "subtitle", identity.subtitle());
-        });
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        }));
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 

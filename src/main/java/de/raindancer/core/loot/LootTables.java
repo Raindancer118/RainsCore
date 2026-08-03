@@ -2,12 +2,11 @@ package de.raindancer.core.loot;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,12 +30,14 @@ public final class LootTables {
     private static final LogChannel log = Log.of("loot");
 
     private final Path file;
+    private final YamlStore store;
     private final Map<String, LootTable> byKey = new ConcurrentHashMap<>();
     private final AtomicBoolean dirty = new AtomicBoolean();
     private final List<String> problems = new ArrayList<>();
 
     public LootTables(Path file) {
         this.file = file;
+        this.store = new YamlStore(file);
     }
 
     // ---------------------------------------------------------------------------- defining
@@ -116,15 +117,13 @@ public final class LootTables {
         synchronized (this) {
             problems.clear();
         }
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
-            note("the file could not be read (" + failure.getMessage() + ")");
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
+            carry();
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("tables");
@@ -179,6 +178,14 @@ public final class LootTables {
         return Optional.of(LootEntry.of(material, weight).amount(least, most));
     }
 
+    /** Takes over what the file itself was wrong about; the store has already logged it. */
+    private void carry() {
+        List<String> fromFile = store.problems();
+        synchronized (this) {
+            problems.addAll(fromFile);
+        }
+    }
+
     private void note(String problem) {
         synchronized (this) {
             problems.add(problem);
@@ -191,26 +198,19 @@ public final class LootTables {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (LootTable table : List.copyOf(byKey.values())) {
-            String path = "tables." + table.key() + ".";
-            yaml.set(path + "tier", table.tier());
-            yaml.set(path + "fill-percent", table.fillPercent());
-            yaml.set(path + "entries", table.entries().stream()
-                    .map(LootTables::asMap)
-                    .collect(Collectors.toList()));
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
+        List<LootTable> snapshot = List.copyOf(byKey.values());
+        boolean written = store.write(yaml -> {
+            for (LootTable table : snapshot) {
+                String path = "tables." + table.key() + ".";
+                yaml.set(path + "tier", table.tier());
+                yaml.set(path + "fill-percent", table.fillPercent());
+                yaml.set(path + "entries", table.entries().stream()
+                        .map(LootTables::asMap)
+                        .collect(Collectors.toList()));
             }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        });
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 

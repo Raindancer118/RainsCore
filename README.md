@@ -93,6 +93,7 @@ Everything below is reached through `RainsCore.get()`.
 | **`de.raindancer.core.gui`** | The one menu framework. Six rows, three bands, chrome the framework owns. |
 | **`de.raindancer.core.log`** | One logger, one logfile per day, rotated and pruned. Never blocks, never throws. |
 | **`de.raindancer.core.banner`** | The startup splash, with a logo drawn from your plugin's name. |
+| **`de.raindancer.core.store`** | `YamlStore` — a YAML file read and written without ever losing it. Use it for anything your plugin keeps. |
 
 ---
 
@@ -137,7 +138,7 @@ point: a player looking for a setting does not know which of nine jars owns it.
 ## Working on it
 
 ```bash
-mvn test        # 606 tests, no server needed
+mvn test        # 655 tests, no server needed
 mvn install     # to the local Maven repository
 ```
 
@@ -146,7 +147,7 @@ takes a sink and a clock, `Chat` takes an `Audiences`, `Warps` takes "is this wo
 arbitration, the arithmetic, the persistence and the failure paths are all tested below the server
 line.
 
-**What cannot be, is tested on a real one.** `../RainsCoreTestPlugin` runs **77 checks against a live
+**What cannot be, is tested on a real one.** `../RainsCoreTestPlugin` runs **101 checks against a live
 Paper server** and prints one line the run is judged by. It exists because unit tests cannot prove
 the jar loads, the descriptor is right, or that Bukkit accepts what you build — and it earned its
 place immediately by finding that **every chat button in the library was dead**, because a `COMMANDS`
@@ -165,6 +166,7 @@ stays unpack-and-rename. `NoExternalDependenciesTest` enforces all of that.
 - **Anything a player typed is never markup.** A home called `<red>` is nine characters.
 - **A button somebody may not use is shown, greyed, with the reason** — not hidden, and not live and
   then refusing.
-- **Every store writes through a temporary file**, so a server killed mid-write has the old file or
-  the new one, never half of each.
+- **Every store writes through `store.YamlStore`**, so a server killed mid-write has the old file or
+  the new one, never half of each. Written once and used by all seven stores in here — it exists
+  because those seven each had their own copy of it, which is the exact thing this library is for.
 - **Comments say why, not what.** Most of them exist because something went wrong once.

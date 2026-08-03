@@ -2,12 +2,11 @@ package de.raindancer.core.poi;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,12 +44,14 @@ public final class PoiStore {
     private static final LogChannel log = Log.of("poi");
 
     private final Path file;
+    private final YamlStore store;
     private final Map<String, Poi> places = new ConcurrentHashMap<>();
     private final AtomicBoolean dirty = new AtomicBoolean();
     private final List<String> problems = new ArrayList<>();
 
     public PoiStore(Path file) {
         this.file = file;
+        this.store = new YamlStore(file);
     }
 
     // ---------------------------------------------------------------------------- writing
@@ -176,17 +177,15 @@ public final class PoiStore {
         synchronized (this) {
             problems.clear();
         }
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
             // Not fatal: a broken file means the plugins start with nothing rather than not at all,
             // and the file is left untouched so whoever fixes it still has their data.
-            note("the file could not be read (" + failure.getMessage() + ")");
+            carry();
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("places");
@@ -208,6 +207,19 @@ public final class PoiStore {
             }
         }
         dirty.set(false);
+    }
+
+    /**
+     * Takes over what the file itself was wrong about.
+     *
+     * <p>Separate from {@link #note} because the store has already written those to the log; saying
+     * it twice makes one broken file look like two.
+     */
+    private void carry() {
+        List<String> fromFile = store.problems();
+        synchronized (this) {
+            problems.addAll(fromFile);
+        }
     }
 
     private void note(String problem) {
@@ -262,45 +274,40 @@ public final class PoiStore {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (Poi place : List.copyOf(places.values())) {
-            String path = "places." + place.id() + ".";
-            yaml.set(path + "name", place.name());
-            yaml.set(path + "kind", place.kind());
-            yaml.set(path + "world", place.world());
-            yaml.set(path + "x", place.x());
-            yaml.set(path + "y", place.y());
-            yaml.set(path + "z", place.z());
-            if (place.yaw() != 0f || place.pitch() != 0f) {
-                yaml.set(path + "yaw", place.yaw());
-                yaml.set(path + "pitch", place.pitch());
+        // Taken before the write rather than inside it, so a place saved while the disk is busy is
+        // in the next flush rather than half in this one.
+        List<Poi> snapshot = List.copyOf(places.values());
+        boolean written = store.write(yaml -> {
+            for (Poi place : snapshot) {
+                String path = "places." + place.id() + ".";
+                yaml.set(path + "name", place.name());
+                yaml.set(path + "kind", place.kind());
+                yaml.set(path + "world", place.world());
+                yaml.set(path + "x", place.x());
+                yaml.set(path + "y", place.y());
+                yaml.set(path + "z", place.z());
+                if (place.yaw() != 0f || place.pitch() != 0f) {
+                    yaml.set(path + "yaw", place.yaw());
+                    yaml.set(path + "pitch", place.pitch());
+                }
+                if (place.owner() != null) {
+                    yaml.set(path + "owner", place.owner().toString());
+                }
+                if (place.icon() != null) {
+                    yaml.set(path + "icon", place.icon().name());
+                }
+                if (place.label() != null && !place.label().equals(place.name())) {
+                    yaml.set(path + "label", place.label());
+                }
+                if (place.isShared()) {
+                    yaml.set(path + "shared", true);
+                }
+                place.tags().forEach((key, value) -> yaml.set(path + "tags." + key, value));
             }
-            if (place.owner() != null) {
-                yaml.set(path + "owner", place.owner().toString());
-            }
-            if (place.icon() != null) {
-                yaml.set(path + "icon", place.icon().name());
-            }
-            if (place.label() != null && !place.label().equals(place.name())) {
-                yaml.set(path + "label", place.label());
-            }
-            if (place.isShared()) {
-                yaml.set(path + "shared", true);
-            }
-            place.tags().forEach((key, value) -> yaml.set(path + "tags." + key, value));
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        });
+        if (!written) {
             // Left dirty, so the next flush tries again rather than believing it succeeded.
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 }

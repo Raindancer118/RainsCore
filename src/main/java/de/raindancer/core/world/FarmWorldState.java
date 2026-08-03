@@ -2,6 +2,7 @@ package de.raindancer.core.world;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -41,6 +42,7 @@ public final class FarmWorldState {
     private static final String WORLD_MARKER = "level.dat";
 
     private final Path file;
+    private final YamlStore store;
     private final Map<String, WorldSet> sets = new ConcurrentHashMap<>();
     private final Map<String, Instant> madeAt = new ConcurrentHashMap<>();
     /** When a set was last <em>tried</em>, whether or not it worked. See {@link #due}. */
@@ -49,6 +51,7 @@ public final class FarmWorldState {
 
     public FarmWorldState(Path file) {
         this.file = file;
+        this.store = new YamlStore(file);
     }
 
     // ---------------------------------------------------------------------------- the sets
@@ -204,15 +207,14 @@ public final class FarmWorldState {
     public void load() {
         sets.clear();
         madeAt.clear();
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
-            log.error(failure, "Could not read {}; no farm worlds are known this session.", file);
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
+            log.error("Could not read {} ({}); no farm worlds are known this session.",
+                    file, String.join("; ", store.problems()));
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("farm-worlds");
@@ -259,33 +261,26 @@ public final class FarmWorldState {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (WorldSet set : List.copyOf(sets.values())) {
-            String path = "farm-worlds." + set.name() + ".";
-            yaml.set(path + "nether", set.hasNether());
-            yaml.set(path + "end", set.hasEnd());
-            set.regenerateEvery().ifPresent(every ->
-                    yaml.set(path + "regenerate-every-hours", every.toHours()));
-            if (set.fixedSeed() != null) {
-                yaml.set(path + "seed", set.fixedSeed());
+        List<WorldSet> snapshot = List.copyOf(sets.values());
+        boolean written = store.write(yaml -> {
+            for (WorldSet set : snapshot) {
+                String path = "farm-worlds." + set.name() + ".";
+                yaml.set(path + "nether", set.hasNether());
+                yaml.set(path + "end", set.hasEnd());
+                set.regenerateEvery().ifPresent(every ->
+                        yaml.set(path + "regenerate-every-hours", every.toHours()));
+                if (set.fixedSeed() != null) {
+                    yaml.set(path + "seed", set.fixedSeed());
+                }
+                set.border().ifPresent(border -> yaml.set(path + "border", border));
+                Instant when = madeAt.get(set.name());
+                if (when != null) {
+                    yaml.set(path + "last-regenerated", when.toEpochMilli());
+                }
             }
-            set.border().ifPresent(border -> yaml.set(path + "border", border));
-            Instant when = madeAt.get(set.name());
-            if (when != null) {
-                yaml.set(path + "last-regenerated", when.toEpochMilli());
-            }
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        });
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 }

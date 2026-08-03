@@ -2,11 +2,10 @@ package de.raindancer.core.moderation;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.Duration;
@@ -44,6 +43,7 @@ public final class Punishments {
     private static final LogChannel log = Log.of("moderation");
 
     private final Path file;
+    private final YamlStore store;
     private final LongSupplier clock;
     private final java.util.Map<UUID, CopyOnWriteArrayList<Punishment>> byPlayer =
             new ConcurrentHashMap<>();
@@ -52,6 +52,7 @@ public final class Punishments {
     /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
     public Punishments(Path file, LongSupplier clock) {
         this.file = file;
+        this.store = new YamlStore(file);
         this.clock = clock;
     }
 
@@ -168,18 +169,16 @@ public final class Punishments {
 
     public void load() {
         byPlayer.clear();
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
             // Deliberately loud: a moderation file that will not load means every ban on the server
             // has silently stopped applying, which somebody has to know about now.
-            log.fatal(failure, "Could not read {}. Nobody is banned or muted this session until "
-                    + "this is fixed.", file);
+            log.fatal("Could not read {} ({}). Nobody is banned or muted this session until this is "
+                    + "fixed.", file, String.join("; ", store.problems()));
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("punishments");
@@ -229,38 +228,31 @@ public final class Punishments {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (List<Punishment> records : byPlayer.values()) {
-            for (Punishment punishment : records) {
-                String path = "punishments." + punishment.id() + ".";
-                yaml.set(path + "target", punishment.target().toString());
-                yaml.set(path + "kind", punishment.kind().name());
-                yaml.set(path + "reason", punishment.reason());
-                yaml.set(path + "given-at", punishment.givenAt().toEpochMilli());
-                if (punishment.moderator() != null) {
-                    yaml.set(path + "moderator", punishment.moderator().toString());
-                }
-                if (punishment.endsAt() != null) {
-                    yaml.set(path + "ends-at", punishment.endsAt().toEpochMilli());
-                }
-                punishment.liftedBy().ifPresent(by -> yaml.set(path + "lifted-by", by.toString()));
-                punishment.liftReason().ifPresent(why -> yaml.set(path + "lift-reason", why));
-                if (punishment.liftedAt() != null) {
-                    yaml.set(path + "lifted-at", punishment.liftedAt().toEpochMilli());
+        var snapshot = List.copyOf(byPlayer.values());
+        boolean written = store.write(yaml -> {
+            for (List<Punishment> records : snapshot) {
+                for (Punishment punishment : List.copyOf(records)) {
+                    String path = "punishments." + punishment.id() + ".";
+                    yaml.set(path + "target", punishment.target().toString());
+                    yaml.set(path + "kind", punishment.kind().name());
+                    yaml.set(path + "reason", punishment.reason());
+                    yaml.set(path + "given-at", punishment.givenAt().toEpochMilli());
+                    if (punishment.moderator() != null) {
+                        yaml.set(path + "moderator", punishment.moderator().toString());
+                    }
+                    if (punishment.endsAt() != null) {
+                        yaml.set(path + "ends-at", punishment.endsAt().toEpochMilli());
+                    }
+                    punishment.liftedBy().ifPresent(by -> yaml.set(path + "lifted-by", by.toString()));
+                    punishment.liftReason().ifPresent(why -> yaml.set(path + "lift-reason", why));
+                    if (punishment.liftedAt() != null) {
+                        yaml.set(path + "lifted-at", punishment.liftedAt().toEpochMilli());
+                    }
                 }
             }
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        });
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 }

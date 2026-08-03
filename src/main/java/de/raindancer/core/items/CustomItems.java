@@ -2,12 +2,11 @@ package de.raindancer.core.items;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,12 +45,14 @@ public final class CustomItems {
     private static final LogChannel log = Log.of("items");
 
     private final Path file;
+    private final YamlStore store;
     private final Map<String, CustomItem> byKey = new ConcurrentHashMap<>();
     private final AtomicBoolean dirty = new AtomicBoolean();
     private final List<String> problems = new ArrayList<>();
 
     public CustomItems(Path file) {
         this.file = file;
+        this.store = new YamlStore(file);
     }
 
     // ---------------------------------------------------------------------------- defining
@@ -134,15 +135,13 @@ public final class CustomItems {
         synchronized (this) {
             problems.clear();
         }
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
-            note("the file could not be read (" + failure.getMessage() + ")");
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
+            carry();
             return;
         }
         ConfigurationSection section = yaml.getConfigurationSection("items");
@@ -165,6 +164,14 @@ public final class CustomItems {
             }
         }
         dirty.set(false);
+    }
+
+    /** Takes over what the file itself was wrong about; the store has already logged it. */
+    private void carry() {
+        List<String> fromFile = store.problems();
+        synchronized (this) {
+            problems.addAll(fromFile);
+        }
     }
 
     private void note(String problem) {
@@ -210,37 +217,30 @@ public final class CustomItems {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (CustomItem item : List.copyOf(byKey.values())) {
-            String path = "items." + item.key() + ".";
-            yaml.set(path + "material", item.material().name());
-            if (!item.displayName().isEmpty()) {
-                yaml.set(path + "name", item.displayName());
+        List<CustomItem> snapshot = List.copyOf(byKey.values());
+        boolean written = store.write(yaml -> {
+            for (CustomItem item : snapshot) {
+                String path = "items." + item.key() + ".";
+                yaml.set(path + "material", item.material().name());
+                if (!item.displayName().isEmpty()) {
+                    yaml.set(path + "name", item.displayName());
+                }
+                if (!item.lore().isEmpty()) {
+                    yaml.set(path + "lore", item.lore());
+                }
+                item.modelData().ifPresent(data -> yaml.set(path + "model-data", data));
+                if (item.isGlowing()) {
+                    yaml.set(path + "glowing", true);
+                }
+                item.ability().ifPresent(ability -> yaml.set(path + "ability", ability));
+                if (item.isCraftable()) {
+                    yaml.set(path + "recipe", item.recipe());
+                }
+                item.tags().forEach((tag, value) -> yaml.set(path + "tags." + tag, value));
             }
-            if (!item.lore().isEmpty()) {
-                yaml.set(path + "lore", item.lore());
-            }
-            item.modelData().ifPresent(data -> yaml.set(path + "model-data", data));
-            if (item.isGlowing()) {
-                yaml.set(path + "glowing", true);
-            }
-            item.ability().ifPresent(ability -> yaml.set(path + "ability", ability));
-            if (item.isCraftable()) {
-                yaml.set(path + "recipe", item.recipe());
-            }
-            item.tags().forEach((tag, value) -> yaml.set(path + "tags." + tag, value));
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+        });
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 }

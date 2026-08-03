@@ -2,10 +2,9 @@ package de.raindancer.core.settings;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,6 +50,7 @@ public final class SettingsStore<T> {
 
     private final SettingsSchema<T> schema;
     private final Path file;
+    private final YamlStore store;
     private final List<Consumer<T>> listeners = new CopyOnWriteArrayList<>();
     private final List<String> problems = new ArrayList<>();
 
@@ -59,6 +59,7 @@ public final class SettingsStore<T> {
     public SettingsStore(SettingsSchema<T> schema, Path file) {
         this.schema = schema;
         this.file = file;
+        this.store = new YamlStore(file);
         // Usable before load(): a plugin that reads a setting while starting up gets the default
         // rather than a NullPointerException.
         this.current = schema.defaults();
@@ -106,22 +107,14 @@ public final class SettingsStore<T> {
 
     /** The file as YAML, or an empty configuration when it is missing or unreadable. */
     private YamlConfiguration readFile(List<String> found) {
-        if (!Files.isRegularFile(file)) {
-            return new YamlConfiguration();
+        YamlConfiguration yaml = store.read();
+        // Not fatal on purpose. A broken file means this plugin runs on its defaults for one start,
+        // which is far better than a server that will not come up at all — and the file is left
+        // exactly as it is, so nothing the owner wrote is lost while they fix it.
+        for (String problem : store.problems()) {
+            found.add("the file " + problem + ", so every setting is at its default");
         }
-        try {
-            YamlConfiguration yaml = new YamlConfiguration();
-            yaml.loadFromString(Files.readString(file));
-            return yaml;
-        } catch (IOException | RuntimeException | org.bukkit.configuration.InvalidConfigurationException
-                unreadable) {
-            // Not fatal on purpose. A broken file means this plugin runs on its defaults for one
-            // start, which is far better than a server that will not come up at all — and the file
-            // is left exactly as it is, so nothing the owner wrote is lost while they fix it.
-            found.add("the file could not be read as YAML, so every setting is at its default ("
-                    + unreadable.getMessage() + ")");
-            return new YamlConfiguration();
-        }
+        return yaml;
     }
 
     /** One setting's value out of the file, with everything that can be wrong with it handled. */
@@ -157,21 +150,16 @@ public final class SettingsStore<T> {
      * first rather than writing a fresh one.
      */
     public void save() {
-        YamlConfiguration yaml = readFile(new ArrayList<>());
         T snapshot = current;
-        for (Setting<?> setting : schema.settings()) {
-            yaml.set(setting.key(), SettingCodec.toYaml(setting.valueIn(snapshot)));
-            yaml.setComments(setting.key(), commentFor(setting));
-        }
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
+        // An update rather than a write: that is what keeps the unknown keys and whatever the owner
+        // wrote around them. It is also atomic, so a server killed here has the old config or the
+        // new one and never half of a file it needs to start.
+        store.update(yaml -> {
+            for (Setting<?> setting : schema.settings()) {
+                yaml.set(setting.key(), SettingCodec.toYaml(setting.valueIn(snapshot)));
+                yaml.setComments(setting.key(), commentFor(setting));
             }
-            Files.writeString(file, yaml.saveToString());
-        } catch (IOException failure) {
-            log.error(failure, "Could not write {}", file);
-        }
+        });
     }
 
     /**

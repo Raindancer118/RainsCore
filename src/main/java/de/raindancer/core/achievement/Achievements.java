@@ -2,12 +2,11 @@ package de.raindancer.core.achievement;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -57,6 +56,7 @@ public final class Achievements {
     private static final LogChannel log = Log.of("achievements");
 
     private final Path file;
+    private final YamlStore store;
     private final LongSupplier clock;
     private final Map<String, Achievement> defined = new ConcurrentHashMap<>();
     /** Who has earned what, and when. */
@@ -69,6 +69,7 @@ public final class Achievements {
     /** @param clock milliseconds; injected so "when was this earned" can be tested */
     public Achievements(Path file, LongSupplier clock) {
         this.file = file;
+        this.store = new YamlStore(file);
         this.clock = clock;
     }
 
@@ -284,16 +285,14 @@ public final class Achievements {
         defined.clear();
         earned.clear();
         progress.clear();
-        if (!Files.isRegularFile(file)) {
+        if (!store.exists()) {
             dirty.set(false);
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.loadFromString(Files.readString(file));
-        } catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
-            log.error(failure, "Could not read {}; nobody's achievements are known this session.",
-                    file);
+        YamlConfiguration yaml = store.read();
+        if (!store.problems().isEmpty()) {
+            log.error("Could not read {} ({}); nobody's achievements are known this session.",
+                    file, String.join("; ", store.problems()));
             return;
         }
         readDefinitions(yaml.getConfigurationSection("achievements"));
@@ -370,37 +369,30 @@ public final class Achievements {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        for (Achievement achievement : List.copyOf(defined.values())) {
-            String path = "achievements." + achievement.key() + ".";
-            yaml.set(path + "title", achievement.title());
-            if (!achievement.description().isEmpty()) {
-                yaml.set(path + "description", achievement.description());
+        List<Achievement> snapshot = List.copyOf(defined.values());
+        boolean written = store.write(yaml -> {
+            for (Achievement achievement : snapshot) {
+                String path = "achievements." + achievement.key() + ".";
+                yaml.set(path + "title", achievement.title());
+                if (!achievement.description().isEmpty()) {
+                    yaml.set(path + "description", achievement.description());
+                }
+                yaml.set(path + "icon", achievement.icon().name());
+                if (achievement.points() > 0) {
+                    yaml.set(path + "points", achievement.points());
+                }
+                achievement.goal().ifPresent(goal -> yaml.set(path + "goal", goal));
+                if (achievement.hidden()) {
+                    yaml.set(path + "hidden", true);
+                }
             }
-            yaml.set(path + "icon", achievement.icon().name());
-            if (achievement.points() > 0) {
-                yaml.set(path + "points", achievement.points());
-            }
-            achievement.goal().ifPresent(goal -> yaml.set(path + "goal", goal));
-            if (achievement.hidden()) {
-                yaml.set(path + "hidden", true);
-            }
-        }
-        earned.forEach((player, got) -> got.forEach((key, when) ->
-                yaml.set("players." + player + ".earned." + escape(key), when.toEpochMilli())));
-        progress.forEach((player, towards) -> towards.forEach((key, count) ->
-                yaml.set("players." + player + ".progress." + escape(key), count)));
-        try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
-            Files.writeString(temporary, yaml.saveToString());
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
+            earned.forEach((player, got) -> got.forEach((key, when) ->
+                    yaml.set("players." + player + ".earned." + escape(key), when.toEpochMilli())));
+            progress.forEach((player, towards) -> towards.forEach((key, count) ->
+                    yaml.set("players." + player + ".progress." + escape(key), count)));
+        });
+        if (!written) {
             dirty.set(true);
-            log.error(failure, "Could not write {}", file);
         }
     }
 
