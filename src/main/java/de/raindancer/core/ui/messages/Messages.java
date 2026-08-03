@@ -540,6 +540,51 @@ public final class Messages {
     }
 
     /**
+     * Takes a module's own bundled wording as a floor.
+     *
+     * <p>A module is not a plugin: it has no data folder and no {@code messages.yml} on disk, it ships its
+     * wording inside its jar and runs on whichever {@code Messages} its host owns. This is how that wording
+     * gets in. Every key lands at {@link #define} level, which means the owner's file wins, the host's own
+     * bundled file wins, and two modules that name the same key do not fight — the first one keeps it.
+     *
+     * <p>Skipping this is not a subtle failure: every key the module uses comes back as the key itself.
+     * The claims module shipped a full {@code messages.yml} and nothing that read it, and {@code /claim}
+     * answered {@code claim.nonehere}.
+     *
+     * @param bundled the module's {@code messages.yml}, from {@code getResourceAsStream} — closed here.
+     *                {@code null} (a file that is not in the jar) is nothing to do rather than a crash
+     * @return how many keys were taken up
+     */
+    public int defineFrom(InputStream bundled) {
+        if (bundled == null) {
+            return 0;
+        }
+        Map<String, Object> wording = new LinkedHashMap<>();
+        try (InputStream stream = bundled) {
+            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8));
+            flatten(yaml, "", wording);
+        } catch (IOException | RuntimeException broken) {
+            // The module's bug, and it costs that module its wording rather than the server its start.
+            problems.add("a module's bundled messages could not be read (" + broken.getMessage() + ")");
+            log.warn("A module's bundled messages could not be read ({}); its messages will show their "
+                    + "keys. This is a fault in that module, not in your configuration.",
+                    broken.getMessage());
+            return 0;
+        }
+        // First one in keeps the key, unlike define(), which is last-wins because a plugin redefining its
+        // own wording means it. Between modules there is no "its own": load order decides who runs first,
+        // and a module silently rewording another because of that is a bug nobody can see from either jar.
+        int taken = 0;
+        for (Map.Entry<String, Object> entry : wording.entrySet()) {
+            if (!defined.containsKey(entry.getKey()) && define(entry.getKey(), entry.getValue())) {
+                taken++;
+            }
+        }
+        return taken;
+    }
+
+    /**
      * Insists on one message, over anything the owner wrote.
      *
      * <p>Rare on purpose. Every use is a line in somebody's {@code messages.yml} that silently does

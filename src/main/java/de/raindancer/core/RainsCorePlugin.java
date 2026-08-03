@@ -75,6 +75,7 @@ import de.raindancer.core.world.protection.EnvironmentProtectionListener;
 import de.raindancer.core.world.protection.InteractionProtectionListener;
 import de.raindancer.core.world.protection.Land;
 import de.raindancer.core.world.protection.LandPolicies;
+import de.raindancer.core.world.protection.LandPolicyStore;
 import de.raindancer.core.world.protection.MobControlListener;
 import de.raindancer.core.world.protection.MovementProtectionListener;
 import de.raindancer.core.world.protection.Seclusion;
@@ -86,6 +87,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
@@ -199,6 +201,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private FarmWorlds farmWorlds;
     private Land land;
     private LandPolicies landPolicies;
+    private LandPolicyStore landPolicyStore;
     private MovementProtectionListener movementProtection;
     private Seclusion seclusion;
     private ResourcePacks resourcePacks;
@@ -329,7 +332,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // World protection. Registered here with nothing to protect: the ground itself comes from whichever
         // plugin owns regions, and it registers a LandProvider once it is enabled. Until then every question
         // answers UNKNOWN rather than "nothing is protected" — see Land and LandVerdict.
-        landPolicies = LandPolicies.builtIn();
+        // Read from disk, not built fresh. Held in memory alone, an admin turning a flag off got what they
+        // asked for until the next restart — which is worse than not offering the setting, because the
+        // server then behaves differently after a restart than it did before one and nothing says why.
+        landPolicyStore = new LandPolicyStore(getDataFolder().toPath().resolve("land-flags.yml"));
+        landPolicies = landPolicyStore.load();
+        landPolicyStore.problem().ifPresent(trouble -> log.warn("land-flags.yml: {}", trouble));
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
         getServer().getPluginManager().registerEvents(new InteractionProtectionListener(land, messages), this);
@@ -862,6 +870,25 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Land land() {
         return land;
+    }
+
+    @Override
+    public LandPolicies landPolicies() {
+        return landPolicies;
+    }
+
+    @Override
+    public boolean saveLandPolicies() {
+        try {
+            landPolicyStore.save(landPolicies);
+            return true;
+        } catch (IOException couldNotWrite) {
+            // The change is already live, so this is not worth refusing over — but an admin who is told
+            // nothing will find their decision gone after the next restart and have no idea when it went.
+            log.error("Could not write land-flags.yml ({}). Your flag change is in force now but will be "
+                    + "lost when the server restarts.", couldNotWrite.getMessage());
+            return false;
+        }
     }
 
     @Override

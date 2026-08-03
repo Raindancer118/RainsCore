@@ -229,6 +229,31 @@ public interface RainsCore {
     Land land();
 
     /**
+     * What this server decided about the flags: which ones owners may touch, and what a new area starts with.
+     *
+     * <p>Separate from {@link #land()} because it is a different audience. {@code land()} answers "may this
+     * player do this here", which is asked thousands of times a second; this is the admin's side, read when
+     * a screen is drawn and written when somebody changes something.
+     *
+     * <p>Core owns it rather than the claims plugin because the flags are Core's. A server that later swaps
+     * one land plugin for another keeps its protection decisions, and a second plugin asking about flags
+     * gets the same answers as the first.
+     *
+     * <p>Changes are kept in memory. Call {@link #saveLandPolicies()} to put them on disk.
+     */
+    de.raindancer.core.world.protection.LandPolicies landPolicies();
+
+    /**
+     * Writes the flag decisions out.
+     *
+     * <p>Held in memory alone they last until the next restart, which is worse than not offering the setting
+     * at all: the server behaves differently after a restart than it did before one, and nothing says why.
+     *
+     * @return whether it was written; false means it was logged and the change is memory-only for now
+     */
+    boolean saveLandPolicies();
+
+    /**
      * Whether it is safe to put a player somewhere, and where to put them instead.
      *
      * <p>Use it before every teleport. A warp set on a platform that has since been mined and a home
