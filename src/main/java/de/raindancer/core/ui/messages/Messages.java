@@ -82,6 +82,18 @@ public final class Messages {
     /** Wording a plugin insists on. Above everything. */
     private final Map<String, Object> forced = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /**
+     * A prefix per top-level section, so a message is signed by the plugin it came from.
+     *
+     * <p>There is one Messages on a server and one host prefix, and every module plugin sets that
+     * prefix to its own brand as it starts — so the last one to enable signed everything. On a live
+     * server the claims plugin's "You were shown out of …" arrived as <em>Moderation »</em>, which is
+     * a sentence attributed to the wrong plugin. A module now claims the sections it supplies, and
+     * anything unclaimed still falls back to the host.
+     */
+    private final Map<String, java.util.function.Supplier<String>> sectionPrefixes =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** What the host says it is called; see prefixFrom. Null means read the prefix key. */
     private volatile java.util.function.Supplier<String> prefixSource;
 
@@ -418,9 +430,37 @@ public final class Messages {
         return render(fill(raw(key), values));
     }
 
-    /** The same, with the prefix in front. */
+    /** The same, with the prefix in front — the one belonging to whoever owns this key. */
     public Component prefixed(String key, Object... values) {
-        return render(prefix() + fill(raw(key), values));
+        return render(prefixFor(key) + fill(raw(key), values));
+    }
+
+    /**
+     * The prefix for one message: its section's, or the host's.
+     *
+     * <p>The section is the first segment — {@code claim.none-here} belongs to {@code claim}. A key with
+     * no dot has no section and takes the host's.
+     */
+    private String prefixFor(String key) {
+        if (key != null) {
+            int dot = key.indexOf('.');
+            if (dot > 0) {
+                java.util.function.Supplier<String> owner = sectionPrefixes.get(key.substring(0, dot));
+                if (owner != null) {
+                    try {
+                        String given = owner.get();
+                        return given == null ? "" : given;
+                    } catch (RuntimeException noBrandYet) {
+                        // A prefix source that throws costs the prefix and nothing else — losing the
+                        // message with it would be the framework swallowing command output over a
+                        // decoration.
+                        log.debug("A section prefix source failed ({}); falling back.",
+                                noBrandYet.getMessage());
+                    }
+                }
+            }
+        }
+        return prefix();
     }
 
     /**
@@ -503,8 +543,9 @@ public final class Messages {
         Object chosen = options.size() == 1
                 ? options.getFirst()
                 : options.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(options.size()));
-        String prefix = has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
-        return render(prefix + fill(String.valueOf(chosen), values));
+        // prefixFor rather than the raw prefix key: a variant is as much this module's sentence as any
+        // other, and reading the key directly ignored both the host's brand and the section's.
+        return render(prefixFor(key) + fill(String.valueOf(chosen), values));
     }
 
     /** A message that is several lines — a help page, a description. */
@@ -599,6 +640,18 @@ public final class Messages {
      * @return how many keys were taken up
      */
     public int defineFrom(InputStream bundled) {
+        return defineFrom(bundled, null);
+    }
+
+    /**
+     * The same, and the supplier signs every section this wording defines.
+     *
+     * <p>What makes a message say which plugin it came from. Without it the last plugin to start signs
+     * the whole server — see {@link #prefixFor}.
+     *
+     * @param signature what to put in front of these sections' messages; null keeps the host's
+     */
+    public int defineFrom(InputStream bundled, java.util.function.Supplier<String> signature) {
         if (bundled == null) {
             return 0;
         }
@@ -607,6 +660,15 @@ public final class Messages {
             YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
                     new InputStreamReader(stream, StandardCharsets.UTF_8));
             flatten(yaml, "", wording);
+            if (signature != null) {
+                // The top-level sections this file defines, which is exactly what this module owns.
+                for (String key : wording.keySet()) {
+                    int dot = key.indexOf('.');
+                    if (dot > 0) {
+                        sectionPrefixes.put(key.substring(0, dot), signature);
+                    }
+                }
+            }
         } catch (IOException | RuntimeException broken) {
             // The module's bug, and it costs that module its wording rather than the server its start.
             problems.add("a module's bundled messages could not be read (" + broken.getMessage() + ")");
