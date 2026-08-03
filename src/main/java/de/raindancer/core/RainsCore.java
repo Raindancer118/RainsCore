@@ -25,6 +25,8 @@ import de.raindancer.core.data.settings.SettingsStore;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.ChunkHolds;
 import de.raindancer.core.ui.effect.Effects;
+import de.raindancer.core.data.sql.Databases;
+import de.raindancer.core.moderation.audit.Audit;
 import de.raindancer.core.moderation.invsee.Inventories;
 import de.raindancer.core.moderation.invsee.InventoryViews;
 import de.raindancer.core.moderation.players.PlayerAdmin;
@@ -279,6 +281,26 @@ public interface RainsCore {
      * file on the next join and would discard the change without a word.
      */
     Inventories inventories();
+
+    /**
+     * The record of what was done on this server, and who did it.
+     *
+     * <p>Two questions, both unanswerable from an ordinary logfile: what has this moderator been
+     * doing, and what has been done to this player. Recording something never touches the disk on
+     * the calling thread — entries are queued and written on a timer — so a plugin may record from a
+     * click handler without thinking about it. Searching does touch the disk, and belongs off the
+     * server's threads.
+     */
+    Audit audit();
+
+    /**
+     * The databases this server keeps.
+     *
+     * <p>For a plugin that wants its own tables rather than its own files. SQLite, with no dependency
+     * to declare: Paper ships the driver. Every read and write must happen off the server's threads —
+     * {@link Databases} says so loudly in the log if it does not.
+     */
+    Databases databases();
 
     /**
      * Weighted loot tables, by tier — what comes out of a chest and how often. An entry may be a

@@ -2,6 +2,8 @@ package de.raindancer.core.moderation.invsee;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.moderation.audit.AuditEntry;
 import de.raindancer.core.platform.util.Scheduling;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -75,6 +77,15 @@ public final class Inventories {
     private final PlayerDataInventorySource saved;
     /** Whether somebody is on the server — a seam, so the decision is not a static call. */
     private final Predicate<UUID> isOnline;
+
+    /**
+     * Where every look and every change is written down.
+     *
+     * <p>Not optional. Being able to open anybody's inventory and take things out of it is the most
+     * abusable power on a server, and the only thing that makes it safe to hand out is that using it
+     * leaves a trace somebody else can read.
+     */
+    private Audit audit = null;
 
     public Inventories(Plugin plugin, InventoryViews views, OfflineEdits offlineEdits,
                        Path playerData) {
@@ -182,10 +193,19 @@ public final class Inventories {
         }
         InventoryWindow window = new InventoryWindow(plugin, watcher, owner,
                 nameOf(owner, ownerName), level, live, sourceFor(owner), carried.get());
+        window.audit(audit);
         window.open();
         log.info("{} is {} the inventory of {} ({}).", watcher.getName(),
                 level.saying().toLowerCase(), nameOf(owner, ownerName),
                 live ? "online" : "from their save file");
+        // Recorded on opening rather than only on changing: looking through somebody's belongings is
+        // itself the thing a player would want to know had happened, whether or not anything moved.
+        record(AuditEntry.of("invsee", "looked inside")
+                .by(watcher.getUniqueId(), watcher.getName())
+                .to(owner, nameOf(owner, ownerName))
+                .saying(level.saying() + (live ? ", online" : ", from their save file"))
+                .with("access", level.name())
+                .with("source", live ? "live" : "playerdata"));
         answer.accept(Outcome.OPENED);
     }
 
@@ -310,6 +330,18 @@ public final class Inventories {
     /** Who is editing them, so the refusal can say how long it is likely to be. */
     public Optional<UUID> editorOf(UUID who) {
         return offlineEdits.editorOf(who);
+    }
+
+    /** Tells this where to write down what moderators do. */
+    public void audit(Audit audit) {
+        this.audit = audit;
+    }
+
+    /** Writes an entry, if there is a journal to write it to. */
+    private void record(AuditEntry.Builder entry) {
+        if (audit != null) {
+            audit.record(entry);
+        }
     }
 
     public InventoryViews views() {

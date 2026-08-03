@@ -32,6 +32,8 @@ import de.raindancer.core.ui.prompt.ChatPrompts;
 import de.raindancer.core.ui.prompt.PromptListener;
 import de.raindancer.core.ui.scoreboard.FastBoardFactory;
 import de.raindancer.core.ui.scoreboard.Scoreboards;
+import de.raindancer.core.data.sql.Databases;
+import de.raindancer.core.moderation.audit.Audit;
 import de.raindancer.core.data.settings.SettingsChatInput;
 import de.raindancer.core.data.settings.SettingsCommand;
 import de.raindancer.core.data.settings.SettingsNavigation;
@@ -102,6 +104,23 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private static final long SAVE_PERIOD_TICKS = 20L * 60L * 2L;
 
     /**
+     * How often the audit journal is written, in seconds.
+     *
+     * <p>Ten, rather than the two minutes the YAML stores use. An audit entry lost to a crash is an
+     * entry nobody can get back, and the cost of writing more often is one transaction per ten
+     * seconds on a database nothing else is contending for.
+     */
+    private static final long AUDIT_FLUSH_PERIOD_SECONDS = 10L;
+
+    /**
+     * How often entries past the retention period are deleted, in seconds.
+     *
+     * <p>Hourly. Retention is measured in days, so anything more frequent is a range delete over the
+     * largest table on the server to remove nothing.
+     */
+    private static final long AUDIT_PRUNE_PERIOD_SECONDS = 60L * 60L;
+
+    /**
      * How often the tablist is rebuilt.
      *
      * <p>Two seconds. A player's world changes on an event and their ping changes continuously, so
@@ -161,6 +180,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private PlayerAdmin players;
     private InventoryViews inventoryViews;
     private Inventories inventories;
+    private Databases databases;
+    private Audit audit;
     private PackServer packServer;
 
     static RainsCorePlugin instance() {
@@ -253,6 +274,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         vanish = new Vanish(new BukkitVanishSink(this));
         getServer().getPluginManager().registerEvents(
                 new VanishListener(this, vanish, "rainscore.vanish.see"), this);
+        // Before anything that stores anything. Opening a database applies its schema, and a
+        // subsystem handed one whose tables are not there yet fails a query at a time.
+        databases = new Databases(getDataFolder().toPath(),
+                () -> getServer().isPrimaryThread());
+        audit = new Audit(databases.audit(), System::currentTimeMillis);
+
         inventoryViews = new InventoryViews(watcher -> {
             org.bukkit.entity.Player looking =
                     getServer().getPlayer(java.util.UUID.fromString(watcher));
@@ -269,6 +296,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // is not currently on it. Worked out once rather than per read: getWorlds() is a copy.
         inventories = new Inventories(this, inventoryViews, new OfflineEdits(System::currentTimeMillis),
                 getServer().getWorlds().get(0).getWorldFolder().toPath().resolve("playerdata"));
+        // Every look and every change written down. Handed over here rather than taken in the
+        // constructor because the journal needs its database, which needs the data folder, which is
+        // not there until the plugin is enabling.
+        inventories.audit(audit);
         getServer().getPluginManager().registerEvents(new InvseeListener(inventories), this);
         applyNewSettings(settings.current());
         // Re-applied on every change, so a toggle in the menu takes hold without a restart —
@@ -307,6 +338,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Written on a timer rather than on every change: a disk write every time somebody sets a
         // home would be a disk write on the main thread, and isDirty() means an idle server writes
         // nothing at all.
+        // The audit journal is written off the server's threads: recording an entry only queues it,
+        // and this is where the queue is turned into rows. Separate from the flushes below because
+        // those write YAML on the main thread by design and this must not.
+        Scheduling.asyncTimer(this, AUDIT_FLUSH_PERIOD_SECONDS, AUDIT_FLUSH_PERIOD_SECONDS,
+                task -> audit.flush());
+        Scheduling.asyncTimer(this, AUDIT_PRUNE_PERIOD_SECONDS, AUDIT_PRUNE_PERIOD_SECONDS,
+                task -> audit.forgetOlderThan(
+                        java.time.Duration.ofDays(settings.current().auditRetentionDays())));
         Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> {
             places.flush();
             identities.flush();
@@ -446,6 +485,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             packServer.stop();
             packServer = null;
         }
+        if (audit != null) {
+            // Before the databases are closed, and on this thread rather than scheduled: the
+            // scheduler is already shutting down, so a task handed to it now may never run — and
+            // this is the one flush whose entries cannot be recovered from anywhere else.
+            int written = audit.flush();
+            if (written > 0) {
+                log.info("Wrote {} audit entr{} on the way out.", written,
+                        written == 1 ? "y" : "ies");
+            }
+        }
         if (places != null) {
             places.flush();
         }
@@ -482,6 +531,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (settings != null) {
             settings.save();
+        }
+        if (databases != null) {
+            // After every flush above and before the logfile: closing a database folds its
+            // write-ahead log back into the file, and a database left open keeps a .db-wal beside
+            // it that somebody taking a backup will not copy.
+            databases.close();
         }
         log.info("Rain's Core is going down.");
         Log.shutdown();
@@ -687,6 +742,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public InventoryViews inventoryViews() {
         return inventoryViews;
+    }
+
+    @Override
+    public Audit audit() {
+        return audit;
+    }
+
+    @Override
+    public Databases databases() {
+        return databases;
     }
 
     @Override

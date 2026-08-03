@@ -50,6 +50,28 @@
             <version>3.27.3</version>
             <scope>test</scope>
         </dependency>
+        <!--
+          The same driver Paper ships inside its own jar, at the same version, and only for tests.
+
+          Paper carries org.xerial:sqlite-jdbc in META-INF/libraries, so on a real server the driver
+          is already there: nothing is declared, nothing is downloaded at startup, and the rule that
+          this plugin has no runtime dependencies still holds. Verified on a running server rather
+          than assumed — see the sqlite checks in RainsCoreTestPlugin.
+
+          Test scope exists so the storage layer can be tested against a real database instead of
+          against a mock of one. A fake that answers queries the way we expect proves only that we
+          are consistent with ourselves; SQLite's own opinions about types, transactions and locking
+          are the entire reason to write tests here.
+
+          Keep this version in step with Paper's. If they diverge, the tests pass against one engine
+          and the server runs on another.
+        -->
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.49.1.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

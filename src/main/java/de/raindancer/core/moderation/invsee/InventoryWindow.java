@@ -2,6 +2,8 @@ package de.raindancer.core.moderation.invsee;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.moderation.audit.AuditEntry;
 import de.raindancer.core.platform.util.Scheduling;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -69,6 +71,8 @@ public final class InventoryWindow implements InventoryHolder {
     private Inventory inventory;
     /** Set while this class is the one writing, so its own writes do not read as edits. */
     private boolean painting;
+    /** Where each change is written down. Null when this server keeps no record. */
+    private Audit audit;
 
     public InventoryWindow(Plugin plugin, Player watcher, UUID owner, String ownerName,
                            Access access, boolean live, InventorySource source,
@@ -103,6 +107,11 @@ public final class InventoryWindow implements InventoryHolder {
     public void open() {
         paint();
         watcher.openInventory(getInventory());
+    }
+
+    /** Tells this where to write down what the moderator changes. */
+    public void audit(Audit audit) {
+        this.audit = audit;
     }
 
     public UUID owner() {
@@ -369,6 +378,20 @@ public final class InventoryWindow implements InventoryHolder {
                 if (live) {
                     source.set(owner, section, within, shown);
                 }
+                if (audit != null) {
+                    // One entry per slot rather than one per window. "Took a diamond sword out of
+                    // slot 4" is the sentence somebody needs a year later; "changed 3 slots" is not,
+                    // and the fields are what make it searchable at all.
+                    audit.record(AuditEntry.of("invsee", changeAction(before, shown))
+                            .by(watcher.getUniqueId(), watcher.getName())
+                            .to(owner, ownerName)
+                            .saying(describe(before, shown))
+                            .with("section", section.name())
+                            .with("slot", within)
+                            .with("was", describeItem(before))
+                            .with("now", describeItem(shown))
+                            .with("source", live ? "live" : "playerdata"));
+                }
             }
         }
         if (protectedSlotTouched) {
@@ -392,6 +415,46 @@ public final class InventoryWindow implements InventoryHolder {
      */
     private static ItemStack real(ItemStack item) {
         return item == null || item.getType().isAir() ? null : item;
+    }
+
+    /** What kind of change this was, so the journal can be searched by it. */
+    private static String changeAction(ItemStack before, ItemStack after) {
+        if (before == null) {
+            return "put an item in";
+        }
+        if (after == null) {
+            return "took an item out";
+        }
+        return "replaced an item";
+    }
+
+    private static String describe(ItemStack before, ItemStack after) {
+        if (before == null) {
+            return describeItem(after);
+        }
+        if (after == null) {
+            return describeItem(before);
+        }
+        return describeItem(before) + " became " + describeItem(after);
+    }
+
+    /**
+     * One item in a few words.
+     *
+     * <p>The type and the count, and the name when somebody gave it one — enough to recognise the
+     * item in a report without the journal becoming a second copy of everybody's inventory.
+     */
+    private static String describeItem(ItemStack item) {
+        if (item == null) {
+            return "nothing";
+        }
+        String said = item.getAmount() + "x " + item.getType().name().toLowerCase();
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            said += " named \"" + net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                    .plainText().serialize(meta.displayName()) + "\"";
+        }
+        return said;
     }
 
     private static boolean same(ItemStack one, ItemStack other) {

@@ -32,6 +32,8 @@ import org.bukkit.Material;
                 description = "Being properly not here, and who is allowed to notice."),
         @Topic(path = "moderation/invsee", title = "Looking Inside", icon = Material.CHEST,
                 description = "Watching somebody's inventory, and what a watcher may touch."),
+        @Topic(path = "moderation/audit", title = "Audit Journal", icon = Material.WRITABLE_BOOK,
+                description = "The record of what moderators did, and how long it is kept."),
         @Topic(path = "appearance/effects", title = "Sounds & Particles", icon = Material.NOTE_BLOCK,
                 description = "The cues every plugin plays, and how loud they are."),
         @Topic(path = "config/safety", title = "Safe Teleports", icon = Material.FEATHER,
@@ -271,6 +273,19 @@ public record CoreConfig(
         @Describe("Whether the ender chest is shown beside the inventory.")
         boolean invseeShowEnderChest,
 
+        @In("moderation/audit") @Title("Keep a record of what moderators do")
+        @Describe("Every moderation action is written down with who did it, to whom, and when — "
+                + "searchable by moderator and by feature. Switching this off does not make the "
+                + "actions stop, only the record of them.")
+        boolean auditEnabled,
+
+        @In("moderation/audit") @Title("Keep the record for this many days")
+        @Range(min = 1, max = 3650)
+        @Describe("Older entries are deleted. These rows name real people and say what they did, "
+                + "which is personal data: under the GDPR it may be kept while there is a reason "
+                + "and no longer, so this is a real decision rather than a performance setting.")
+        int auditRetentionDays,
+
         @In("appearance/effects") @Title("Sounds and particles")
         @Describe("Whether the shared cues every plugin plays are heard at all.")
         boolean effectsEnabled,
@@ -318,6 +333,9 @@ public record CoreConfig(
             true, false, true, false, "Server pack", true, "0.0.0.0", 8123, "",
             true, true, true, true,
             true, true, false, true,
+            // Recording on, kept for ninety days: long enough to investigate something reported
+            // weeks late, short enough not to be a standing archive of everybody's behaviour.
+            true, 90,
             true, 120,
             true, 1, 8);
 }
