@@ -15,6 +15,7 @@ import de.raindancer.core.log.LogChannel;
 import de.raindancer.core.platform.BukkitActionBarSink;
 import de.raindancer.core.platform.BukkitAudiences;
 import de.raindancer.core.platform.BukkitBarViewers;
+import de.raindancer.core.identity.Identities;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.FastBoardFactory;
 import de.raindancer.core.scoreboard.Scoreboards;
@@ -73,6 +74,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Scoreboards scoreboards;
     private BossBars bossBars;
     private PoiStore places;
+    private Identities identities;
 
     /** Every plugin's settings, so the combined GUI can find them. Keyed by the schema's id. */
     private final Map<String, SettingsStore<?>> stores = new ConcurrentHashMap<>();
@@ -101,6 +103,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         places = new PoiStore(getDataFolder().toPath().resolve("places.yml"));
         places.load();
+
+        identities = new Identities(getDataFolder().toPath().resolve("identities.yml"));
+        identities.load();
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -122,7 +127,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Written on a timer rather than on every change: a disk write every time somebody sets a
         // home would be a disk write on the main thread, and isDirty() means an idle server writes
         // nothing at all.
-        Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> places.flush());
+        Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> {
+            places.flush();
+            identities.flush();
+        });
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
                 .version(getPluginMeta().getVersion())
@@ -149,6 +157,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         instance = null;
         if (places != null) {
             places.flush();
+        }
+        if (identities != null) {
+            identities.flush();
         }
         if (bossBars != null) {
             bossBars.shutdown();
@@ -266,6 +277,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Scoreboards scoreboards() {
         return scoreboards;
+    }
+
+    @Override
+    public Identities identities() {
+        return identities;
     }
 
     @Override

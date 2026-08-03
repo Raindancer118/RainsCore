@@ -6,6 +6,7 @@ import de.raindancer.core.chat.Chat;
 import de.raindancer.core.chat.ChatButtons;
 import de.raindancer.core.chat.ClickActions;
 import de.raindancer.core.bossbar.BossBars;
+import de.raindancer.core.identity.Identities;
 import de.raindancer.core.poi.PoiStore;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsSchema;
@@ -91,6 +92,12 @@ public interface RainsCore {
      * knowing about the other.
      */
     PoiStore places();
+
+    /**
+     * Who a player is as everybody else sees them: their chat prefix and suffix, the prefix above
+     * their head, and the colour of their name.
+     */
+    Identities identities();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();
