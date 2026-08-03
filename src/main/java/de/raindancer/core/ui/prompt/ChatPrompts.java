@@ -53,6 +53,37 @@ public final class ChatPrompts {
     private final Map<UUID, Question> waiting = new ConcurrentHashMap<>();
 
     /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
+    /**
+     * Where a plugin's callback is run.
+     *
+     * <p>The answer arrives on a Netty thread: {@code AsyncChatEvent} is asynchronous, which is the
+     * whole point of its name. A plugin's callback almost always does something to the player — opens
+     * a menu, gives an item, sends a message — and doing that from a Netty thread is a silent
+     * corruption on Paper and an {@code IllegalStateException} on Folia.
+     *
+     * <p>Making every caller remember that is not a design, it is a trap. So the dispatch is a seam:
+     * it runs the callback inline by default, which is what a test wants, and the plugin replaces it
+     * with one that schedules onto the thread that owns the player.
+     */
+    private volatile java.util.function.BiPredicate<UUID, Runnable> dispatcher =
+            (who, task) -> {
+                task.run();
+                return true;
+            };
+
+    /**
+     * Tells this where a plugin's callback should be run.
+     *
+     * @param dispatcher answers whether it ran or scheduled the work. False — a player who has gone,
+     *                   a scheduler that is shutting down — is what makes {@link PromptResult#FAILED}
+     *                   mean something once the callback no longer runs inline
+     */
+    public void runCallbacksOn(java.util.function.BiPredicate<UUID, Runnable> dispatcher) {
+        if (dispatcher != null) {
+            this.dispatcher = dispatcher;
+        }
+    }
+
     public ChatPrompts(LongSupplier clock) {
         this.clock = clock;
     }
@@ -101,19 +132,30 @@ public final class ChatPrompts {
             return PromptResult.NOT_WAITING;
         }
         if (CANCEL_WORDS.contains(line.trim().toLowerCase(Locale.ROOT))) {
-            run(question.onCancelled(), question.owner());
+            dispatcher.test(player, () -> run(question.onCancelled(), question.owner()));
             return PromptResult.CANCELLED;
         }
-        try {
-            question.onAnswer().accept(line);
-            return PromptResult.ANSWERED;
-        } catch (RuntimeException failure) {
-            // The question is over either way: a plugin's bug must not leave somebody unable to use
-            // chat until they log out.
-            log.error(failure, "The '{}' prompt threw on an answer from {}.",
-                    question.owner(), player);
+        // Answered from this caller's point of view, whatever the callback does later. The question
+        // has been taken out of the map, so it cannot be answered twice, and the chat line has to be
+        // cancelled now rather than after somebody else's work has run.
+        boolean dispatched = dispatcher.test(player, () -> {
+            try {
+                question.onAnswer().accept(line);
+            } catch (RuntimeException failure) {
+                // A plugin's bug must not leave somebody unable to use chat until they log out. Not
+                // reported back through the result: by the time this runs the caller has long since
+                // had its answer, and pretending otherwise would be the sort of half-truth that
+                // makes an enum constant meaningless.
+                log.error(failure, "The '{}' prompt threw on an answer from {}.",
+                        question.owner(), player);
+            }
+        });
+        if (!dispatched) {
+            log.warn("The answer from {} to the '{}' prompt could not be delivered.", player,
+                    question.owner());
             return PromptResult.FAILED;
         }
+        return PromptResult.ANSWERED;
     }
 
     /** Whether anybody is waiting on this player. */

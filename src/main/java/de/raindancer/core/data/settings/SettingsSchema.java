@@ -248,6 +248,45 @@ public final class SettingsSchema<T> {
         };
     }
 
+    /**
+     * Fits a number to the primitive the record actually declares.
+     *
+     * <h2>Why reflection needs this</h2>
+     * Because {@link #box} deliberately widens on the way in: a {@code float} setting is read as a
+     * {@code Double} and a {@code short} as an {@code Integer}, since that is what a YAML parser
+     * produces and there is no point having four nearly identical codecs. Reflection, however, will
+     * not narrow: handing a {@code Double} to a constructor that declares {@code float} throws
+     * {@link IllegalArgumentException}, and it throws it while the plugin is starting — so a record
+     * with one {@code float} field in it is a plugin that does not load, with a stack trace that
+     * names the constructor rather than the field.
+     *
+     * <p>Anything that is not a number, or already fits, is passed through untouched.
+     */
+    private static Object narrow(Object value, Class<?> wanted) {
+        if (!(value instanceof Number number)) {
+            return value;
+        }
+        if (wanted == float.class || wanted == Float.class) {
+            return number.floatValue();
+        }
+        if (wanted == double.class || wanted == Double.class) {
+            return number.doubleValue();
+        }
+        if (wanted == long.class || wanted == Long.class) {
+            return number.longValue();
+        }
+        if (wanted == int.class || wanted == Integer.class) {
+            return number.intValue();
+        }
+        if (wanted == short.class || wanted == Short.class) {
+            return number.shortValue();
+        }
+        if (wanted == byte.class || wanted == Byte.class) {
+            return number.byteValue();
+        }
+        return value;
+    }
+
     /** {@code fencesEnabled} becomes {@code fences-enabled} — the shape YAML keys have here. */
     static String kebab(String camel) {
         StringBuilder built = new StringBuilder(camel.length() + 4);
@@ -319,7 +358,8 @@ public final class SettingsSchema<T> {
             Setting<?> setting = ordered.get(index);
             parameterTypes[index] = components[index].getType();
             Object given = valuesByKey.get(setting.key());
-            arguments[index] = given != null ? given : setting.defaultValue();
+            arguments[index] = narrow(given != null ? given : setting.defaultValue(),
+                    parameterTypes[index]);
         }
         try {
             return type.getDeclaredConstructor(parameterTypes).newInstance(arguments);

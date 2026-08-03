@@ -3,6 +3,7 @@ package de.raindancer.core.ui.identity;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
+import de.raindancer.core.platform.util.Marks;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -277,7 +278,9 @@ public final class Identities {
         if (changed.isEmpty() || !database.isUsable()) {
             return;
         }
-        Set<UUID> writing = Set.copyOf(changed);
+        // Drained rather than snapshotted — see Marks. Copying the marks and clearing them
+        // afterwards loses any change that arrives while the write is running.
+        Set<UUID> writing = Marks.drain(changed);
         boolean written = database.write(connection -> {
             try (PreparedStatement upsert = connection.prepareStatement("""
                     INSERT INTO identity (player, prefix, suffix, nametag_prefix, colour, subtitle)
@@ -305,8 +308,8 @@ public final class Identities {
                 }
             }
         });
-        if (written) {
-            changed.removeAll(writing);
+        if (!written) {
+            Marks.restore(changed, writing);
         }
     }
 

@@ -52,7 +52,22 @@ public final class FarmWorlds {
     private static final LogChannel log = Log.of("worlds");
 
     /** How long to wait for a player to actually leave before unloading the world anyway. */
-    private static final long EVACUATION_SECONDS = 5;
+    /**
+     * What happened to one world this time round.
+     *
+     * <p>Three answers rather than a boolean, because "not this time" and "something is wrong" have to
+     * be told apart. Recording a failed attempt holds the set back for {@link FarmWorldState#RETRY_AFTER};
+     * doing that merely because somebody was standing in the world would mean a farm world nobody can
+     * leave alone for long enough never gets made again.
+     */
+    private enum Step {
+        /** Made again. */
+        DONE,
+        /** Players were sent out; the world can be unloaded once they have landed. */
+        EVACUATING,
+        /** Something is wrong and waiting will not fix it. */
+        FAILED
+    }
 
     private final Plugin plugin;
     private final FarmWorldState state;
@@ -148,10 +163,23 @@ public final class FarmWorlds {
         }
 
         boolean allBack = true;
+        boolean stillEmptying = false;
         for (String name : set.worlds()) {
-            if (!regenerateOne(set, name, safety)) {
+            Step step = regenerateOne(set, name, safety);
+            if (step != Step.DONE) {
                 allBack = false;
             }
+            if (step == Step.EVACUATING) {
+                stillEmptying = true;
+            }
+        }
+        if (stillEmptying && allBack == false) {
+            // Deliberately no attempt recorded, so the next check — a minute away — carries on rather
+            // than the set being held back for the retry period. Nothing has been unloaded or
+            // deleted yet; the only thing that happened is that people were sent to spawn.
+            log.info("'{}' still had players in it. They have been sent to spawn and it will be "
+                    + "made again on the next check.", set.name());
+            return false;
         }
         Instant now = Instant.now();
         // The attempt is always recorded, so a set that cannot be made does not retry every minute.
@@ -170,16 +198,22 @@ public final class FarmWorlds {
         return allBack;
     }
 
-    private boolean regenerateOne(WorldSet set, String name, Location safety) {
+    private Step regenerateOne(WorldSet set, String name, Location safety) {
         World world = Bukkit.getWorld(name);
         if (world != null) {
-            evacuate(world, safety);
+            if (evacuate(world, safety)) {
+                // Somebody was in it. Their teleport is in flight and will complete on this thread
+                // once it is free, so there is nothing useful to do here but come back later —
+                // Bukkit refuses to unload a world that still has players, and forcing it would put
+                // them in a world that no longer exists.
+                return Step.EVACUATING;
+            }
             // save = false: writing chunks to disk immediately before deleting them is a freeze
             // that buys nothing.
             if (!Bukkit.unloadWorld(world, false)) {
                 log.error("Could not unload '{}', so it was left alone rather than half-removed.",
                         name);
-                return false;
+                return Step.FAILED;
             }
         }
         Path folder = Bukkit.getWorldContainer().toPath().resolve(name);
@@ -192,37 +226,58 @@ public final class FarmWorlds {
             log.fatal("'{}' was only partly deleted and has NOT been made again. Its folder is at "
                     + "{} — remove it by hand, then start the server. Recreating it now would "
                     + "generate new terrain around the surviving chunks.", name, folder);
-            return false;
+            return Step.FAILED;
         }
-        return create(set, name) != null;
+        return create(set, name) != null ? Step.DONE : Step.FAILED;
     }
 
-    /** Moves everybody out of a world before it stops existing. */
-    private void evacuate(World world, Location safety) {
+    /**
+     * Moves everybody out of a world before it stops existing.
+     *
+     * <h2>Why this does not wait for the teleports</h2>
+     * It used to, and that was a deadlock rather than a safeguard. {@code regenerate} runs on the
+     * global region thread — from the due-check timer, or from the command — and a teleport completes
+     * <em>on that same thread</em>. Blocking it while waiting for the future meant the future could
+     * never be completed: on Paper it timed out every single time, so the wait achieved nothing
+     * except a five-second freeze, and then the world was unloaded with the players still in it —
+     * exactly what the wait was there to prevent.
+     *
+     * <p>So the teleports are started and this returns. Whether they landed is answered by asking the
+     * world, which is the only honest question — see {@link #whenEmpty}.
+     *
+     * @return whether anybody had to be moved at all
+     */
+    private boolean evacuate(World world, Location safety) {
         List<Player> inside = List.copyOf(world.getPlayers());
-        List<java.util.concurrent.CompletableFuture<Boolean>> moving =
-                new ArrayList<>(inside.size());
         for (Player player : inside) {
             try {
                 // teleportAsync, not teleport: on Folia a synchronous teleport across regions
                 // throws, and the world would then be unloaded with somebody still in it.
-                moving.add(player.teleportAsync(safety));
-                player.sendMessage(net.kyori.adventure.text.Component.text(
-                        "The farm world is being made again — you have been moved to spawn."));
+                player.teleportAsync(safety);
+                player.sendMessage(farmWorldMessage());
             } catch (RuntimeException failure) {
                 log.warn(failure, "Could not move {} out of '{}'.", player.getName(),
                         world.getName());
             }
         }
-        // Waited for, because the next thing that happens is the world being unloaded. A player
-        // still in flight when that happens is a player in a world that no longer exists.
-        for (var move : moving) {
-            try {
-                move.get(EVACUATION_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
-            } catch (Exception slow) {
-                log.warn("A player did not leave '{}' in time; carrying on.", world.getName());
-            }
+        return !inside.isEmpty();
+    }
+
+    /**
+     * What a player is told when the world under them is being made again.
+     *
+     * <p>From the message file when there is one, so it can be translated; the English below is the
+     * fallback for a server that has none.
+     */
+    private static net.kyori.adventure.text.Component farmWorldMessage() {
+        String builtIn = "The farm world is being made again — you have been moved to spawn.";
+        if (!de.raindancer.core.RainsCore.isAvailable()) {
+            return net.kyori.adventure.text.Component.text(builtIn);
         }
+        de.raindancer.core.ui.messages.Messages words =
+                de.raindancer.core.RainsCore.get().messages();
+        return words == null ? net.kyori.adventure.text.Component.text(builtIn)
+                : words.get("farm-world.moved-out");
     }
 
     /** The main world's spawn, or null when there is not one. */

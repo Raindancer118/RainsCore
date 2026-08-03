@@ -102,7 +102,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private static final long SWEEP_PERIOD_TICKS = 20L * 60L;
 
     /** How often saved places are written out, if anything changed. */
-    private static final long SAVE_PERIOD_TICKS = 20L * 60L * 2L;
+    /**
+     * How often the stores are written, in the seconds the async scheduler counts in.
+     *
+     * <p>Seconds rather than ticks because this is off the server's threads, where a tick is not a
+     * unit of anything.
+     */
+    private static final long SAVE_PERIOD_SECONDS = 120L;
 
     /**
      * How often the audit journal is written, in seconds.
@@ -185,6 +191,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Messages messages;
     /** False while the stores are being read, true once players can be on. */
     private volatile boolean watchingThreads;
+
+    /**
+     * The timers that write to disk, kept so shutdown can stop them.
+     *
+     * <p>Discarded handles were a race at shutdown: {@code onDisable} flushes and then closes the
+     * databases, and an async timer firing in between writes into a database that is closing. The
+     * entries it was carrying are then lost, quietly, exactly when a shutdown is the last chance to
+     * write them.
+     */
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask auditFlushTask;
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask savingTask;
     private Audit audit;
     private PackServer packServer;
 
@@ -293,6 +310,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // One chat listener for every prompt on the server. Three plugins each registering their
         // own is three plugins fighting over the next line a player types.
         prompts = new ChatPrompts(System::currentTimeMillis);
+        // A chat answer arrives on a Netty thread, and a plugin's callback almost always touches the
+        // player. Dispatched onto the thread that owns them, so no plugin using this has to know.
+        prompts.runCallbacksOn((who, task) -> {
+            org.bukkit.entity.Player answering = getServer().getPlayer(who);
+            if (answering == null) {
+                // They left between typing and this running. Answering "no" rather than dropping it
+                // silently, so the line is reported as undelivered instead of as answered.
+                return false;
+            }
+            Scheduling.entity(this, answering, task);
+            return true;
+        });
         getServer().getPluginManager().registerEvents(new PromptListener(prompts), this);
         // The commands are registered by RainsCoreBootstrap, before this runs. Paper fires the
         // COMMANDS lifecycle event during bootstrap, so a handler registered here would never fire
@@ -371,12 +400,19 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // The audit journal is written off the server's threads: recording an entry only queues it,
         // and this is where the queue is turned into rows. Separate from the flushes below because
         // those write YAML on the main thread by design and this must not.
-        Scheduling.asyncTimer(this, AUDIT_FLUSH_PERIOD_SECONDS, AUDIT_FLUSH_PERIOD_SECONDS,
-                task -> audit.flush());
+        auditFlushTask = Scheduling.asyncTimer(this, AUDIT_FLUSH_PERIOD_SECONDS,
+                AUDIT_FLUSH_PERIOD_SECONDS, task -> audit.flush());
         Scheduling.asyncTimer(this, AUDIT_PRUNE_PERIOD_SECONDS, AUDIT_PRUNE_PERIOD_SECONDS,
                 task -> audit.forgetOlderThan(
                         java.time.Duration.ofDays(settings.current().auditRetentionDays())));
-        Scheduling.globalTimer(this, SAVE_PERIOD_TICKS, SAVE_PERIOD_TICKS, task -> {
+        // On the ASYNC timer, not the global one. That was wrong until a review pointed it out: every
+        // one of these writes a file or a database, and the global timer runs on the thread that ticks
+        // the world. Two minutes between freezes is still a freeze.
+        //
+        // Worth noting how it survived this long: the guard in Databases would have reported it, and
+        // the live checks never ran long enough for the first tick to arrive. A safety net only helps
+        // if something reaches it.
+        savingTask = Scheduling.asyncTimer(this, SAVE_PERIOD_SECONDS, SAVE_PERIOD_SECONDS, task -> {
             places.flush();
             identities.flush();
             punishments.flush();
@@ -515,6 +551,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             packServer.stop();
             packServer = null;
         }
+        // Before anything is flushed by hand: a timer that fires while this method is closing the
+        // databases writes into one that is going away, and loses whatever it was carrying.
+        stopTimer(savingTask);
+        stopTimer(auditFlushTask);
         if (audit != null) {
             // Before the databases are closed, and on this thread rather than scheduled: the
             // scheduler is already shutting down, so a task handed to it now may never run — and
@@ -880,4 +920,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             case FAILED -> chat.raw(clicker, messages.prefixed("button.failed"));
         }
     }
+    /**
+     * Stops one timer, if it was ever started.
+     *
+     * <p>Guarded because {@code onDisable} also runs when {@code onEnable} failed halfway, and a
+     * plugin that throws on the way down while shutting down hides whatever went wrong on the way up.
+     */
+    private static void stopTimer(
+            io.papermc.paper.threadedregions.scheduler.ScheduledTask task) {
+        if (task != null && !task.isCancelled()) {
+            task.cancel();
+        }
+    }
+
 }

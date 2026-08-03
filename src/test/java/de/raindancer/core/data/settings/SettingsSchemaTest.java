@@ -25,6 +25,27 @@ class SettingsSchemaTest {
     // ------------------------------------------------------------------ the fixtures
 
     /** A record exercising every supported component type and a two-level topic tree. */
+    /**
+     * The primitives a YAML parser does not produce.
+     *
+     * <p>A parser gives back {@code Double} and {@code Integer}; a record may declare {@code float},
+     * {@code short} or {@code byte}. Reflection refuses to narrow, so a record with one {@code float}
+     * in it was a plugin that would not start — and it failed while starting, with a stack trace
+     * naming the constructor rather than the field.
+     */
+    @Settings(id = "narrow", topics = {
+            @Topic(path = "config", title = "Config", icon = Material.PAPER,
+                    description = "The awkward primitives."),
+    })
+    record NarrowConfig(
+            @In("config") @Title("A float") float rate,
+            @In("config") @Title("A short") short count,
+            @In("config") @Title("A byte") byte level,
+            @In("config") @Title("A double for comparison") double amount) {
+
+        static final NarrowConfig DEFAULTS = new NarrowConfig(0.5f, (short) 3, (byte) 2, 1.5);
+    }
+
     @Settings(id = "claims", topics = {
             @Topic(path = "management", title = "Management", icon = Material.IRON_AXE,
                     description = "What someone running a claim changes for other people."),
@@ -528,4 +549,37 @@ class SettingsSchemaTest {
     @Settings(id = "not-a-record", topics = @Topic(path = "config/x", title = "X"))
     static final class NotARecord {
     }
+    @Nested
+    @DisplayName("the primitives a YAML parser does not produce")
+    class NarrowPrimitives {
+
+        @Test
+        @DisplayName("a record with float, short and byte in it can be built at all")
+        void buildsNarrowPrimitives() {
+            SettingsSchema<NarrowConfig> schema =
+                    SettingsSchema.of(NarrowConfig.class, NarrowConfig.DEFAULTS);
+
+            NarrowConfig built = schema.instantiate(java.util.Map.of());
+
+            assertThat(built)
+                    .as("reflection will not hand a Double to a float parameter, so this used to "
+                            + "throw while the plugin was starting")
+                    .isEqualTo(NarrowConfig.DEFAULTS);
+        }
+
+        @Test
+        @DisplayName("a value read as a Double reaches a float field as a float")
+        void narrowsAReadValue() {
+            SettingsSchema<NarrowConfig> schema =
+                    SettingsSchema.of(NarrowConfig.class, NarrowConfig.DEFAULTS);
+
+            NarrowConfig built = schema.instantiate(java.util.Map.of(
+                    "rate", 0.25d, "count", 7, "level", 4));
+
+            assertThat(built.rate()).isEqualTo(0.25f);
+            assertThat(built.count()).isEqualTo((short) 7);
+            assertThat(built.level()).isEqualTo((byte) 4);
+        }
+    }
+
 }

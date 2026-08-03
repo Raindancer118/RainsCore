@@ -104,7 +104,13 @@ class ChatPromptsTest {
                     line -> {
                         throw new IllegalStateException("no");
                     }, null);
-            assertThat(prompts.offer(ALICE, "anything")).isEqualTo(PromptResult.FAILED);
+            assertThat(prompts.offer(ALICE, "anything"))
+                    .as("the line WAS taken as an answer — the plugin's callback failing afterwards "
+                            + "is its own problem and goes to the log. Reporting FAILED here would "
+                            + "only be possible while callbacks ran inline, and they no longer do: "
+                            + "the answer arrives on a Netty thread and is dispatched onto the "
+                            + "thread that owns the player")
+                    .isEqualTo(PromptResult.ANSWERED);
             assertThat(prompts.isWaiting(ALICE))
                     .as("a plugin's bug must not leave somebody unable to use chat")
                     .isFalse();
@@ -279,4 +285,53 @@ class ChatPromptsTest {
                     .isEqualTo(1);
         }
     }
+    @Nested
+    @DisplayName("where the callback runs")
+    class Dispatch {
+
+        @Test
+        @DisplayName("a callback is run wherever it was told to, not on the caller's thread")
+        void callbacksGoThroughTheDispatcher() {
+            java.util.List<Runnable> held = new java.util.ArrayList<>();
+            prompts.runCallbacksOn((who, task) -> held.add(task));
+            java.util.concurrent.atomic.AtomicReference<String> answered =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            prompts.ask(ALICE, "claims", Duration.ofMinutes(2), answered::set, null);
+
+            assertThat(prompts.offer(ALICE, "my base")).isEqualTo(PromptResult.ANSWERED);
+            assertThat(answered.get())
+                    .as("a chat answer arrives on a Netty thread; running the callback there is what "
+                            + "this seam exists to stop")
+                    .isNull();
+
+            held.forEach(Runnable::run);
+
+            assertThat(answered.get()).isEqualTo("my base");
+        }
+
+        @Test
+        @DisplayName("an answer that cannot be delivered is reported as such")
+        void undeliverableAnswer() {
+            prompts.runCallbacksOn((who, task) -> false);
+            prompts.ask(ALICE, "claims", Duration.ofMinutes(2), line -> { }, null);
+
+            assertThat(prompts.offer(ALICE, "my base"))
+                    .as("a player who left between typing and the callback running has not been "
+                            + "answered, and saying so is the only honest report")
+                    .isEqualTo(PromptResult.FAILED);
+        }
+
+        @Test
+        @DisplayName("a dispatcher of nothing leaves the inline one in place")
+        void refusesNull() {
+            prompts.runCallbacksOn(null);
+            java.util.concurrent.atomic.AtomicReference<String> answered =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            prompts.ask(ALICE, "claims", Duration.ofMinutes(2), answered::set, null);
+
+            assertThat(prompts.offer(ALICE, "my base")).isEqualTo(PromptResult.ANSWERED);
+            assertThat(answered.get()).isEqualTo("my base");
+        }
+    }
+
 }

@@ -154,7 +154,11 @@ public final class Database implements AutoCloseable {
                 // Deliberately left usable=false rather than half-open: a store handed a database
                 // whose tables are not all there fails one query at a time, in a different place
                 // each time, and the reason is nowhere near the cause.
+                //
+                // And closed, not merely marked. Five connections to a database nothing may use are
+                // five file handles held until the server stops.
                 usable.set(false);
+                closeConnections();
             }
         } catch (SQLException | java.io.IOException | RuntimeException unopenable) {
             log.error(unopenable, "The database {} could not be opened.", file);
@@ -326,13 +330,45 @@ public final class Database implements AutoCloseable {
             return Optional.empty();
         } finally {
             if (reader != null) {
-                // Read connections never write, but a read opens a transaction all the same and one
-                // left open holds a snapshot of the database — which stops the write-ahead log from
-                // ever being folded back in, and the file grows for ever.
-                rollbackQuietly(reader);
-                readers.add(reader);
+                giveBack(reader);
             }
         }
+    }
+
+    /**
+     * Puts a read connection back, unless it is no longer worth having.
+     *
+     * <p>Two things happen here, and the second was missing.
+     *
+     * <p>The rollback is because a read opens a transaction all the same, and one left open holds a
+     * snapshot of the database — which stops the write-ahead log from ever being folded back in, so
+     * the file grows for ever.
+     *
+     * <p>The check is because a connection that has died — a fatal I/O error, or {@link #close()}
+     * shutting it while this read was running — must not go back in the pool. Returned, it would be
+     * handed to the next reader, fail immediately, and be returned again: one dead connection
+     * permanently costs a quarter of the read capacity, and four of them cost all of it.
+     */
+    private void giveBack(Connection reader) {
+        boolean alive;
+        try {
+            alive = !reader.isClosed();
+        } catch (SQLException gone) {
+            alive = false;
+        }
+        if (!alive || closed.get()) {
+            // Dropped rather than replaced. Opening a new one here would mean opening connections
+            // from whatever thread happened to hit the error, on a database that may be shutting
+            // down; the pool being short is reported by the caller that waits for one.
+            try {
+                reader.close();
+            } catch (SQLException ignored) {
+                // Already gone, which is the point.
+            }
+            return;
+        }
+        rollbackQuietly(reader);
+        readers.add(reader);
     }
 
     // ------------------------------------------------------------------------- being careful
@@ -438,18 +474,24 @@ public final class Database implements AutoCloseable {
         }
     }
 
-    /** Closes every read connection, waiting for none of them. */
+    /**
+     * Closes the read connections that are idle, and leaves the rest to their readers.
+     *
+     * <p>Only the ones in the pool. A connection that is checked out has a statement running on
+     * another thread, and closing a SQLite connection from underneath an executing statement is
+     * unsafe in the driver's native half — the failure mode is not an exception but a crash of the
+     * whole server. {@link #closed} is already set by the time this runs, so whoever holds that
+     * connection closes it themselves when they hand it back; see {@link #giveBack}.
+     */
     private void closeReaders() {
-        List<Connection> readConnections = new ArrayList<>(everyConnection);
-        readConnections.remove(writer);
-        for (Connection open : readConnections) {
+        Connection idle;
+        while ((idle = readers.poll()) != null) {
             try {
-                open.close();
+                idle.close();
             } catch (SQLException ignored) {
-                // A reader mid-query. Closing it is the point; its caller gets an empty answer.
+                // On the way out.
             }
         }
-        readers.clear();
     }
 
     /** Shuts everything again after a failed open, where there is nothing to checkpoint. */

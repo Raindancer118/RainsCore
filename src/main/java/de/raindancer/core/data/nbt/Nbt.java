@@ -41,8 +41,16 @@ public final class Nbt {
      * the stack. */
     private static final int MAX_DEPTH = 512;
 
-    /** Nothing real is a gigabyte; a length claiming to be is a corrupt file. */
-    private static final int MAX_ELEMENTS = 1 << 24;
+    /**
+     * The most bytes any one array in a file may claim.
+     *
+     * <p>Counted in <b>bytes</b>, not elements, which is the correction: a cap of sixteen million
+     * *elements* is sixteen megabytes for a byte array and a hundred and thirty-four for an array of
+     * longs — and the allocation happens before a single byte of it has been read, so a corrupt
+     * four-byte length is enough to take a chunk of the heap. A handful of those in one file is an
+     * OutOfMemoryError, which is precisely what this constant is here to prevent.
+     */
+    private static final int MAX_ARRAY_BYTES = 16 << 20;
 
     private Nbt() {
     }
@@ -108,7 +116,7 @@ public final class Nbt {
 
     private static Tag readList(DataInput data, int depth) throws IOException {
         int elementType = data.readUnsignedByte();
-        int count = length(data.readInt());
+        int count = count(data.readInt());
         if (elementType == Tag.END && count > 0) {
             throw new IOException("A list of nothing cannot have " + count + " entries.");
         }
@@ -132,13 +140,13 @@ public final class Nbt {
     }
 
     private static byte[] readBytes(DataInput data) throws IOException {
-        byte[] bytes = new byte[length(data.readInt())];
+        byte[] bytes = new byte[length(data.readInt(), Byte.BYTES)];
         data.readFully(bytes);
         return bytes;
     }
 
     private static Tag readIntArray(DataInput data) throws IOException {
-        int[] values = new int[length(data.readInt())];
+        int[] values = new int[length(data.readInt(), Integer.BYTES)];
         for (int at = 0; at < values.length; at++) {
             values[at] = data.readInt();
         }
@@ -146,15 +154,33 @@ public final class Nbt {
     }
 
     private static Tag readLongArray(DataInput data) throws IOException {
-        long[] values = new long[length(data.readInt())];
+        long[] values = new long[length(data.readInt(), Long.BYTES)];
         for (int at = 0; at < values.length; at++) {
             values[at] = data.readLong();
         }
         return new Tag.LongArray(values);
     }
 
-    private static int length(int claimed) throws IOException {
-        if (claimed < 0 || claimed > MAX_ELEMENTS) {
+    /**
+     * Checks a claimed length before anything is allocated for it.
+     *
+     * @param bytesEach how wide one element is, so the cap is a size rather than a count
+     */
+    private static int length(int claimed, int bytesEach) throws IOException {
+        if (claimed < 0 || (long) claimed * bytesEach > MAX_ARRAY_BYTES) {
+            throw new IOException("An NBT length of " + claimed + " is not a real one.");
+        }
+        return claimed;
+    }
+
+    /**
+     * A count of tags rather than of fixed-width values.
+     *
+     * <p>Capped by count, because a tag's size is not known until it is read. Each one still costs at
+     * least a byte to read, so a list claiming more entries than the byte cap cannot be honest either.
+     */
+    private static int count(int claimed) throws IOException {
+        if (claimed < 0 || claimed > MAX_ARRAY_BYTES) {
             throw new IOException("An NBT length of " + claimed + " is not a real one.");
         }
         return claimed;

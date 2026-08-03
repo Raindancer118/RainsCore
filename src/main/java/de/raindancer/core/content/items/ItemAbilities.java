@@ -135,7 +135,15 @@ public final class ItemAbilities {
 
     /** Undoes a provisional claim — the use did not happen, so it costs nothing. */
     private void giveBack(UUID player, ItemAbility ability, long now) {
-        forPlayer(player).compute(ability.key(), (ignored, standing) -> {
+        // computeIfPresent, not forPlayer(): the latter creates the player's map if it has gone, and
+        // a give-back for somebody who logged out between using an item and the ability declining
+        // would leave an empty map behind for every such player until the next restart. Nothing to
+        // give back when there is no map — the use was never recorded either.
+        Map<String, Standing> theirs = standings.get(player);
+        if (theirs == null) {
+            return;
+        }
+        theirs.compute(ability.key(), (ignored, standing) -> {
             if (standing == null || standing.lastUsedAt() != now) {
                 return standing;
             }

@@ -144,6 +144,11 @@ menu:
   page-of: "<dark_gray>Page <page> of <pages>"
   previous-menu: "the previous menu"
 
+# ────────────────────────────────────────────────────────────── farm worlds
+farm-world:
+  # Said to anybody standing in a farm world that is about to be made again.
+  moved-out: "<yellow>The farm world is being made again — you have been moved to spawn."
+
 # ─────────────────────────────────────────────────────────────── the tablist
 tablist:
   nobody-on: "<dark_gray>nobody is on"

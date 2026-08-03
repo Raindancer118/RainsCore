@@ -257,14 +257,30 @@ public final class Warps {
         }
         Duration wait = cooldown;
         if (wait != null) {
-            Long last = lastUsed.get(player);
             long now = clock.getAsLong();
-            if (last != null && now - last < wait.toMillis()) {
-                return WarpUse.ON_COOLDOWN;
-            }
+            // Checked and recorded in one step. Reading the last use and then writing it, as two
+            // steps, lets two requests arriving together both see the old value and both be allowed
+            // — which is a macro or a double-click getting a free warp past the cooldown. On Folia
+            // these really can be two threads.
+            //
             // Recorded only once everything else has passed, so a typo or a locked warp does not
             // cost thirty seconds.
-            lastUsed.put(player, now);
+            // The answer is a flag rather than the value compute returned: with a clock that has not
+            // moved, the value kept and the value written are the same number, so comparing them
+            // cannot tell "allowed" from "refused". The first version of this fix did exactly that
+            // and let every second warp through.
+            java.util.concurrent.atomic.AtomicBoolean allowed =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+            lastUsed.compute(player, (ignored, last) -> {
+                if (last != null && now - last < wait.toMillis()) {
+                    return last;
+                }
+                allowed.set(true);
+                return now;
+            });
+            if (!allowed.get()) {
+                return WarpUse.ON_COOLDOWN;
+            }
         }
         return WarpUse.WENT;
     }

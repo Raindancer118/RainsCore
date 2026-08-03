@@ -3,6 +3,7 @@ package de.raindancer.core.world.farm;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
+import de.raindancer.core.platform.util.Marks;
 import de.raindancer.core.data.store.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -347,7 +348,9 @@ public final class FarmWorldState {
         if (changedTimes.isEmpty() || !database.isUsable()) {
             return;
         }
-        Set<String> writing = Set.copyOf(changedTimes);
+        // Drained rather than snapshotted — see Marks. Copying the marks and clearing them
+        // afterwards loses any change that arrives while the write is running.
+        Set<String> writing = Marks.drain(changedTimes);
         boolean written = database.write(connection -> {
             try (PreparedStatement upsert = connection.prepareStatement("""
                     INSERT INTO farm_world (name, made_at, tried_at) VALUES (?, ?, ?)
@@ -370,8 +373,8 @@ public final class FarmWorldState {
                 }
             }
         });
-        if (written) {
-            changedTimes.removeAll(writing);
+        if (!written) {
+            Marks.restore(changedTimes, writing);
         }
     }
 

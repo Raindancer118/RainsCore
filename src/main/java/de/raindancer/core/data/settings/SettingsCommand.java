@@ -1,6 +1,7 @@
 package de.raindancer.core.data.settings;
 
 import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.ui.chat.Chat;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -32,6 +33,16 @@ public final class SettingsCommand implements BasicCommand {
      * when it is actually run. See {@code RainsCoreBootstrap} for why registration cannot wait.
      */
     public SettingsCommand() {
+    }
+
+    /**
+     * The plugin to schedule against.
+     *
+     * <p>Core itself, because these settings are Core's and the work is a file write rather than
+     * anything belonging to whoever typed the command.
+     */
+    private static org.bukkit.plugin.Plugin corePlugin() {
+        return org.bukkit.Bukkit.getPluginManager().getPlugin("RainsCore");
     }
 
     private SettingsNavigation navigation() {
@@ -119,7 +130,9 @@ public final class SettingsCommand implements BasicCommand {
             return;
         }
         if (navigation().registry().set(args[1], value)) {
-            navigation().registry().saveAll();
+            // Off the thread the command arrived on: this writes a YAML file for every plugin that
+            // has settings, and doing that on a region thread stalls the world for the disk.
+            Scheduling.async(corePlugin(), () -> navigation().registry().saveAll());
             chat().ok(sender, "<name> is now <value>.",
                     Chat.arg("name", args[1]),
                     Chat.arg("value", navigation().registry().display(args[1])));
@@ -147,7 +160,7 @@ public final class SettingsCommand implements BasicCommand {
             return;
         }
         navigation().registry().reset(args[1]);
-        navigation().registry().saveAll();
+        Scheduling.async(corePlugin(), () -> navigation().registry().saveAll());
         chat().ok(sender, "<name> is back to <value>.",
                 Chat.arg("name", args[1]),
                 Chat.arg("value", navigation().registry().display(args[1])));

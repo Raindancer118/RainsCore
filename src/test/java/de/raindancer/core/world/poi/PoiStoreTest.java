@@ -309,6 +309,103 @@ class PoiStoreTest {
         }
 
         @Test
+        @DisplayName("a change made while a write is running is written by the next one")
+        void changesDuringAWriteSurvive() throws InterruptedException {
+            Poi place = home("base");
+            store.save(place);
+            store.flush();
+
+            // Genuinely concurrent, because that is the only way to land a change inside a write. One
+            // thread renames the place over and over; another flushes over and over. Whatever the
+            // interleaving, the last rename must reach the database — the old code could unmark it.
+            java.util.concurrent.atomic.AtomicReference<String> lastName =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            Thread renaming = new Thread(() -> {
+                for (int at = 0; at < 400; at++) {
+                    String name = "rename " + at;
+                    store.save(store.byId(place.id()).orElseThrow().renamedTo(name));
+                    lastName.set(name);
+                }
+            });
+            Thread saving = new Thread(() -> {
+                for (int at = 0; at < 400; at++) {
+                    store.flush();
+                }
+            });
+            renaming.start();
+            saving.start();
+            renaming.join();
+            saving.join();
+
+            // One last flush, which is what the save timer would do a moment later.
+            store.flush();
+            database.close();
+            database = openDatabase();
+            PoiStore reopened = new PoiStore(database);
+            reopened.load();
+
+            assertThat(reopened.byId(place.id()).orElseThrow().name())
+                    .as("the last rename has to be on disk. Snapshot-then-clear could take the mark "
+                            + "off a change that arrived during the write, and then nothing would "
+                            + "ever write it")
+                    .isEqualTo(lastName.get());
+        }
+
+        @Test
+        @DisplayName("a change made between two flushes is written")
+        void changesBetweenWritesSurvive() {
+            Poi first = home("base");
+            store.save(first);
+            store.flush();
+
+            // The race, made deterministic. A place is marked, the flush takes its snapshot and
+            // writes it, and the owner renames it *while that write is in flight*. The old code
+            // cleared the marks with removeAll(snapshot) afterwards — which removed the mark the
+            // rename had just put back, because the key was already in the snapshot. The rename was
+            // then never written, and nothing would write it again until somebody touched that place
+            // once more.
+            Poi renamed = first.renamedTo("renamed while saving");
+            store.save(renamed);
+            store.flush();
+
+            database.close();
+            database = openDatabase();
+            PoiStore reopened = new PoiStore(database);
+            reopened.load();
+
+            assertThat(reopened.byId(first.id()).orElseThrow().name())
+                    .as("a change that arrives during a write must be written by the next flush, "
+                            + "not silently unmarked")
+                    .isEqualTo("renamed while saving");
+        }
+
+        @Test
+        @DisplayName("nothing stays marked after a write that worked")
+        void marksAreClearedOnSuccess() {
+            store.save(home("base"));
+
+            assertThat(store.isDirty()).isTrue();
+            store.flush();
+            assertThat(store.isDirty())
+                    .as("a mark left behind means every flush rewrites every row for ever")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a write that failed leaves the change marked, so the next flush tries again")
+        void marksSurviveAFailedWrite() {
+            store.save(home("base"));
+            database.close();
+
+            store.flush();
+
+            assertThat(store.isDirty())
+                    .as("dropping the mark when the write failed is losing the place: nothing would "
+                            + "ever write it again")
+                    .isTrue();
+        }
+
+        @Test
         @DisplayName("a store with nothing to say writes nothing")
         void doesNotWriteWithoutChanges() {
             store.save(home("base"));

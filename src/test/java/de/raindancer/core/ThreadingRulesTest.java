@@ -121,6 +121,52 @@ class ThreadingRulesTest {
         }
 
         @Test
+        @DisplayName("the timer that writes the stores is an async one, not a global one")
+        void theSaveTimerIsAsync() throws IOException {
+            String plugin = code("RainsCorePlugin.java");
+            int at = plugin.indexOf("places.flush()");
+            assertThat(at).as("the save timer this rule is about has moved or gone").isNotNegative();
+            // Backwards to whichever timer call this block belongs to.
+            String before = plugin.substring(Math.max(0, at - 600), at);
+            int lastTimer = before.lastIndexOf("Scheduling.");
+
+            assertThat(before.substring(lastTimer))
+                    .as("every one of those flushes writes a file or a database. On the global timer "
+                            + "that is disk I/O on the thread that ticks the world — a freeze every "
+                            + "two minutes, which is exactly how this shipped once already")
+                    .startsWith("Scheduling.asyncTimer");
+        }
+
+        @Test
+        @DisplayName("the audit journal is written off the server's threads")
+        void theAuditTimerIsAsync() throws IOException {
+            String plugin = code("RainsCorePlugin.java");
+            int at = plugin.indexOf("audit.flush()");
+            assertThat(at).isNotNegative();
+            String before = plugin.substring(Math.max(0, at - 400), at);
+
+            assertThat(before.substring(before.lastIndexOf("Scheduling.")))
+                    .as("recording an audit entry is free precisely because writing it happens "
+                            + "somewhere else")
+                    .startsWith("Scheduling.asyncTimer");
+        }
+
+        @Test
+        @DisplayName("a timer that writes to disk is stopped before the databases close")
+        void writingTimersAreCancelled() throws IOException {
+            String plugin = code("RainsCorePlugin.java");
+            int closes = plugin.indexOf("databases.close()");
+            assertThat(closes).as("the shutdown this rule is about has moved").isNotNegative();
+
+            assertThat(plugin.substring(0, closes))
+                    .as("an async timer firing while onDisable closes the databases writes into one "
+                            + "that is going away, and loses what it was carrying — the one moment "
+                            + "when a lost audit entry cannot be recovered")
+                    .contains("stopTimer(savingTask)")
+                    .contains("stopTimer(auditFlushTask)");
+        }
+
+        @Test
         @DisplayName("the NBT reader is never called straight out of an event handler")
         void nbtIsNotReadInListeners() throws IOException {
             for (Path file : javaFilesIn("moderation/invsee")) {

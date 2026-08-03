@@ -3,6 +3,7 @@ package de.raindancer.core.content.achievement;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
+import de.raindancer.core.platform.util.Marks;
 import de.raindancer.core.data.store.YamlStore;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -461,7 +462,9 @@ public final class Achievements {
         if (changedPlayers.isEmpty() || !database.isUsable()) {
             return;
         }
-        Set<UUID> writing = Set.copyOf(changedPlayers);
+        // Drained rather than snapshotted — see Marks. Copying the marks and clearing them
+        // afterwards loses any change that arrives while the write is running.
+        Set<UUID> writing = Marks.drain(changedPlayers);
         boolean written = database.write(connection -> {
             try (PreparedStatement clearEarned = connection.prepareStatement(
                          "DELETE FROM achievement_earned WHERE player = ?");
@@ -493,8 +496,8 @@ public final class Achievements {
                 }
             }
         });
-        if (written) {
-            changedPlayers.removeAll(writing);
+        if (!written) {
+            Marks.restore(changedPlayers, writing);
         }
     }
 

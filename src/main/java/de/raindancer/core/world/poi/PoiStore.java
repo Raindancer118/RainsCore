@@ -3,6 +3,7 @@ package de.raindancer.core.world.poi;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
+import de.raindancer.core.platform.util.Marks;
 import org.bukkit.Material;
 
 import java.util.ArrayList;
@@ -293,10 +294,19 @@ public final class PoiStore {
         if (!isDirty() || !database.isUsable()) {
             return;
         }
-        // Taken before the write rather than inside it, so a place saved while the disk is busy is in
-        // the next flush rather than half in this one.
-        Set<String> writing = Set.copyOf(changed);
-        Set<String> removing = Set.copyOf(deleted);
+        // Drained, not snapshotted.
+        //
+        // The obvious version takes a copy of the marks, writes those rows, and then clears the marks
+        // with removeAll(copy). That loses a change which arrives while the write is running: the key
+        // is already in the copy, so marking it again is a no-op, and removeAll then takes the mark
+        // away. The change is never written, and nothing writes it again until somebody happens to
+        // touch that row once more.
+        //
+        // Taking the marks *off* first inverts it. A change arriving during the write puts its key
+        // back, and the next flush picks it up. The worst case is one row written twice, which costs
+        // nothing.
+        Set<String> writing = Marks.drain(changed);
+        Set<String> removing = Marks.drain(deleted);
         List<Poi> rows = writing.stream().map(places::get)
                 .filter(java.util.Objects::nonNull)
                 .toList();
@@ -357,11 +367,11 @@ public final class PoiStore {
                 }
             }
         });
-        if (written) {
-            // Removed rather than cleared, so anything saved during the write stays marked for the
-            // next one rather than being forgotten.
-            changed.removeAll(writing);
-            deleted.removeAll(removing);
+        if (!written) {
+            // Put back, so the next flush tries again. Dropping them here would be losing the
+            // places: nothing else would ever write them.
+            Marks.restore(changed, writing);
+            Marks.restore(deleted, removing);
         }
     }
 }

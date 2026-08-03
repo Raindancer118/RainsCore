@@ -75,7 +75,10 @@ public final class SettingsChatInput {
 
     /** Back onto a thread that may open an inventory: a chat event's is not one. */
     private void applyLater(Player player, Waiting waiting, String typed) {
-        Scheduling.global(plugin, () -> apply(player, waiting, typed));
+        // On the player's own thread, not the global one. Everything this does ends in
+        // player.openInventory(), and on Folia touching a player from a region that does not own them
+        // throws — which would break the settings menu for anybody not standing in the global region.
+        Scheduling.entity(plugin, player, () -> apply(player, waiting, typed));
     }
 
     private void apply(Player player, Waiting waiting, String typed) {

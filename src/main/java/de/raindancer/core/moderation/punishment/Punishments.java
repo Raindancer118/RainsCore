@@ -3,6 +3,7 @@ package de.raindancer.core.moderation.punishment;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
+import de.raindancer.core.platform.util.Marks;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -268,9 +269,9 @@ public final class Punishments {
         if (changed.isEmpty() || !database.isUsable()) {
             return;
         }
-        // Taken before the write, so a punishment handed out while it runs is left marked and caught
-        // by the next flush rather than being cleared without having been written.
-        Set<String> writing = Set.copyOf(changed);
+        // Drained rather than snapshotted — see Marks. Copying the marks and clearing them
+        // afterwards loses any change that arrives while the write is running.
+        Set<String> writing = Marks.drain(changed);
         List<Punishment> rows = byPlayer.values().stream()
                 .flatMap(List::stream)
                 .filter(punishment -> writing.contains(punishment.id()))
@@ -301,9 +302,10 @@ public final class Punishments {
                 }
             }
         });
-        if (written) {
-            // Removed rather than cleared, so anything that arrived during the write stays marked.
-            changed.removeAll(writing);
+        if (!written) {
+            // Put back, so the next flush tries again. A dropped mark here is a ban nothing will
+            // ever write.
+            Marks.restore(changed, writing);
         }
     }
 

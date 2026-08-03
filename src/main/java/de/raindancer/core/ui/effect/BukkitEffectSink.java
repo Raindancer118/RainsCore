@@ -47,6 +47,9 @@ public final class BukkitEffectSink implements EffectSink {
         Player online = Bukkit.getPlayer(player);
         Particle particle = particleOf(particles.particle());
         if (online != null && particle != null) {
+            if (needsData(particle)) {
+                return;
+            }
             online.spawnParticle(particle, online.getLocation().add(0, 1, 0), particles.count(),
                     particles.spreadX(), particles.spreadY(), particles.spreadZ(),
                     particles.speed());
@@ -67,6 +70,9 @@ public final class BukkitEffectSink implements EffectSink {
         World found = Bukkit.getWorld(world);
         Particle particle = particleOf(particles.particle());
         if (found != null && particle != null) {
+            if (needsData(particle)) {
+                return;
+            }
             found.spawnParticle(particle, new Location(found, x, y, z), particles.count(),
                     particles.spreadX(), particles.spreadY(), particles.spreadZ(),
                     particles.speed());
@@ -107,4 +113,33 @@ public final class BukkitEffectSink implements EffectSink {
         return Sound.class.isEnum() && org.bukkit.Registry.SOUNDS.get(
                 org.bukkit.NamespacedKey.minecraft(key.replace("minecraft:", ""))) != null;
     }
+    /** Particles already complained about, so a cue on a timer is one log line rather than a flood. */
+    private static final java.util.Set<String> WITHOUT_DATA =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Whether this particle cannot be spawned without extra data.
+     *
+     * <p>Some of them — dust, block and item particles, falling dust, sculk charge — require a second
+     * argument saying which colour or which block. Bukkit does not treat the data-less call as "no
+     * data, then": it throws {@code IllegalArgumentException}. So an admin who names one of those in a
+     * cue would get an exception every time the cue played, from inside a scheduled task, and no
+     * particle either.
+     *
+     * <p>Skipped with one line in the log instead. The alternative is inventing a colour on their
+     * behalf, which is a cue that works and looks wrong — harder to diagnose than one that says why
+     * it did nothing.
+     */
+    private static boolean needsData(org.bukkit.Particle particle) {
+        if (particle.getDataType() == Void.class) {
+            return false;
+        }
+        if (WITHOUT_DATA.add(particle.name())) {
+            log.warn("The particle {} needs extra data — a colour, or which block — which a cue "
+                    + "cannot carry. Cues naming it will show nothing. Pick a particle that stands "
+                    + "on its own.", particle.name());
+        }
+        return true;
+    }
+
 }
