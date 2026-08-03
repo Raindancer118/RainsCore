@@ -341,6 +341,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         vanish.flightWhileVanished(config.vanishFlight());
         if (tablists != null) {
             tablists.model().showPing(config.tablistShowPing());
+            tablists.model().title(config.tablistTitle());
+            tablists.model().logo("auto".equalsIgnoreCase(config.tablistLogo().trim())
+                    ? de.raindancer.core.tablist.TablistModel.logoFor(getServer().getMotd())
+                    : framesOf(config.tablistLogo()));
             tablists.headerFrames(framesOf(config.tablistHeaderFrames()), config.tablistFrameTicks());
             tablists.footerFrames(framesOf(config.tablistFooterFrames()), config.tablistFrameTicks());
         }

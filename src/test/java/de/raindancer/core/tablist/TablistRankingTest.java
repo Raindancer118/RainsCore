@@ -262,6 +262,95 @@ class TablistRankingTest {
         }
     }
 
+    // ------------------------------------------------------------------ the title and the logo
+
+    /**
+     * What sits at the very top.
+     *
+     * <p>The header is the largest piece of text a server ever puts in front of a player, and by
+     * default it is the MOTD in a gradient — which is fine and says nothing. A title an owner chose,
+     * and a few lines of glyphs above it, is the one place a server gets to look like itself.
+     */
+    @Nested
+    @DisplayName("the title and the logo")
+    class Branding {
+
+        @Test
+        @DisplayName("without a title it is the server name, as it was")
+        void defaultsToTheServerName() {
+            assertThat(plain(model().header(List.of(PLAYER), "My Server")))
+                    .as("a server that sets nothing must be no worse off than before")
+                    .contains("My Server");
+        }
+
+        @Test
+        @DisplayName("a title replaces it")
+        void titleWins() {
+            TablistModel model = model();
+            model.title("<gold>RAINDANCER</gold>");
+
+            String header = plain(model.header(List.of(PLAYER), "My Server"));
+            assertThat(header).contains("RAINDANCER").doesNotContain("My Server");
+        }
+
+        @Test
+        @DisplayName("a logo sits above the title, line by line")
+        void logoAboveTheTitle() {
+            TablistModel model = model();
+            model.title("<gold>RAIN");
+            model.logo(List.of("<gray>▛▀▖", "<gray>▙▄▘"));
+
+            String header = plain(model.header(List.of(PLAYER), "My Server"));
+            assertThat(header.indexOf("▛"))
+                    .as("a logo underneath the name is a footer, not a logo")
+                    .isLessThan(header.indexOf("RAIN"));
+            assertThat(header).contains("▙▄▘");
+        }
+
+        @Test
+        @DisplayName("the player count stays, because it is the one thing people look for")
+        void countSurvives() {
+            TablistModel model = model();
+            model.title("<gold>RAIN");
+            model.logo(List.of("<gray>▛▀▖"));
+
+            assertThat(plain(model.header(List.of(PLAYER, MOD), "My Server")))
+                    .contains("2 players online");
+        }
+
+        @Test
+        @DisplayName("a title with a typo in its markup still shows the words")
+        void brokenTitleMarkup() {
+            TablistModel model = model();
+            model.title("<not_a_colour>RAIN");
+
+            assertThat(plain(model.header(List.of(PLAYER), "My Server")))
+                    .as("a broken header must not empty the whole tablist")
+                    .contains("RAIN");
+        }
+
+        @Test
+        @DisplayName("no logo and no title is simply neither")
+        void emptyBranding() {
+            TablistModel model = model();
+            model.title("");
+            model.logo(List.of());
+
+            assertThat(plain(model.header(List.of(PLAYER), "My Server"))).contains("My Server");
+        }
+
+        @Test
+        @DisplayName("a logo can be built out of a name, so nobody has to draw one")
+        void logoFromAName() {
+            List<String> drawn = TablistModel.logoFor("RC");
+
+            assertThat(drawn)
+                    .as("an owner who wants a logo and cannot draw one should still get one")
+                    .isNotEmpty();
+            assertThat(String.join("", drawn)).isNotBlank();
+        }
+    }
+
     private static String plain(net.kyori.adventure.text.Component component) {
         return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                 .serialize(component);

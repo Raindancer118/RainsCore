@@ -123,6 +123,17 @@ public record CoreConfig(
         @Describe("What sits below it. Empty lists how many players are in each world.")
         String tablistFooter,
 
+        @In("appearance/tablist") @Title("Title")
+        @Describe("The name at the very top, in your own markup. The header is the largest text a "
+                + "server ever puts in front of a player; empty uses the MOTD in a gradient.")
+        String tablistTitle,
+
+        @In("appearance/tablist") @Title("Logo")
+        @Describe("Lines of glyphs above the title, separated by | — block characters, or glyphs "
+                + "from a resource pack you contribute. The word 'auto' draws one from the server "
+                + "name using the same block letters as the startup banner.")
+        String tablistLogo,
+
         @In("appearance/tablist") @Title("Show the ping as a number")
         @Describe("Writes the latency on each line. The five bars at the right-hand end are drawn "
                 + "by the client and no server can remove them — but 30ms and 130ms look identical "
@@ -302,7 +313,7 @@ public record CoreConfig(
             "▸",
             LogLevel.INFO, LogLevel.INFO, 14,
             15,
-            true, true, false, "", "", false, true, "", "", 4, 40,
+            true, true, false, "", "", "", "", false, true, "", "", 4, 40,
             true, true, true, true, "",
             true, false, true, false, "Server pack", true, "0.0.0.0", 8123, "",
             true, true, true, true,

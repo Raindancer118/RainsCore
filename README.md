@@ -99,7 +99,7 @@ Everything below is reached through `RainsCore.get()`.
 | **`actionBars()`** | Owner, priority and lifetime per message, so plugins stop overwriting each other. What a refusal interrupts comes back when it expires. `countdown()` redraws itself — no repeating task to cancel. |
 | **`scoreboards()`** | The sidebar, arbitrated the same way. Packet-level underneath, so it does not flicker and does not fight other plugins over teams. Degrades to nothing if the server's internals are newer than the copied-in code. |
 | **`bossBars()`** | These *stack*, so it is a cap and a ranking rather than a winner. Also **shared bars**: one bar, an audience that changes — a flight's passengers get on and off, and leaving takes the bar with them. |
-| **`tablists()`** | Grouped by world, so the list says who is where. **Sorted by rank** — your staff at the top, not wherever the alphabet put them — via scoreboard-team keys, the same lever Velocitab uses. Animated header and footer, and the ping written as a number beside each name, because 30ms and 130ms look identical in the five bars. |
+| **`tablists()`** | Grouped by world, so the list says who is where. **Sorted by rank** — your staff at the top, not wherever the alphabet put them — via scoreboard-team keys, the same lever Velocitab uses. A title and a logo of your own, animated header and footer, and the ping written as a number beside each name, because 30ms and 130ms look identical in the five bars. |
 | **`resourcePacks()`** | Plugins contribute assets; Core builds **one** pack, serves it, and sends it. Reproducible zips (so clients cache rather than redownload), conflicts reported by name, and a built-in HTTP server you can turn off if you have your own. |
 
 ### Saying things
@@ -130,6 +130,7 @@ Everything below is reached through `RainsCore.get()`.
 | **`de.raindancer.core.gui`** | The one menu framework. Six rows, three bands, chrome the framework owns. |
 | **`de.raindancer.core.log`** | One logger, one logfile per day, rotated and pruned. Never blocks, never throws. |
 | **`de.raindancer.core.banner`** | The startup splash, with a logo drawn from your plugin's name. |
+| **`de.raindancer.core.messages`** | `Messages` — a `messages.yml` an owner can edit, over the defaults your plugin ships. A key their file is missing falls back rather than blanking; player text is escaped; broken markup still renders. |
 | **`de.raindancer.core.store`** | `YamlStore` — a YAML file read and written without ever losing it. Use it for anything your plugin keeps. |
 | **`safety()`** | Is it safe to put a player there, and where instead. Two blocks of room, solid ground, no lava/fire/portal, a survivable drop — optionally checking the blocks around it too. Never loads a chunk to answer; `chunks()` does that first. |
 | **`chunks()`** | Keeping chunks loaded — for a moment, or until somebody lets go. Every permanent hold carries a name, because the flag survives a restart. |
@@ -215,7 +216,7 @@ point: a player looking for a setting does not know which of nine jars owns it.
 ## Working on it
 
 ```bash
-mvn test        # 999 tests, no server needed
+mvn test        # 1021 tests, no server needed
 mvn install     # to the local Maven repository
 ```
 

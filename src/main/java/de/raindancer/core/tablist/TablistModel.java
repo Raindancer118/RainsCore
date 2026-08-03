@@ -228,12 +228,85 @@ public final class TablistModel {
 
     /** What sits above the list: the server, and how many are on. */
     public Component header(List<TablistEntry> online, String serverName) {
-        String name = serverName == null || serverName.isBlank() ? "This server" : serverName.trim();
         int count = online == null ? 0 : online.size();
-        return MINI.deserialize("\n<gradient:#C9A0FF:#7C5CBF><b>" + escape(name)
-                + "</b></gradient>\n<gray>" + count
-                + (count == 1 ? " player online" : " players online") + "\n");
+
+        StringBuilder built = new StringBuilder("\n");
+        // The logo first: one underneath the name is a footer, not a logo.
+        for (String line : logo) {
+            built.append(line).append('\n');
+        }
+        if (title.isEmpty()) {
+            String name = serverName == null || serverName.isBlank()
+                    ? "This server" : serverName.trim();
+            built.append("<gradient:#C9A0FF:#7C5CBF><b>").append(escape(name))
+                    .append("</b></gradient>");
+        } else {
+            // Not escaped: this is the owner's own markup, and the whole point of a title is that
+            // they get to colour it. A typo in it is caught below rather than thrown at a player.
+            built.append(title);
+        }
+        // Kept whatever else is above it: how many people are on is the one thing anybody looks at
+        // a tablist header for.
+        built.append("\n<gray>").append(count)
+                .append(count == 1 ? " player online" : " players online").append('\n');
+
+        String markup = built.toString();
+        try {
+            return MINI.deserialize(markup);
+        } catch (RuntimeException badMarkup) {
+            // An owner's typo must not empty the tablist for everybody. The words without their
+            // colours beat a blank header.
+            return Component.text(markup.replaceAll("<[^>]*>", ""));
+        }
     }
+
+    /**
+     * The name at the top, in the owner's own markup.
+     *
+     * <p>The header is the largest piece of text a server ever puts in front of a player, and by
+     * default it is the MOTD in a gradient — which is fine and says nothing. Empty keeps that.
+     */
+    public void title(String miniMessage) {
+        this.title = miniMessage == null ? "" : miniMessage.trim();
+    }
+
+    public String title() {
+        return title;
+    }
+
+    /**
+     * Lines of glyphs above the title.
+     *
+     * <p>Block characters, or glyphs from a resource pack the server contributes through
+     * {@code resourcePacks()} — which is what makes a real logo possible rather than approximated
+     * artwork. Empty is no logo.
+     */
+    public void logo(List<String> lines) {
+        this.logo = lines == null ? List.of()
+                : lines.stream().filter(line -> line != null && !line.isBlank()).toList();
+    }
+
+    public List<String> logo() {
+        return logo;
+    }
+
+    /**
+     * A logo drawn out of a name, for an owner who wants one and cannot draw one.
+     *
+     * <p>The same block letters the startup banner uses, so a server's console and its tablist look
+     * like the same server. Long names become their initials, because nine letters of block text is
+     * wider than a tablist column.
+     */
+    public static List<String> logoFor(String name) {
+        return de.raindancer.core.banner.BlockLetters.render(
+                de.raindancer.core.banner.BlockLetters.abbreviate(
+                        name == null || name.isBlank() ? "MC" : name)).stream()
+                .map(line -> "<gradient:#C9A0FF:#7C5CBF>" + line + "</gradient>")
+                .toList();
+    }
+
+    private volatile String title = "";
+    private volatile List<String> logo = List.of();
 
     /**
      * What sits below it: how many are in each world.
