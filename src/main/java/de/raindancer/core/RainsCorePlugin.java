@@ -14,6 +14,8 @@ import de.raindancer.core.ui.chat.Style;
 import de.raindancer.core.ui.menu.MenuListener;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.platform.permission.GrantListener;
+import de.raindancer.core.platform.permission.Grants;
 import de.raindancer.core.content.items.CustomItems;
 import de.raindancer.core.content.items.ItemAbilities;
 import de.raindancer.core.content.items.ItemFactory;
@@ -180,6 +182,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private BossBars bossBars;
     private PoiStore places;
     private Identities identities;
+    private Grants grants;
+    private GrantListener grantListener;
     private Punishments punishments;
     private PunishmentGuard punishmentGuard;
     private VanillaBanBridge banBridge;
@@ -287,6 +291,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         identities = new Identities(databases.core());
         identities.load();
+
+        // Permissions this server has granted individuals. Not a permissions plugin — see Grants —
+        // but the thing a server without one needs, and the thing the moderation module's staff
+        // presets are built on. Registered LOWEST so everything else that fires on join already sees
+        // what it grants.
+        grants = new Grants(getDataFolder().toPath());
+        grants.load();
+        grantListener = new GrantListener(this, grants);
+        getServer().getPluginManager().registerEvents(grantListener, this);
 
         punishments = new Punishments(databases.core(),
                 System::currentTimeMillis);
@@ -483,6 +496,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         savingTask = Scheduling.asyncTimer(this, SAVE_PERIOD_SECONDS, SAVE_PERIOD_SECONDS, task -> {
             places.flush();
             identities.flush();
+            grants.flush();
             punishments.flush();
             items.flush();
             achievements.flush();
@@ -648,6 +662,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (identities != null) {
             identities.flush();
+        }
+        if (grants != null) {
+            grants.flush();
+        }
+        if (grantListener != null) {
+            // Before the plugin goes: an attachment outliving the plugin that owns it is a permission
+            // nothing can take away again.
+            grantListener.removeEverything();
         }
         if (farmWorlds != null) {
             farmWorlds.state().flush();
@@ -844,6 +866,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Identities identities() {
         return identities;
+    }
+
+    @Override
+    public Grants grants() {
+        return grants;
+    }
+
+    @Override
+    public void reapplyGrants(org.bukkit.entity.Player player) {
+        if (grantListener != null) {
+            grantListener.apply(player);
+        }
     }
 
     @Override

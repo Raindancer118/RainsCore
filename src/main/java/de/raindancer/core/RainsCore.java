@@ -6,6 +6,7 @@ import de.raindancer.core.ui.chat.Chat;
 import de.raindancer.core.ui.chat.ChatButtons;
 import de.raindancer.core.ui.chat.ClickActions;
 import de.raindancer.core.ui.bossbar.BossBars;
+import de.raindancer.core.platform.permission.Grants;
 import de.raindancer.core.ui.identity.Identities;
 import de.raindancer.core.content.achievement.Achievements;
 import de.raindancer.core.content.items.CustomItems;
@@ -126,6 +127,28 @@ public interface RainsCore {
      * their head, and the colour of their name.
      */
     Identities identities();
+
+    /**
+     * Permissions this server has granted individuals, remembered across restarts.
+     *
+     * <p><b>Not a permissions plugin</b>, and not a replacement for one: no groups, no inheritance, no
+     * wildcards. It is the small thing a server without LuckPerms needs — a list of nodes granted to a
+     * named person — and it layers on top of whatever a real permissions plugin says rather than
+     * fighting it.
+     *
+     * <p>Here rather than in a module because the first thing that wanted it was a moderation module
+     * handing out staff presets that include land-claim permissions. Two plugins wanted it before it
+     * was written.
+     */
+    Grants grants();
+
+    /**
+     * Gives somebody their granted permissions now, rather than at their next login.
+     *
+     * <p>What a promotion needs: a moderator told they are a moderator, whose commands then all refuse
+     * them until they relog, is a moderator who reports the promotion as broken.
+     */
+    void reapplyGrants(org.bukkit.entity.Player player);
 
     /**
      * Bans, mutes, freezes and the record of who did what — for any plugin that needs to refuse
