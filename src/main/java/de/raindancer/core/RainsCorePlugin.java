@@ -191,6 +191,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Inventories inventories;
     private Databases databases;
     private Combat combat;
+    private CombatListener combatListener;
     private Messages messages;
     /** False while the stores are being read, true once players can be on. */
     private volatile boolean watchingThreads;
@@ -365,8 +366,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         settings.onChange(this::applyNewSettings);
         combat = new Combat();
         applyCombatSettings();
-        getServer().getPluginManager().registerEvents(
-                new CombatListener(combat, System::currentTimeMillis, messages), this);
+        // Kept, because it holds one entry per player it has had to refuse and the quit handler has
+        // to be able to drop them. A map that only grows is a leak on a server that runs for months.
+        combatListener = new CombatListener(combat, System::currentTimeMillis, messages);
+        getServer().getPluginManager().registerEvents(combatListener, this);
 
         chunks = new ChunkHolds(new BukkitChunkLoader(this));
         // A world by name, or null when it is not loaded — the seam that keeps every rule about
@@ -931,6 +934,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         bossBars.forget(player.getUniqueId());
         tablists.forget(player);
         warps.forget(player.getUniqueId());
+        effects.forget(player.getUniqueId());
+        if (combatListener != null) {
+            combatListener.forget(player.getUniqueId());
+        }
     }
 
     /**

@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -200,6 +202,101 @@ class ThreadingRulesTest {
                     .as("one door to the disk, so there is one place that has to get the "
                             + "scheduling, the atomic replace and the backup right")
                     .isEmpty();
+        }
+    }
+
+    /**
+     * Anything that remembers something per player has to be told when they leave.
+     *
+     * <p>A map keyed by UUID that nothing ever removes from is a leak measured in months, and it is
+     * invisible: the server is a little larger every day and nothing points at the cause. Every
+     * subsystem here has a {@code forget(UUID)} for it, and the mistake is not writing one — it is
+     * writing one and not calling it, which is exactly what happened to the combat listener.
+     */
+    @Nested
+    @DisplayName("everything that remembers a player is told when they leave")
+    class Forgetting {
+
+        @Test
+        @DisplayName("every forget(UUID) there is gets called when somebody leaves")
+        void everyForgetIsCalled() throws IOException {
+            // Every quit handler in the library, together: the plugin's own, and the ones subsystems
+            // ship for themselves because they have other quit business too.
+            String whenSomebodyLeaves = everyQuitHandler();
+            assertThat(whenSomebodyLeaves)
+                    .as("no quit handler was found at all, so this rule is checking nothing")
+                    .contains("PlayerQuitEvent");
+
+            // Matched by the FIELD each subsystem is reached through, worked out from the declaration
+            // rather than guessed from the class name. Guessing was the first attempt and reported
+            // three false leaks: the fields are called packs, prompts and vanish while the classes are
+            // ResourcePacks, ChatPrompts and Vanish.
+            List<String> notForgotten = new ArrayList<>();
+            for (Path file : classesThatForget()) {
+                String name = file.getFileName().toString().replace(".java", "");
+                if (fieldsOfType(name).stream().noneMatch(field ->
+                        whenSomebodyLeaves.contains(field + ".forget(")
+                                || whenSomebodyLeaves.contains(field + ".forgetSession("))) {
+                    notForgotten.add(name);
+                }
+            }
+
+            assertThat(notForgotten)
+                    .as("these have a forget(UUID) that nothing calls when a player leaves, so they "
+                            + "keep an entry for every player who has ever been on this server — a "
+                            + "leak measured in months, with nothing pointing at the cause")
+                    .isEmpty();
+        }
+
+        /** Every class with a per-player thing to forget. */
+        private static List<Path> classesThatForget() throws IOException {
+            try (Stream<Path> files = Files.walk(SOURCE)) {
+                List<Path> found = new ArrayList<>();
+                for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                    String source = Files.readString(file);
+                    if (source.contains("public void forget(UUID")
+                            || source.contains("public boolean forget(UUID")) {
+                        found.add(file);
+                    }
+                }
+                found.sort(java.util.Comparator.comparing(Path::toString));
+                return found;
+            }
+        }
+
+        /** Every field anywhere in the library declared as this type, by name. */
+        private static List<String> fieldsOfType(String type) throws IOException {
+            Pattern declared = Pattern.compile(
+                    "\\b" + Pattern.quote(type) + "\\s+([a-z][A-Za-z0-9_]*)\\s*[;=)]");
+            List<String> names = new ArrayList<>();
+            try (Stream<Path> files = Files.walk(SOURCE)) {
+                for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                    Matcher matcher = declared.matcher(Files.readString(file));
+                    while (matcher.find()) {
+                        names.add(matcher.group(1));
+                    }
+                }
+            }
+            return names;
+        }
+
+        /** The plugin's quit handler and every listener's, run together. */
+        private static String everyQuitHandler() throws IOException {
+            StringBuilder all = new StringBuilder();
+            try (Stream<Path> files = Files.walk(SOURCE)) {
+                List<Path> sorted = files.filter(path -> path.toString().endsWith(".java"))
+                        .sorted(java.util.Comparator.comparing(Path::toString)).toList();
+                for (Path file : sorted) {
+                    String source = Files.readString(file);
+                    int quit = source.indexOf("PlayerQuitEvent event");
+                    while (quit >= 0) {
+                        int ends = source.indexOf("\n    }", quit);
+                        all.append(source, quit, ends < 0 ? source.length() : ends);
+                        quit = source.indexOf("PlayerQuitEvent event", quit + 1);
+                    }
+                }
+            }
+            return all.toString();
         }
     }
 
