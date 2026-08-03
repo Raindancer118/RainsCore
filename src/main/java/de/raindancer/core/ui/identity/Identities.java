@@ -128,6 +128,30 @@ public final class Identities {
         return notEmpty(identityOf(player).nametagPrefix());
     }
 
+    /**
+     * The name to show for a player, whether or not they are on the server.
+     *
+     * <p>Here because "who is this uuid" is a question every plugin has and none of them should be answering
+     * for itself. Before this, one plugin kept its own cache of uuid-to-name, which is one more set of answers
+     * to drift the first time somebody renames — and a plugin without a cache writes a raw uuid into a
+     * sentence a player is meant to read.
+     *
+     * <p>Answers from the server's own player list, which is what makes it correct for offline players too.
+     * Empty for a uuid the server has genuinely never seen, so a caller can say "somebody" rather than print
+     * thirty-six characters of hex.
+     */
+    public Optional<String> nameOf(UUID player) {
+        if (player == null) {
+            return Optional.empty();
+        }
+        org.bukkit.entity.Player online = org.bukkit.Bukkit.getPlayer(player);
+        if (online != null) {
+            return Optional.of(online.getName());
+        }
+        String saved = org.bukkit.Bukkit.getOfflinePlayer(player).getName();
+        return saved == null || saved.isBlank() ? Optional.empty() : Optional.of(saved);
+    }
+
     public Optional<String> colour(UUID player) {
         return notEmpty(identityOf(player).colour());
     }

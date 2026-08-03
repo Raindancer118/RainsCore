@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.messages;
 
+import net.kyori.adventure.audience.Audience;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
@@ -208,6 +209,49 @@ public final class Messages {
     public Component prefixed(String key, Object... values) {
         String prefix = has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
         return render(prefix + fill(raw(key), values));
+    }
+
+    /**
+     * Sends a prefixed message. The normal case for command feedback.
+     *
+     * <p>Here rather than at every call site because {@code recipient.sendMessage(messages.prefixed(key, …))}
+     * is the same line in three hundred places, and the one that forgets the prefix is the one nobody notices
+     * until a player asks which plugin just talked to them.
+     */
+    public void send(Audience recipient, String key, Object... values) {
+        if (recipient != null) {
+            recipient.sendMessage(prefixed(key, values));
+        }
+    }
+
+    /** The same without the prefix, for the rows of a list where a prefix per line is noise. */
+    public void sendPlain(Audience recipient, String key, Object... values) {
+        if (recipient != null) {
+            recipient.sendMessage(get(key, values));
+        }
+    }
+
+    /**
+     * One of several wordings for the same thing, chosen at random.
+     *
+     * <p>For the lines a player sees over and over — a refusal, an arrival. A key whose value is a list gets
+     * one of its entries; a key with a single value behaves exactly like {@link #get}, so making a message
+     * varied is editing {@code messages.yml} and changing nothing in code.
+     *
+     * <p>Prefixed, because the callers are all feedback. The one place this matters: a variant list with one
+     * entry must not read differently from a plain key, or turning a message into a list would silently move
+     * the prefix.
+     */
+    public Component variant(String key, Object... values) {
+        Object found = lookUp(key);
+        if (!(found instanceof List<?> options) || options.isEmpty()) {
+            return prefixed(key, values);
+        }
+        Object chosen = options.size() == 1
+                ? options.getFirst()
+                : options.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(options.size()));
+        String prefix = has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
+        return render(prefix + fill(String.valueOf(chosen), values));
     }
 
     /** A message that is several lines — a help page, a description. */

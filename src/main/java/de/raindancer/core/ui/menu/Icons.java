@@ -201,6 +201,22 @@ public final class Icons {
         return of(Material.PAPER, "<" + Style.itemName() + ">Page " + page + " of " + pages);
     }
 
+    /**
+     * An item's name, styled the way every item name on this server is styled.
+     *
+     * <p>Public because plugins build item stacks that are not menu buttons — a custom item, a fence block, a
+     * marking tool — and they should read the same. The alternative is each of them remembering to switch
+     * vanilla's italics off, and the one that forgets has an item that looks like a mistake.
+     */
+    public static Component name(String miniMessage) {
+        return text(miniMessage == null ? "" : miniMessage, Style.itemName());
+    }
+
+    /** One line of lore, likewise. */
+    public static Component loreLine(String miniMessage) {
+        return text(miniMessage == null ? "" : miniMessage, Style.itemLore());
+    }
+
     /** MiniMessage with the vanilla italics explicitly switched off. See the class note. */
     private static Component text(String miniMessage, String fallbackColour) {
         String source = miniMessage.startsWith("<") ? miniMessage
