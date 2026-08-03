@@ -384,7 +384,27 @@ public abstract class Menu implements InventoryHolder {
      * rest of the title, and {@code <click:run_command:...>} must never become a click event.
      */
     public Component windowTitle() {
-        return brand.trail(parent == null ? null : parent.title(), title());
+        return brand.trail(parentTitle(), title());
+    }
+
+    /**
+     * The parent page's name, or nothing if it can no longer say.
+     *
+     * <p>A parent's title is usually built from the thing that page is about, and the child outlives that:
+     * open a claim's member list, have the claim deleted underneath you, click anything, and the parent's
+     * title throws while the <em>child</em> is the page being drawn. Before there was a trail at all, a child
+     * was insulated from its parent's state once opened, and it has to stay that way — losing a breadcrumb is
+     * cosmetic, losing the window is not.
+     */
+    private Component parentTitle() {
+        if (parent == null) {
+            return null;
+        }
+        try {
+            return parent.title();
+        } catch (RuntimeException gone) {
+            return null;
+        }
     }
 
     /** Human-readable name, used in the Back button of a child page. */

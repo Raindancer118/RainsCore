@@ -133,4 +133,30 @@ class MenuTrailTest {
                 .contains("<red>")
                 .contains("Fence");
     }
+
+    @Test
+    @DisplayName("a parent whose subject has gone does not take the child page down with it")
+    void abrokenParentTitleIsSurvivable() {
+        // Found by review. The trail asks the parent for its title every time the child's window is built,
+        // including on a refresh — and a parent page's title is usually built from the thing it is about.
+        // Open a claim's member list, have the claim deleted underneath you, click anything, and the parent's
+        // title() now throws while the CHILD is the page being drawn.
+        //
+        // Before the trail, a child was insulated from its parent's state once opened. It has to stay that
+        // way: losing the breadcrumb is a cosmetic loss, and losing the window is not.
+        Menu parent = new Menu(null, BRAND, null) {
+            @Override
+            protected Component title() {
+                throw new IllegalStateException("the claim this page was about is gone");
+            }
+
+            @Override
+            protected void render() {
+            }
+        };
+
+        assertThat(plain(new Page("Trusted people", parent).windowTitle()))
+                .as("the child page still has a title of its own, and that is the one that matters")
+                .contains("Trusted people");
+    }
 }
