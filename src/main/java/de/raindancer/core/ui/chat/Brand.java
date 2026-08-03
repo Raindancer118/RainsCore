@@ -32,6 +32,9 @@ public final class Brand {
 
     /** The gradient, the clipping and the chevron are shared; only the tag differs. */
     private static final String CHEVRON = " <dark_gray>»</dark_gray> ";
+    /** Between a page and the page it was opened from, so the two separators read as levels. */
+    private static final String SUB_CHEVRON = " <dark_gray>\u203a</dark_gray> ";
+    private static final String SUB_CHEVRON_PLAIN = " \u203a ";
 
     /**
      * How wide a chest window's title bar is, in pixels of Minecraft's font.
@@ -191,6 +194,42 @@ public final class Brand {
      *
      * <p>Never less than a little, so an absurd tag shortens the page rather than erasing it.
      */
+    /**
+     * A window title with the page it was opened from in front of it: {@code RSC » Server › All claims}.
+     *
+     * <p>A chest menu has no other chrome, so three levels in the title said "Trusted people" and nothing on
+     * screen said which claim that belonged to.
+     *
+     * <p><b>The page wins the budget.</b> Minecraft clips a title by cutting the end off, so simply joining
+     * the two names produced {@code Claims » claimtrials › Trusted…} — it spent the space on where you came
+     * from and lost where you are, which is the half worth having. So the parent is only included when both
+     * fit whole. When they do not, the parent is dropped: a title that says less is better than one that
+     * trails off mid-word.
+     *
+     * @param from  the page this was opened from; null or blank for a front page
+     * @param page  this page, which is never sacrificed
+     */
+    public Component trail(Component from, Component page) {
+        Component here = page == null ? Component.empty() : page;
+        if (from == null) {
+            return wrap(here);
+        }
+
+        String parentText = PLAIN.serialize(from);
+        String pageText = PLAIN.serialize(here);
+        if (parentText.isBlank()) {
+            return wrap(here);
+        }
+
+        int needed = FontWidth.of(parentText) + FontWidth.of(SUB_CHEVRON_PLAIN) + FontWidth.of(pageText);
+        if (needed > pageBudget()) {
+            return wrap(here);
+        }
+        return wrap(from
+                .append(MiniMessage.miniMessage().deserialize(SUB_CHEVRON))
+                .append(here));
+    }
+
     private int pageBudget() {
         return Math.max(24, TITLE_PIXELS - FontWidth.of(tag(), true) - FontWidth.of(" » ", false));
     }

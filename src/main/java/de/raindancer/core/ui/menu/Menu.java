@@ -108,7 +108,7 @@ public abstract class Menu implements InventoryHolder {
     @Override
     public @NotNull Inventory getInventory() {
         if (inventory == null) {
-            inventory = Bukkit.createInventory(this, layout.size(), brand.wrap(title()));
+            inventory = Bukkit.createInventory(this, layout.size(), windowTitle());
         }
         return inventory;
     }
@@ -364,6 +364,27 @@ public abstract class Menu implements InventoryHolder {
             candidate = candidate.parent;
         }
         return candidate;
+    }
+
+    /**
+     * The whole window title: the brand, the page this was opened from, and this page.
+     *
+     * <p>A chest menu has no other chrome. There is a Back button but nothing saying what Back goes back to,
+     * so three levels in the title read "Trusted people" and the player had to remember which claim they
+     * opened it from. With the parent in front of it the title is the only orientation the window needs:
+     *
+     * <pre>Claims » claimtrials › Trusted people</pre>
+     *
+     * <p><b>One level, not the chain.</b> Minecraft clips a window title to a pixel budget by cutting the end
+     * off, so a full path spends the budget on where you came from and loses where you are — which is the
+     * half that matters. Two names fit, and the second survives.
+     *
+     * <p>Composed from Components rather than by joining MiniMessage strings, because a parent's name can be
+     * a claim name somebody chose: {@code <red>} must appear as those six characters rather than colour the
+     * rest of the title, and {@code <click:run_command:...>} must never become a click event.
+     */
+    public Component windowTitle() {
+        return brand.trail(parent == null ? null : parent.title(), title());
     }
 
     /** Human-readable name, used in the Back button of a child page. */
