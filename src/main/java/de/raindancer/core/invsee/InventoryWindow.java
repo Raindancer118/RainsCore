@@ -254,13 +254,20 @@ public final class InventoryWindow implements InventoryHolder {
 
     /** Turns the page. */
     public void turnPage(int windowSlot) {
-        if (showingEnderChest && windowSlot == Layout.ARMOUR_FIRST) {
-            showingEnderChest = false;
-        } else if (!showingEnderChest && windowSlot == Layout.ENDER_CHEST) {
-            showingEnderChest = true;
-        } else {
+        boolean turning = (showingEnderChest && windowSlot == Layout.ARMOUR_FIRST)
+                || (!showingEnderChest && windowSlot == Layout.ENDER_CHEST);
+        if (!turning) {
             return;
         }
+        // Before the page changes, not after, and not on the scheduled sync a tick later.
+        //
+        // Turning the page repaints the whole window. Anything the moderator moved into it and had
+        // not been taken yet would be painted over and simply gone — and the sync that was already
+        // scheduled would then run against the *new* page and find nothing wrong with it. That is a
+        // real item deleted by two clicks in the same tick, with nobody at fault and nothing in the
+        // log.
+        sync();
+        showingEnderChest = !showingEnderChest;
         paint();
     }
 
