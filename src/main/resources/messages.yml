@@ -180,6 +180,7 @@ land:
   denied: "<red>You may not <white><permission></white> in <white><claim></white>."
   pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
   potions-refused: "<red>Potions are not allowed in <white><claim></white>."
+  redstone-refused: "<red>Redstone does not work in <white><claim></white>."
   riptide-refused: "<red>Riptide is not allowed in <white><claim></white>."
   leads-refused: "<red>You may not lead animals about in <white><claim></white>."
   boats-refused: "<red>Boats and minecarts may not be put down in <white><claim></white>."

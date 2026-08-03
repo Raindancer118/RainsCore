@@ -69,6 +69,25 @@ public final class InteractionProtectionListener implements Listener {
         }
         if (!land.allow(event.getPlayer(), block.getLocation(), required)) {
             event.setCancelled(true);
+            return;
+        }
+
+        // The flag, asked here rather than only on BlockRedstoneEvent. That event carries no player, so there
+        // was nobody to bypass on behalf of: an admin with the bypass on flipped a lever in a claim with
+        // redstone switched off and the circuit stayed dead, because the current was held at its old value
+        // whatever the click had been allowed to do.
+        //
+        // Refusing the click instead means nothing flips, so no world event follows and there is nothing left
+        // to judge without an actor. It also reads better for everybody else: a lever that will not move is
+        // clearer than one that moves and does nothing.
+        if (required == LandAction.REDSTONE
+                && land.landFlags().isEnforced(LandFlag.REDSTONE)
+                && !land.landFlags().isAllowedForTracked(
+                        land.areaAround(event.getPlayer()).orElse(null),
+                        block.getLocation(), LandFlag.REDSTONE, event.getPlayer())) {
+            event.setCancelled(true);
+            land.areaAt(block.getLocation())
+                    .ifPresent(area -> refuse(event.getPlayer(), area, "land.redstone-refused"));
         }
     }
 

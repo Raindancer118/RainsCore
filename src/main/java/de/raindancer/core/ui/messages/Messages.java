@@ -82,6 +82,9 @@ public final class Messages {
     /** Wording a plugin insists on. Above everything. */
     private final Map<String, Object> forced = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** What the host says it is called; see prefixFrom. Null means read the prefix key. */
+    private volatile java.util.function.Supplier<String> prefixSource;
+
     private final List<String> problems = new CopyOnWriteArrayList<>();
     private final List<String> missing = new CopyOnWriteArrayList<>();
 
@@ -417,8 +420,48 @@ public final class Messages {
 
     /** The same, with the prefix in front. */
     public Component prefixed(String key, Object... values) {
-        String prefix = has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
-        return render(prefix + fill(raw(key), values));
+        return render(prefix() + fill(raw(key), values));
+    }
+
+    /**
+     * Tells this server what it is called, so every message says so.
+     *
+     * <p>Without it, {@code prefixed()} reads the {@code prefix} message key — of which there is exactly one on
+     * a server. RainsCore's own bundled wording defines <code>[Core]</code>, a module's wording arrives as a
+     * <em>floor</em>, and the bundled file sits above a floor. So every message a module sent went out as
+     * <code>[Core]</code> and the gradient tag it was branded with, already on every window title, was nowhere
+     * in chat.
+     *
+     * <p>Usually {@code brand::chatPrefix}. Asked every time rather than copied, so a server renaming itself
+     * does not need a restart to be believed — and because {@link de.raindancer.core.ui.chat.Brand} decides for
+     * itself whether the tag is shown at all.
+     *
+     * <p>One identity per server, whether its features arrive as one plugin or as six modules: a player does not
+     * care which jar a line came from. {@code null} puts it back to reading the key.
+     */
+    public void prefixFrom(java.util.function.Supplier<String> source) {
+        this.prefixSource = source;
+    }
+
+    /**
+     * The tag to put in front of a message.
+     *
+     * <p>A source that throws costs the prefix and nothing else. Losing the message with it would be the
+     * framework swallowing somebody's command output over a decoration.
+     */
+    private String prefix() {
+        java.util.function.Supplier<String> source = prefixSource;
+        if (source != null) {
+            try {
+                String given = source.get();
+                return given == null ? "" : given;
+            } catch (RuntimeException noBrandYet) {
+                log.debug("The message prefix source failed ({}); sending unprefixed.",
+                        noBrandYet.getMessage());
+                return "";
+            }
+        }
+        return has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
     }
 
     /**
