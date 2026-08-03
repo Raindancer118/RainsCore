@@ -103,6 +103,17 @@ public final class Layout {
         return chrome;
     }
 
+    /** Which line of the message file names one armour place. */
+    public static String armourKey(int indexFromHelmet) {
+        return switch (indexFromHelmet) {
+            case 0 -> "invsee.armour.helmet";
+            case 1 -> "invsee.armour.chestplate";
+            case 2 -> "invsee.armour.leggings";
+            case 3 -> "invsee.armour.boots";
+            default -> "invsee.armour.other";
+        };
+    }
+
     /** What the armour slots are called, top to bottom as somebody wears them. */
     public static String armourName(int indexFromHelmet) {
         return switch (indexFromHelmet) {
@@ -112,6 +123,12 @@ public final class Layout {
             case 3 -> "Boots";
             default -> "Worn";
         };
+    }
+
+    /** The same, in whatever words this server uses. */
+    public static String armourName(int indexFromHelmet,
+                                    de.raindancer.core.ui.messages.Messages words) {
+        return words == null ? armourName(indexFromHelmet) : words.raw(armourKey(indexFromHelmet));
     }
 
     /** Every part, and where it starts, for a window that wants to label them. */

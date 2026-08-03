@@ -2,6 +2,7 @@ package de.raindancer.core.moderation.punishment;
 
 import de.raindancer.core.ui.chat.Style;
 import net.kyori.adventure.text.Component;
+import de.raindancer.core.ui.messages.Messages;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.time.Duration;
@@ -50,9 +51,23 @@ public final class PunishmentGuard {
     private volatile boolean enabled = true;
     private volatile String appealMessage = "";
 
+    /**
+     * Where the wording comes from.
+     *
+     * <p>Null until a server hands one over, and the wording built in below is used until then — so a
+     * plugin that only wants the rules does not have to set up a message file to get a working ban
+     * screen, and a test does not need one either.
+     */
+    private volatile Messages messages;
+
     public PunishmentGuard(Punishments punishments, LongSupplier clock) {
         this.punishments = punishments;
         this.clock = clock;
+    }
+
+    /** Tells this where the wording lives. */
+    public void messages(Messages messages) {
+        this.messages = messages;
     }
 
     // ---------------------------------------------------------------------------- settings
@@ -117,13 +132,14 @@ public final class PunishmentGuard {
     /** What a muted player is told when they try to talk. */
     public Optional<Component> speakRefusal(UUID player) {
         return stopping(player, PunishmentKind.MUTE)
-                .map(punishment -> oneLine("You are muted", punishment));
+                .map(punishment -> oneLine("punishment.muted", "You are muted", punishment));
     }
 
     /** What a frozen player is told when they try to build. */
     public Optional<Component> buildRefusal(UUID player) {
         return stopping(player, PunishmentKind.FREEZE)
-                .map(punishment -> oneLine("You cannot build right now", punishment));
+                .map(punishment -> oneLine("punishment.frozen", "You cannot build right now",
+                        punishment));
     }
 
     /** The punishment stopping this player, if one is and it is being enforced. */
@@ -144,10 +160,37 @@ public final class PunishmentGuard {
      * timestamp in the server's timezone is not.
      */
     private Component banScreen(Punishment ban) {
+        Messages words = messages;
+        if (words == null) {
+            return builtInBanScreen(ban);
+        }
+        StringBuilder built = new StringBuilder();
+        append(built, words, "punishment.banned.heading");
+        built.append("\n\n");
+        append(built, words, "punishment.banned.reason", "reason", ban.reason());
+        built.append('\n');
+        if (ban.isPermanent()) {
+            append(built, words, "punishment.banned.permanent");
+        } else {
+            append(built, words, "punishment.banned.temporary", "time", remaining(ban));
+        }
+        if (!appealMessage.isEmpty()) {
+            built.append("\n\n");
+            append(built, words, "punishment.appeal", "message", appealMessage);
+        }
+        return MINI.deserialize(built.toString());
+    }
+
+    /**
+     * The ban screen with no message file behind it.
+     *
+     * <p>Kept rather than deleted: a plugin using only the rules must still get a usable screen, and
+     * "the wording is missing" is not something to tell a player who is being refused entry.
+     */
+    private Component builtInBanScreen(Punishment ban) {
         StringBuilder built = new StringBuilder();
         built.append("<").append(Style.bad()).append("><b>You are banned from this server.</b>\n\n");
         built.append("<gray>").append(escape(ban.reason())).append("\n");
-
         built.append("<dark_gray>");
         if (ban.isPermanent()) {
             built.append("This ban does not expire.");
@@ -160,8 +203,45 @@ public final class PunishmentGuard {
         return MINI.deserialize(built.toString());
     }
 
+    /**
+     * One line of a message file, appended as markup rather than as a rendered component.
+     *
+     * <p>Because the ban screen is one component built out of several lines, and MiniMessage has to
+     * see the whole thing at once for a tag opened on one line and closed on the next to work.
+     */
+    private static void append(StringBuilder into, Messages words, String key, Object... values) {
+        into.append(fillIn(words, key, values));
+    }
+
+    /**
+     * A message's markup with its values escaped into it.
+     *
+     * <p>The escaping is the point, and is the reason this cannot simply concatenate: a reason a
+     * moderator typed is text somebody chose, being pasted into markup. Without it a reason of
+     * {@code <red>} recolours the rest of the screen and an unclosed tag swallows what follows.
+     */
+    private static String fillIn(Messages words, String key, Object... values) {
+        String markup = words.raw(key);
+        for (int at = 0; at + 1 < values.length; at += 2) {
+            markup = markup.replace("<" + values[at] + ">",
+                    MINI.escapeTags(String.valueOf(values[at + 1])));
+        }
+        return markup;
+    }
+
     /** What a muted or frozen player is told, in one line of chat. */
-    private Component oneLine(String what, Punishment punishment) {
+    private Component oneLine(String key, String builtIn, Punishment punishment) {
+        Messages words = messages;
+        if (words == null) {
+            return builtInOneLine(builtIn, punishment);
+        }
+        String wanted = punishment.isPermanent() ? key : key + "-temporary";
+        return MINI.deserialize(fillIn(words, wanted,
+                "reason", punishment.reason(),
+                "time", remaining(punishment)));
+    }
+
+    private Component builtInOneLine(String what, Punishment punishment) {
         StringBuilder built = new StringBuilder("<").append(Style.bad()).append('>')
                 .append(what).append(": <gray>").append(escape(punishment.reason()));
         if (!punishment.isPermanent()) {

@@ -317,7 +317,7 @@ public final class TablistModel {
     public Component footer(List<TablistEntry> online) {
         List<TablistGroup> groups = groups(online);
         if (groups.isEmpty()) {
-            return MINI.deserialize("\n<dark_gray>nobody is on\n");
+            return MINI.deserialize("\n" + nobodyOn() + "\n");
         }
         StringBuilder built = new StringBuilder("\n");
         for (int index = 0; index < groups.size(); index++) {
@@ -428,4 +428,22 @@ public final class TablistModel {
     private static String escape(String raw) {
         return MINI.escapeTags(raw);
     }
+
+    /**
+     * What is shown when the tablist has nobody in it.
+     *
+     * <p>Looked up each time rather than held: this model outlives any one reload of the message file,
+     * and holding a reference taken at construction would pin the wording from before somebody edited
+     * it.
+     */
+    private static String nobodyOn() {
+        String builtIn = "<dark_gray>nobody is on";
+        if (!de.raindancer.core.RainsCore.isAvailable()) {
+            return builtIn;
+        }
+        de.raindancer.core.ui.messages.Messages words =
+                de.raindancer.core.RainsCore.get().messages();
+        return words == null ? builtIn : words.raw("tablist.nobody-on");
+    }
+
 }

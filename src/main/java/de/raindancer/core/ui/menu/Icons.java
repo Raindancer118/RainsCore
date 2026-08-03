@@ -111,7 +111,8 @@ public final class Icons {
             }
             List<Component> lore = meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
             lore.add(Component.empty());
-            lore.add(text("<" + Style.bad() + ">" + (reason == null ? "Not yours to change" : reason),
+            lore.add(text("<" + Style.bad() + ">"
+                    + (reason == null ? word("menu.locked", "Not yours to change") : reason),
                     Style.bad()));
             meta.lore(lore);
             item.setItemMeta(meta);
@@ -131,18 +132,22 @@ public final class Icons {
     }
 
     public static ItemStack back(String where) {
-        return of(Material.ARROW, "<" + Style.itemName() + ">Back",
-                "<" + Style.itemLore() + ">Return to " + (where == null ? "the previous menu" : where));
+        String to = where == null ? word("menu.previous-menu", "the previous menu") : where;
+        return of(Material.ARROW, "<" + Style.itemName() + ">" + word("menu.back", "Back"),
+                "<" + Style.itemLore() + ">" + word("menu.back-to", "Back to <where>",
+                        "where", to));
     }
 
     public static ItemStack home(String where) {
-        return of(Material.COMPASS, "<" + Style.itemName() + ">Home",
-                "<" + Style.itemLore() + ">Back to " + (where == null ? "the start" : where));
+        return of(Material.COMPASS,
+                "<" + Style.itemName() + ">" + word("menu.home", "Main menu"),
+                "<" + Style.itemLore() + ">" + word("menu.back-to", "Back to <where>",
+                        "where", where == null ? "the start" : where));
     }
 
     public static ItemStack close() {
-        return of(Material.BARRIER, "<" + Style.bad() + ">Close",
-                "<" + Style.itemLore() + ">Shut this menu");
+        return of(Material.BARRIER, "<" + Style.bad() + ">" + word("menu.close", "Close"),
+                "<" + Style.itemLore() + ">" + word("menu.close", "Shut this menu"));
     }
 
     public static ItemStack help(List<String> lines) {
@@ -150,17 +155,46 @@ public final class Icons {
         for (String line : lines) {
             lore.add("<" + Style.itemLore() + ">" + line);
         }
-        return of(Material.WRITABLE_BOOK, "<" + Style.itemName() + ">What is this?", lore);
+        return of(Material.WRITABLE_BOOK,
+                "<" + Style.itemName() + ">" + word("menu.help", "What is this?"), lore);
     }
 
     public static ItemStack previousPage(int page, int pages) {
-        return of(Material.SPECTRAL_ARROW, "<" + Style.itemName() + ">Previous page",
-                "<" + Style.itemLore() + ">Page " + page + " of " + pages);
+        return of(Material.SPECTRAL_ARROW,
+                "<" + Style.itemName() + ">" + word("menu.previous-page", "Previous page"),
+                "<" + Style.itemLore() + ">" + pageOf(page, pages));
     }
 
     public static ItemStack nextPage(int page, int pages) {
-        return of(Material.SPECTRAL_ARROW, "<" + Style.itemName() + ">Next page",
-                "<" + Style.itemLore() + ">Page " + page + " of " + pages);
+        return of(Material.SPECTRAL_ARROW,
+                "<" + Style.itemName() + ">" + word("menu.next-page", "Next page"),
+                "<" + Style.itemLore() + ">" + pageOf(page, pages));
+    }
+
+    private static String pageOf(int page, int pages) {
+        return word("menu.page-of", "Page <page> of <pages>", "page", page, "pages", pages);
+    }
+
+    /**
+     * One label, in this server's words.
+     *
+     * <p>Plain text with the markup stripped, because the caller wraps it in its own colour tags and a
+     * message file that added its own would end up with two sets nested inside each other.
+     *
+     * <p>Static, and looks the plugin up each time rather than holding a reference: this class is
+     * static utility called from every menu in every plugin, and there is no moment at which it could
+     * be handed a {@code Messages} that would still be the right one later.
+     */
+    private static String word(String key, String builtIn, Object... values) {
+        if (!de.raindancer.core.RainsCore.isAvailable()) {
+            return builtIn;
+        }
+        de.raindancer.core.ui.messages.Messages words = de.raindancer.core.RainsCore.get().messages();
+        if (words == null) {
+            return builtIn;
+        }
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(words.get(key, values));
     }
 
     public static ItemStack pageCounter(int page, int pages) {

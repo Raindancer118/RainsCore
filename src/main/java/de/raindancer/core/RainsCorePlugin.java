@@ -6,6 +6,7 @@ import de.raindancer.core.ui.banner.Banner;
 import de.raindancer.core.ui.bossbar.BossBars;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.ui.chat.ChatButtons;
 import de.raindancer.core.ui.chat.ClickActions;
 import de.raindancer.core.ui.chat.ClickResult;
@@ -181,6 +182,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private InventoryViews inventoryViews;
     private Inventories inventories;
     private Databases databases;
+    private Messages messages;
     /** False while the stores are being read, true once players can be on. */
     private volatile boolean watchingThreads;
     private Audit audit;
@@ -223,6 +225,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 () -> watchingThreads && getServer().isPrimaryThread());
         audit = new Audit(databases.audit(), System::currentTimeMillis);
 
+        // Before anything that says anything. The file is written out on the first start and never
+        // over the owner's edits afterwards; a key it has not got falls back to the jar's wording, so
+        // a file from three versions ago customises less rather than blanking messages out.
+        messages = new Messages(getDataFolder().toPath().resolve("messages.yml"));
+        messages.writeIfMissing(getResource("messages.yml"));
+        messages.load(getResource("messages.yml"));
+        if (!messages.problems().isEmpty()) {
+            log.warn("messages.yml: {}", String.join("; ", messages.problems()));
+        }
+
         places = new PoiStore(databases.core());
         places.load();
 
@@ -233,6 +245,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 System::currentTimeMillis);
         punishments.load();
         punishmentGuard = new PunishmentGuard(punishments, System::currentTimeMillis);
+        punishmentGuard.messages(messages);
         banBridge = new VanillaBanBridge(punishments);
         applyModerationSettings();
         settings.onChange(config -> applyModerationSettings());
@@ -312,6 +325,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // constructor because the journal needs its database, which needs the data folder, which is
         // not there until the plugin is enabling.
         inventories.audit(audit);
+        inventories.messages(messages);
         getServer().getPluginManager().registerEvents(new InvseeListener(inventories), this);
         applyNewSettings(settings.current());
         // Re-applied on every change, so a toggle in the menu takes hold without a restart —
@@ -761,6 +775,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Messages messages() {
+        return messages;
+    }
+
+    @Override
     public Audit audit() {
         return audit;
     }
@@ -854,10 +873,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             case RAN -> {
                 // The action said whatever needed saying.
             }
-            case NOT_YOURS -> chat.no(clicker, "That is not your button.");
-            case SPENT -> chat.warn(clicker, "You have already answered that.");
-            case EXPIRED, UNKNOWN -> chat.warn(clicker, "That is no longer on offer.");
-            case FAILED -> chat.no(clicker, "That did not work. The server has written down why.");
+            case NOT_YOURS -> chat.raw(clicker, messages.prefixed("button.not-yours"));
+            case SPENT -> chat.raw(clicker, messages.prefixed("button.already-answered"));
+            case EXPIRED, UNKNOWN -> chat.raw(clicker,
+                    messages.prefixed("button.no-longer-offered"));
+            case FAILED -> chat.raw(clicker, messages.prefixed("button.failed"));
         }
     }
 }

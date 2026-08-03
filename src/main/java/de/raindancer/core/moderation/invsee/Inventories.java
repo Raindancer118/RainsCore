@@ -4,6 +4,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.moderation.audit.Audit;
 import de.raindancer.core.moderation.audit.AuditEntry;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.platform.util.Scheduling;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -44,25 +45,44 @@ public final class Inventories {
 
     private static final LogChannel log = Log.of("invsee");
 
-    /** What happened when somebody tried to look. */
+    /**
+     * What happened when somebody tried to look.
+     *
+     * <p>Each one carries the <em>key</em> of what to say rather than the sentence, so the wording
+     * lives in {@code messages.yml} with everything else and this enum stays about outcomes. The
+     * English beside it is the fallback for a server with no message file — see
+     * {@link #saying(de.raindancer.core.ui.messages.Messages)}.
+     */
     public enum Outcome {
 
-        OPENED("Opened."),
-        YOURSELF("Your own inventory is a key rather than a menu."),
-        BEING_EDITED("Somebody else is editing that inventory."),
-        NEVER_SEEN("This server has never seen that player."),
-        UNREADABLE("Their inventory could not be read — see the log."),
-        NOT_ALLOWED("You may not do that.");
+        OPENED("invsee.opened", "Opened."),
+        YOURSELF("invsee.yourself", "Your own inventory is a key rather than a menu."),
+        BEING_EDITED("invsee.being-edited", "Somebody else is editing that inventory."),
+        NEVER_SEEN("invsee.never-seen", "This server has never seen that player."),
+        UNREADABLE("invsee.unreadable", "Their inventory could not be read — see the log."),
+        NOT_ALLOWED("invsee.not-allowed", "You may not do that.");
 
-        private final String saying;
+        private final String key;
+        private final String builtIn;
 
-        Outcome(String saying) {
-            this.saying = saying;
+        Outcome(String key, String builtIn) {
+            this.key = key;
+            this.builtIn = builtIn;
         }
 
-        /** What to tell the moderator. */
+        /** Which line of the message file this is. */
+        public String key() {
+            return key;
+        }
+
+        /** What to tell the moderator, in whatever words this server uses. */
+        public Component saying(de.raindancer.core.ui.messages.Messages words) {
+            return words == null ? Component.text(builtIn) : words.prefixed(key);
+        }
+
+        /** The built-in wording, for a caller with no message file at all. */
         public String saying() {
-            return saying;
+            return builtIn;
         }
 
         public boolean opened() {
@@ -86,6 +106,9 @@ public final class Inventories {
      * leaves a trace somebody else can read.
      */
     private Audit audit = null;
+
+    /** Where the wording lives. Null on a server that has not set one up. */
+    private Messages messages = null;
 
     public Inventories(Plugin plugin, InventoryViews views, OfflineEdits offlineEdits,
                        Path playerData) {
@@ -194,6 +217,7 @@ public final class Inventories {
         InventoryWindow window = new InventoryWindow(plugin, watcher, owner,
                 nameOf(owner, ownerName), level, live, sourceFor(owner), carried.get());
         window.audit(audit);
+        window.messages(messages);
         window.open();
         log.info("{} is {} the inventory of {} ({}).", watcher.getName(),
                 level.saying().toLowerCase(), nameOf(owner, ownerName),
@@ -203,7 +227,7 @@ public final class Inventories {
         record(AuditEntry.of("invsee", "looked inside")
                 .by(watcher.getUniqueId(), watcher.getName())
                 .to(owner, nameOf(owner, ownerName))
-                .saying(level.saying() + (live ? ", online" : ", from their save file"))
+                .saying(level.saying(messages) + (live ? ", online" : ", from their save file"))
                 .with("access", level.name())
                 .with("source", live ? "live" : "playerdata"));
         answer.accept(Outcome.OPENED);
@@ -265,6 +289,7 @@ public final class Inventories {
                 // not now the owner's has to go back to them. Without this, "the change was not
                 // written" quietly means "the items are gone".
                 window.giveBackAdditions();
+                told(watcher, say("invsee.not-saved"));
                 told(watcher, Component.text("Their inventory was not saved — nothing was changed, "
                                 + "and what you added is back with you.")
                         .color(NamedTextColor.RED));
@@ -307,17 +332,23 @@ public final class Inventories {
         watchers.stream()
                 .filter(watcher -> editor.filter(watcher::equals).isEmpty())
                 .forEach(watcher -> told(watcher,
-                        Component.text("They just logged in — the window was showing their saved "
-                                + "file, which is no longer where their things are. Open it again "
-                                + "to see them live.").color(NamedTextColor.GRAY)));
+                        say("invsee.owner-returned-watcher")));
         return editor;
     }
 
     private void tell(UUID moderator, UUID owner) {
-        told(moderator, Component.text(nameOf(owner, null) + " logged in before you closed the "
-                        + "window, so your changes were not saved — their file is untouched. "
-                        + "Open their inventory again to change it live.")
-                .color(NamedTextColor.GOLD));
+        told(moderator, say("invsee.owner-returned", "who", nameOf(owner, null)));
+    }
+
+    /**
+     * One message, in this server's words.
+     *
+     * <p>Falls back to a bare sentence when no message file has been handed over, because a moderator
+     * whose change was dropped has to be told <em>something</em> — "the wording is missing" is not it.
+     */
+    private Component say(String key, Object... values) {
+        Messages words = messages;
+        return words == null ? Component.text(key) : words.prefixed(key, values);
     }
 
     private void told(UUID who, Component message) {
@@ -335,6 +366,16 @@ public final class Inventories {
     /** Tells this where to write down what moderators do. */
     public void audit(Audit audit) {
         this.audit = audit;
+    }
+
+    /** Tells this where the wording comes from. */
+    public void messages(Messages messages) {
+        this.messages = messages;
+    }
+
+    /** The wording, for a caller that wants to say an outcome itself. */
+    public Messages messages() {
+        return messages;
     }
 
     /** Writes an entry, if there is a journal to write it to. */

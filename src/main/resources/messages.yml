@@ -1,0 +1,163 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Rain's Core — every word a player sees.
+#
+#  Edit any line here and that line is what players get. A line you delete, or
+#  a key a newer version added and this file has not got, falls back to the
+#  wording built into the jar — so an old file never blanks out a message, it
+#  just stops customising it.
+#
+#  Your edits are never overwritten. This file is written once, on the first
+#  start, and left alone from then on.
+#
+#  FORMATTING is MiniMessage: <red>text</red>, <bold>, <gradient:gold:yellow>.
+#  See https://docs.advntr.dev/minimessage/format.html
+#
+#  PLACEHOLDERS are the <angled> names in each line. They are filled in with
+#  real values, and anything a player typed — a name, a reason, a home's title
+#  — is inserted as plain text. A player called <rainbow> cannot recolour your
+#  messages. Placeholders you delete simply do not appear; ones you invent are
+#  left as they are, which is usually a typo in the name.
+#
+#  A COLOUR NAME WITH A TYPO in it will not break anything: the message still
+#  arrives, without its markup, and the mistake is written to the log. The
+#  times these messages matter most are the times somebody is being refused.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In front of most messages Core sends. Set it to "" for no prefix at all.
+prefix: "<gray>[<aqua>Core<gray>] "
+
+# ─────────────────────────────────────────── punishments: what a player is told
+punishment:
+
+  # The full screen a banned player sees instead of joining. \n is a new line.
+  banned:
+    heading: "<red><bold>You are banned from this server.</bold>"
+    # <reason> is what the moderator typed.
+    reason: "<gray><reason>"
+    permanent: "<dark_gray>This ban does not expire."
+    # <time> reads like "2 days, 4 hours".
+    temporary: "<dark_gray>Time left: <time>"
+
+  # One line in chat when a muted player tries to talk.
+  # <reason> is the moderator's; <time> only appears in the temporary version.
+  muted: "<red>You are muted: <gray><reason>"
+  muted-temporary: "<red>You are muted: <gray><reason> <dark_gray>(<time> left)"
+
+  # And when a frozen player tries to build.
+  frozen: "<red>You cannot build right now: <gray><reason>"
+  frozen-temporary: "<red>You cannot build right now: <gray><reason> <dark_gray>(<time> left)"
+
+  # Shown under the ban reason, if the owner set an appeal address in the
+  # settings. Left out entirely when they have not.
+  appeal: "<gray><message>"
+
+  # How a length is written out. <count> is the number.
+  length:
+    forever: "for ever"
+    days: "<count> days"
+    hours: "<count> hours"
+    minutes: "<count> minutes"
+    seconds: "<count> seconds"
+
+# ────────────────────────────────────────────────────── clickable chat buttons
+button:
+  not-yours: "<red>That is not your button."
+  already-answered: "<yellow>You have already answered that."
+  no-longer-offered: "<yellow>That is no longer on offer."
+  failed: "<red>That did not work. The server has written down why."
+  not-a-player: "<red>Only a player can click a button."
+  not-typed: "<yellow>That is not something to type."
+
+# ─────────────────────────────────────────────────────────── the settings menu
+settings:
+  # <name> is the setting, <value> what it became.
+  changed: "<green><name> is now <value>."
+  refused: "<red><value> is not something <name> can be."
+  finish-first: "<gray>Finish what you were asked first."
+  gone: "<gray>That setting is not there any more."
+
+# ─────────────────────────────────────── looking inside somebody's inventory
+invsee:
+  # What a moderator is told when opening one does not work.
+  opened: "<gray>Looking inside <who>."
+  yourself: "<gray>Your own inventory is a key rather than a menu."
+  being-edited: "<yellow>Somebody else is editing that inventory."
+  never-seen: "<red>This server has never seen that player."
+  unreadable: "<red>Their inventory could not be read — the log says why."
+  not-allowed: "<red>You may not do that."
+
+  # When an offline edit could not be saved. Nothing was changed either way.
+  not-saved: "<red>Their inventory was not saved — nothing was changed, and what you added is back with you."
+  # When its owner logged in before the window was closed. The player wins.
+  owner-returned: "<gold><who> logged in before you closed the window, so your changes were not saved — their file is untouched. Open their inventory again to change it live."
+  # Said to anybody else who was watching when that happened.
+  owner-returned-watcher: "<gray>They just logged in — the window was showing their saved file, which is no longer where their things are. Open it again to see them live."
+
+  # The window's own title: <who> is whose inventory, <access> what you may do.
+  title: "<who> — <access>"
+
+  # What a watcher is allowed to do, as it appears in the title.
+  access:
+    read-only: "Looking"
+    edit: "Editing"
+    edit-everything: "Editing everything"
+
+  # The parts of an inventory, as the window labels them.
+  section:
+    hotbar: "Hotbar"
+    storage: "Backpack"
+    armour: "Worn"
+    off-hand: "Off Hand"
+    ender-chest: "Ender Chest"
+
+  # Armour, named from the head down.
+  armour:
+    helmet: "Helmet"
+    chestplate: "Chestplate"
+    leggings: "Leggings"
+    boots: "Boots"
+    other: "Worn"
+
+  # The two buttons on the window.
+  ender-chest-button:
+    name: "Ender Chest"
+    # <used> of <total> slots have something in them.
+    lore: "Their ender chest — <used> of <total> used"
+    hint: "Click to look inside"
+  back-button:
+    name: "Back"
+    lore: "What <who> is carrying"
+    hint: "Click to go back"
+
+# ──────────────────────────────────────────────────────── menus, everywhere
+menu:
+  back: "<gray>Back"
+  back-to: "<gray>Back to <where>"
+  home: "<gray>Main menu"
+  close: "<gray>Close"
+  help: "<aqua>What is this?"
+  # A button somebody may not use is shown greyed with the reason.
+  locked: "<dark_gray><reason>"
+  previous-page: "<gray>Previous page"
+  next-page: "<gray>Next page"
+  # <page> of <pages>.
+  page-of: "<dark_gray>Page <page> of <pages>"
+  previous-menu: "the previous menu"
+
+# ─────────────────────────────────────────────────────────────── the tablist
+tablist:
+  nobody-on: "<dark_gray>nobody is on"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Nothing else here on purpose.
+#
+#  Core is a library: warps, votes, resource packs and achievements are things
+#  it *manages*, not things it talks about. The sentences a player reads about
+#  their own warp come from whichever plugin owns the command — and that plugin
+#  registers its own wording, either in its own messages.yml or through
+#  RainsCore.messages().define(...).
+#
+#  An earlier draft of this file had keys for all of them. They were removed:
+#  a message file listing lines that never appear is worse than a short one,
+#  because somebody translates them and then wonders why nothing changed.
+# ─────────────────────────────────────────────────────────────────────────────

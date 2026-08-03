@@ -4,6 +4,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.moderation.audit.Audit;
 import de.raindancer.core.moderation.audit.AuditEntry;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.platform.util.Scheduling;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -73,6 +74,8 @@ public final class InventoryWindow implements InventoryHolder {
     private boolean painting;
     /** Where each change is written down. Null when this server keeps no record. */
     private Audit audit;
+    /** Where the wording comes from. Null on a server with no message file. */
+    private Messages words;
 
     public InventoryWindow(Plugin plugin, Player watcher, UUID owner, String ownerName,
                            Access access, boolean live, InventorySource source,
@@ -99,6 +102,9 @@ public final class InventoryWindow implements InventoryHolder {
     }
 
     private Component title() {
+        if (words != null) {
+            return words.get("invsee.title", "who", ownerName, "access", access.saying(words));
+        }
         return Component.text(ownerName + " — " + access.saying())
                 .color(access.canEdit() ? NamedTextColor.GOLD : NamedTextColor.GRAY)
                 .decoration(TextDecoration.ITALIC, false);
@@ -112,6 +118,11 @@ public final class InventoryWindow implements InventoryHolder {
     /** Tells this where to write down what the moderator changes. */
     public void audit(Audit audit) {
         this.audit = audit;
+    }
+
+    /** Tells this where its wording comes from. */
+    public void messages(Messages words) {
+        this.words = words;
     }
 
     public UUID owner() {
@@ -207,9 +218,13 @@ public final class InventoryWindow implements InventoryHolder {
         // pane. A label there would be indistinguishable from a moderator putting a pane in that
         // slot, and telling those two apart by looking at the item is a guess — one that eats a
         // real item the first time somebody equips somebody with stained glass.
-        window.setItem(Layout.ENDER_CHEST, button(Material.ENDER_CHEST, "Ender Chest",
-                "Their ender chest — " + carried.countIn(Section.ENDER_CHEST) + " of 27 used",
-                "Click to look inside"));
+        window.setItem(Layout.ENDER_CHEST, button(Material.ENDER_CHEST,
+                say("invsee.ender-chest-button.name", "Ender Chest"),
+                say("invsee.ender-chest-button.lore",
+                        "Their ender chest — " + carried.countIn(Section.ENDER_CHEST) + " of 27 used",
+                        "used", carried.countIn(Section.ENDER_CHEST),
+                        "total", Section.ENDER_CHEST.size()),
+                say("invsee.ender-chest-button.hint", "Click to look inside")));
     }
 
     private void paintEnderChest(Inventory window) {
@@ -219,10 +234,28 @@ public final class InventoryWindow implements InventoryHolder {
         for (int slot = Section.ENDER_CHEST.size(); slot < Layout.SIZE; slot++) {
             window.setItem(slot, divider());
         }
-        window.setItem(Layout.ARMOUR_FIRST, button(Material.CHEST, "Back",
-                "What " + ownerName + " is carrying", "Click to go back"));
-        window.setItem(Layout.ENDER_CHEST, button(Material.ENDER_CHEST, "Ender Chest",
-                "This is what you are looking at", ""));
+        window.setItem(Layout.ARMOUR_FIRST, button(Material.CHEST,
+                say("invsee.back-button.name", "Back"),
+                say("invsee.back-button.lore", "What " + ownerName + " is carrying",
+                        "who", ownerName),
+                say("invsee.back-button.hint", "Click to go back")));
+        window.setItem(Layout.ENDER_CHEST, button(Material.ENDER_CHEST,
+                say("invsee.section.ender-chest", "Ender Chest"), ""));
+    }
+
+    /**
+     * One line of text, in this server's words or in the built-in ones.
+     *
+     * <p>Plain text rather than a component, because these are an item's name and lore and the caller
+     * turns them into components with its own colours. A message file that puts markup in them would
+     * therefore be shown literally, which is why these keys are worded without any.
+     */
+    private String say(String key, String builtIn, Object... values) {
+        if (words == null) {
+            return builtIn;
+        }
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(words.get(key, values));
     }
 
     private static ItemStack divider() {

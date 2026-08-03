@@ -132,6 +132,169 @@ class MessagesTest {
 
     // ------------------------------------------------------------------ filling in
 
+    /**
+     * What a plugin may say about a message, and who wins when they disagree.
+     *
+     * <h2>Four layers, and why that many</h2>
+     * <ol>
+     *   <li><b>Bundled</b> — the {@code messages.yml} inside the jar. The floor: nothing is ever
+     *       missing.</li>
+     *   <li><b>{@link Messages#define}</b> — a default a plugin supplies in code, for a message it
+     *       invented after its file shipped or that it builds at runtime.</li>
+     *   <li><b>The owner's file</b> — beats both of those. Somebody who edits a line in
+     *       {@code messages.yml} has to get that line, or the file is decoration.</li>
+     *   <li><b>{@link Messages#force}</b> — beats even the file. For the few texts that must not be
+     *       freely editable, and for switching a text at runtime.</li>
+     * </ol>
+     *
+     * <p>Two calls rather than one with a flag, so the difference is visible where it is used rather
+     * than in the documentation of the thing being used.
+     */
+    @Nested
+    @DisplayName("what a plugin can override")
+    class Overriding {
+
+        @Test
+        @DisplayName("a plugin default is used when neither the jar nor the file has the key")
+        void defineFillsAGap() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.define("invented-later", "<gray>Something new.");
+
+            assertThat(plain(messages.get("invented-later"))).isEqualTo("Something new.");
+            assertThat(messages.has("invented-later")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a plugin default does not replace what the jar shipped")
+        void defineDoesNotBeatTheJar() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.define("not-yours", "<red>Something else entirely.");
+
+            assertThat(plain(messages.get("not-yours")))
+                    .as("the bundled file is the plugin's own considered wording; a define is for a "
+                            + "key that is not in it")
+                    .isEqualTo("That is not your claim.");
+        }
+
+        @Test
+        @DisplayName("the owner's file beats a plugin default")
+        void theFileBeatsDefine() throws Exception {
+            Files.writeString(directory.resolve("messages.yml"),
+                    "invented-later: \"<green>My own wording.\"\n");
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.define("invented-later", "<gray>The plugin's suggestion.");
+
+            assertThat(plain(messages.get("invented-later")))
+                    .as("somebody who edits a line has to get that line, or the file is decoration")
+                    .isEqualTo("My own wording.");
+        }
+
+        @Test
+        @DisplayName("a forced message beats the owner's file")
+        void forceBeatsTheFile() throws Exception {
+            Files.writeString(directory.resolve("messages.yml"),
+                    "claimed: \"<green>Their own wording.\"\n");
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.force("claimed", "<red>The plugin insists.");
+
+            assertThat(plain(messages.get("claimed"))).isEqualTo("The plugin insists.");
+        }
+
+        @Test
+        @DisplayName("a forced message can be taken back, and the file comes through again")
+        void forceCanBeUndone() throws Exception {
+            Files.writeString(directory.resolve("messages.yml"),
+                    "claimed: \"<green>Their own wording.\"\n");
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+            messages.force("claimed", "<red>The plugin insists.");
+
+            assertThat(messages.release("claimed")).isTrue();
+
+            assertThat(plain(messages.get("claimed"))).isEqualTo("Their own wording.");
+            assertThat(messages.release("claimed"))
+                    .as("releasing something nobody forced is nothing, not an error")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("overrides survive the file being read again")
+        void overridesSurviveAReload() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+            messages.define("invented-later", "<gray>Something new.");
+            messages.force("claimed", "<red>The plugin insists.");
+
+            // A reload is what happens when somebody edits the file and runs /reload. A plugin's
+            // overrides are not in that file and must not be lost with it — the plugin is not going
+            // to be asked to register them again.
+            messages.load(bundled(DEFAULTS));
+
+            assertThat(plain(messages.get("invented-later"))).isEqualTo("Something new.");
+            assertThat(plain(messages.get("claimed"))).isEqualTo("The plugin insists.");
+        }
+
+        @Test
+        @DisplayName("placeholders and escaping work the same in an override")
+        void overridesGetTheSameTreatment() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+            messages.define("greeting", "<gray>Hello, <who>.");
+
+            assertThat(plain(messages.get("greeting", "who", "<rainbow>Steve")))
+                    .as("a name a player chose is text, in an override as much as in the file")
+                    .isEqualTo("Hello, <rainbow>Steve.");
+        }
+
+        @Test
+        @DisplayName("several lines work in an override too")
+        void overridesCanBeSeveralLines() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.define("help", java.util.List.of("<gray>One.", "<gray>Two."));
+
+            assertThat(messages.lines("help")).hasSize(2);
+            assertThat(plain(messages.lines("help").get(1))).isEqualTo("Two.");
+        }
+
+        @Test
+        @DisplayName("nothing is overridden for nothing")
+        void nulls() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            assertThat(messages.define(null, "x")).isFalse();
+            assertThat(messages.define("  ", "x")).isFalse();
+            assertThat(messages.define("key", null)).isFalse();
+            assertThat(messages.force(null, "x")).isFalse();
+            assertThat(messages.force("key", null)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a plugin default is reported as coming from the plugin, not the file")
+        void definedKeysAreNotReportedAsMissing() {
+            Messages messages = messages();
+            messages.load(bundled(DEFAULTS));
+
+            messages.define("invented-later", "<gray>Something new.");
+
+            assertThat(messages.missingFromFile())
+                    .as("a key a plugin supplied in code is not something the owner forgot to "
+                            + "translate, and listing it as missing sends them looking for it")
+                    .doesNotContain("invented-later");
+            assertThat(messages.keys()).contains("invented-later");
+        }
+    }
+
     @Nested
     @DisplayName("filling in the blanks")
     class Placeholders {

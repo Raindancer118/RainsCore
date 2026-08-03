@@ -1,6 +1,7 @@
 package de.raindancer.core.ui.chat;
 
 import de.raindancer.core.RainsCore;
+import de.raindancer.core.ui.messages.Messages;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
@@ -27,13 +28,16 @@ public final class ClickCommand implements BasicCommand {
         }
         RainsCore core = RainsCore.get();
         Chat chat = core.chatFor("Core");
+        // The wording comes from messages.yml and the delivery from Chat: one of them owns what is
+        // said, the other how it arrives, and neither has an opinion about the other's half.
+        Messages words = core.messages();
         if (!(sender instanceof Player clicker)) {
-            chat.no(sender, "Only a player can click a button.");
+            chat.raw(sender, words.prefixed("button.not-a-player"));
             return;
         }
         if (args.length != 1) {
             // Somebody typed it by hand. There is nothing useful to offer them.
-            chat.warn(clicker, "That is not something to type.");
+            chat.raw(clicker, words.prefixed("button.not-typed"));
             return;
         }
         ClickResult result = core.clickActions().run(clicker.getUniqueId(), args[0]);
@@ -41,10 +45,10 @@ public final class ClickCommand implements BasicCommand {
             case RAN -> {
                 // The action said whatever needed saying.
             }
-            case NOT_YOURS -> chat.no(clicker, "That is not your button.");
-            case SPENT -> chat.warn(clicker, "You have already answered that.");
-            case EXPIRED, UNKNOWN -> chat.warn(clicker, "That is no longer on offer.");
-            case FAILED -> chat.no(clicker, "That did not work. The server has written down why.");
+            case NOT_YOURS -> chat.raw(clicker, words.prefixed("button.not-yours"));
+            case SPENT -> chat.raw(clicker, words.prefixed("button.already-answered"));
+            case EXPIRED, UNKNOWN -> chat.raw(clicker, words.prefixed("button.no-longer-offered"));
+            case FAILED -> chat.raw(clicker, words.prefixed("button.failed"));
         }
     }
 

@@ -27,6 +27,7 @@ import de.raindancer.core.world.chunk.ChunkHolds;
 import de.raindancer.core.ui.effect.Effects;
 import de.raindancer.core.data.sql.Databases;
 import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.moderation.invsee.Inventories;
 import de.raindancer.core.moderation.invsee.InventoryViews;
 import de.raindancer.core.moderation.players.PlayerAdmin;
@@ -291,6 +292,20 @@ public interface RainsCore {
      * click handler without thinking about it. Searching does touch the disk, and belongs off the
      * server's threads.
      */
+    /**
+     * Every word this server says to a player, in a file somebody can edit.
+     *
+     * <p>Four layers, lowest first: a default a plugin supplied in code, the wording built into the
+     * jar, the owner's {@code messages.yml}, and — above even that — anything a plugin insists on.
+     * The ordering is the design: the owner's file beats both defaults, because somebody who edits a
+     * line has to get that line or the file is decoration; and a plugin can still override outright
+     * for the few texts that must not be freely editable.
+     *
+     * <p>A plugin adding its own messages calls {@code define}. A plugin replacing one of Core's
+     * calls {@code force}, and should expect to explain why.
+     */
+    Messages messages();
+
     Audit audit();
 
     /**

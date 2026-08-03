@@ -2,6 +2,7 @@ package de.raindancer.core.data.settings;
 
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.ui.menu.Icons;
 import de.raindancer.core.ui.menu.Menu;
 import de.raindancer.core.ui.menu.MenuLayout;
@@ -32,6 +33,17 @@ public final class SettingsMenu extends Menu {
 
     private final SettingsNavigation navigation;
     private final Chat chat;
+
+    /**
+     * Where the wording comes from.
+     *
+     * <p>Asked for rather than held, because this menu is built long before the plugin has finished
+     * starting and holding a reference taken then would be a reference to nothing.
+     */
+    private static Messages words() {
+        return de.raindancer.core.RainsCore.get().messages();
+    }
+
     private final String path;
     private final SettingsPage page;
 
@@ -138,10 +150,10 @@ public final class SettingsMenu extends Menu {
                 if (!SettingsChatInput.expect(viewer, setting.key(), path)) {
                     // Somebody else is already asking them something. Saying so beats quietly
                     // taking over the answer they were about to give to another plugin.
-                    chat.warn(viewer, "<gray>Finish what you were asked first.");
+                    chat.raw(viewer, words().prefixed("settings.finish-first"));
                 }
             }
-            case UNKNOWN -> chat.no(viewer, "<gray>That setting is not there any more.");
+            case UNKNOWN -> chat.raw(viewer, words().prefixed("settings.gone"));
         }
     }
 

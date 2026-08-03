@@ -2,6 +2,7 @@ package de.raindancer.core.data.settings;
 
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.ui.prompt.ChatPrompts;
 import org.bukkit.entity.Player;
@@ -80,12 +81,12 @@ public final class SettingsChatInput {
     private void apply(Player player, Waiting waiting, String typed) {
         if (navigation.registry().set(waiting.key(), typed)) {
             navigation.registry().saveAll();
-            chat.ok(player, "<name> is now <value>.",
+            chat.ok(player, words().raw("settings.changed"),
                     Chat.arg("name", waiting.key()),
                     Chat.arg("value", navigation.registry().display(waiting.key())));
         } else {
             // Refused rather than clamped, and told why: whoever typed this is standing there.
-            chat.no(player, "<value> is not something <name> can be.",
+            chat.no(player, words().raw("settings.refused"),
                     Chat.arg("value", typed),
                     Chat.arg("name", waiting.key()));
             navigation.registry().setting(waiting.key()).ifPresent(setting -> {
@@ -103,6 +104,17 @@ public final class SettingsChatInput {
 
     private void reopen(Player player, Waiting waiting) {
         new SettingsMenu(player, brand, chat, navigation, waiting.returnTo(), null).open();
+    }
+
+
+    /**
+     * Where the wording comes from.
+     *
+     * <p>Asked for each time rather than held, because this is built while the plugin is still
+     * starting and the message file may be read again afterwards.
+     */
+    private static de.raindancer.core.ui.messages.Messages words() {
+        return de.raindancer.core.RainsCore.get().messages();
     }
 
 }

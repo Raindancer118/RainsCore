@@ -17,31 +17,43 @@ package de.raindancer.core.moderation.invsee;
 public enum Section {
 
     /** The nine slots they can hold. What somebody is about to use. */
-    HOTBAR("Hotbar", "GOLDEN_SWORD", 9),
+    HOTBAR("invsee.section.hotbar", "Hotbar", "GOLDEN_SWORD", 9),
 
     /** The twenty-seven above it — the backpack. */
-    STORAGE("Backpack", "CHEST", 27),
+    STORAGE("invsee.section.storage", "Backpack", "CHEST", 27),
 
     /** Helmet, chestplate, leggings, boots. */
-    ARMOUR("Worn", "IRON_CHESTPLATE", 4),
+    ARMOUR("invsee.section.armour", "Worn", "IRON_CHESTPLATE", 4),
 
     /** The one in the other hand. */
-    OFF_HAND("Off Hand", "SHIELD", 1),
+    OFF_HAND("invsee.section.off-hand", "Off Hand", "SHIELD", 1),
 
     /** The ender chest, which is not in the inventory at all and is usually forgotten. */
-    ENDER_CHEST("Ender Chest", "ENDER_CHEST", 27);
+    ENDER_CHEST("invsee.section.ender-chest", "Ender Chest", "ENDER_CHEST", 27);
 
+    private final String key;
     private final String title;
     private final String icon;
     private final int size;
 
-    Section(String title, String icon, int size) {
+    Section(String key, String title, String icon, int size) {
+        this.key = key;
         this.title = title;
         this.icon = icon;
         this.size = size;
     }
 
-    /** What to write above it. */
+    /** Which line of the message file names this part. */
+    public String key() {
+        return key;
+    }
+
+    /** What to write above it, in whatever words this server uses. */
+    public String title(de.raindancer.core.ui.messages.Messages words) {
+        return words == null ? title : words.raw(key);
+    }
+
+    /** The built-in name, for a caller with no message file. */
     public String title() {
         return title;
     }

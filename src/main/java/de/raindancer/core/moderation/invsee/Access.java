@@ -10,22 +10,35 @@ package de.raindancer.core.moderation.invsee;
 public enum Access {
 
     /** Look, and nothing else. */
-    READ_ONLY("Looking"),
+    READ_ONLY("invsee.access.read-only", "Looking"),
 
     /** Change what they are carrying, but not what they are wearing. */
-    EDIT("Editing"),
+    EDIT("invsee.access.edit", "Editing"),
 
     /** Change everything, armour and off-hand included. */
-    EDIT_EVERYTHING("Editing everything");
+    EDIT_EVERYTHING("invsee.access.edit-everything", "Editing everything");
 
-    private final String saying;
+    private final String key;
+    private final String builtIn;
 
-    Access(String saying) {
-        this.saying = saying;
+    Access(String key, String builtIn) {
+        this.key = key;
+        this.builtIn = builtIn;
     }
 
+    /** Which line of the message file names this level. */
+    public String key() {
+        return key;
+    }
+
+    /** What to call this level, in whatever words this server uses. */
+    public String saying(de.raindancer.core.ui.messages.Messages words) {
+        return words == null ? builtIn : words.raw(key);
+    }
+
+    /** The built-in name, for a caller with no message file. */
     public String saying() {
-        return saying;
+        return builtIn;
     }
 
     public boolean canEdit() {

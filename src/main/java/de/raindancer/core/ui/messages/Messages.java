@@ -55,10 +55,31 @@ public final class Messages {
 
     private final Path file;
 
-    /** What the owner wrote. Everything they did not write falls through to the defaults. */
+    /**
+     * The four places a message can come from, in the order they beat each other.
+     *
+     * <p>Bottom to top: what the jar shipped, what a plugin supplied in code, what the owner wrote,
+     * and what a plugin insists on. The middle two are the ones this class gained later, and the
+     * ordering between them is the whole design:
+     *
+     * <ul>
+     *   <li>A <b>{@link #define}</b> is a <em>default</em>, and the lowest layer of the four: it fills
+     *       a key nobody else has. Both the jar and the owner's file beat it — the jar because its
+     *       lines are what an owner reads to learn what they may change, and the file because
+     *       somebody who edits a line has to get that line or the file is decoration.</li>
+     *   <li>A <b>{@link #force}</b> beats the file. For the few texts that must not be freely
+     *       editable, and for switching wording at runtime. Rare on purpose: every use of it is a
+     *       line in the owner's file that silently does nothing.</li>
+     * </ul>
+     */
+    /** What the owner wrote. Beats the jar and anything a plugin merely suggested. */
     private volatile Map<String, Object> theirs = Map.of();
-    /** What the plugin shipped. The floor: nothing is ever missing from here. */
+    /** What the plugin shipped in its jar. The floor: nothing is ever missing from here. */
     private volatile Map<String, Object> shipped = Map.of();
+    /** Defaults a plugin supplied in code. Below the owner's file. */
+    private final Map<String, Object> defined = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Wording a plugin insists on. Above everything. */
+    private final Map<String, Object> forced = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final List<String> problems = new CopyOnWriteArrayList<>();
     private final List<String> missing = new CopyOnWriteArrayList<>();
@@ -118,6 +139,7 @@ public final class Messages {
                 missing.add(key);
             }
         }
+
         if (!missing.isEmpty() && !theirs.isEmpty()) {
             log.info("{} is missing {} message(s) that this version added; the built-in wording is "
                     + "used for those.", file == null ? "messages.yml" : file.getFileName(),
@@ -161,9 +183,7 @@ public final class Messages {
      * least says which one is missing.
      */
     public String raw(String key) {
-        Object mine = theirs.get(key);
-        Object theirsShipped = shipped.get(key);
-        Object found = mine != null ? mine : theirsShipped;
+        Object found = lookUp(key);
         if (found == null) {
             String problem = "no message is defined for '" + key + "'";
             if (!problems.contains(problem)) {
@@ -186,14 +206,13 @@ public final class Messages {
 
     /** The same, with the prefix in front. */
     public Component prefixed(String key, Object... values) {
-        String prefix = theirs.containsKey(PREFIX_KEY) || shipped.containsKey(PREFIX_KEY)
-                ? raw(PREFIX_KEY) : "";
+        String prefix = has(PREFIX_KEY) ? raw(PREFIX_KEY) : "";
         return render(prefix + fill(raw(key), values));
     }
 
     /** A message that is several lines — a help page, a description. */
     public List<Component> lines(String key, Object... values) {
-        Object found = theirs.containsKey(key) ? theirs.get(key) : shipped.get(key);
+        Object found = lookUp(key);
         if (!(found instanceof List<?> list)) {
             return List.of(get(key, values));
         }
@@ -204,9 +223,99 @@ public final class Messages {
         return rendered;
     }
 
+    /**
+     * The winner among the four layers, or null when nobody has this key.
+     *
+     * <p>One method, so every way of reading a message agrees about precedence. The first version of
+     * the override API had {@code raw} and {@code lines} each work it out, and they disagreed about
+     * whether a forced value beat the file.
+     */
+    private Object lookUp(String key) {
+        Object insisted = forced.get(key);
+        if (insisted != null) {
+            return insisted;
+        }
+        Object owner = theirs.get(key);
+        if (owner != null) {
+            return owner;
+        }
+        Object bundled = shipped.get(key);
+        // The bundled file last but one, above a define rather than below it. A define is a *floor*:
+        // it fills a key nobody else has. Letting it beat the jar would make every line in the
+        // shipped messages.yml a suggestion the code could silently ignore — and that file is the one
+        // an owner reads to find out what they may change.
+        return bundled != null ? bundled : defined.get(key);
+    }
+
     /** Whether a key is defined anywhere at all. */
     public boolean has(String key) {
-        return theirs.containsKey(key) || shipped.containsKey(key);
+        return lookUp(key) != null;
+    }
+
+    // ------------------------------------------------------------------ what a plugin can say
+
+    /**
+     * Supplies a default for one message.
+     *
+     * <p>Used below the owner's file: for a message this version invented, or one built at runtime.
+     * If the owner has written that key, theirs is what players see.
+     *
+     * @param value a string, or a {@link List} of them for something several lines long
+     * @return whether it was taken
+     */
+    public boolean define(String key, Object value) {
+        if (key == null || key.isBlank() || value == null) {
+            return false;
+        }
+        defined.put(key, value);
+        return true;
+    }
+
+    /** Supplies several at once — what a plugin registering its own set of messages wants. */
+    public int defineAll(Map<String, ?> values) {
+        if (values == null) {
+            return 0;
+        }
+        int taken = 0;
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            if (define(entry.getKey(), entry.getValue())) {
+                taken++;
+            }
+        }
+        return taken;
+    }
+
+    /**
+     * Insists on one message, over anything the owner wrote.
+     *
+     * <p>Rare on purpose. Every use is a line in somebody's {@code messages.yml} that silently does
+     * nothing, and an owner who cannot see why their edit is ignored will conclude the file is
+     * broken. Use {@link #define} unless the text genuinely must not be editable.
+     *
+     * @return whether it was taken
+     */
+    public boolean force(String key, Object value) {
+        if (key == null || key.isBlank() || value == null) {
+            return false;
+        }
+        forced.put(key, value);
+        return true;
+    }
+
+    /**
+     * Stops insisting, so the owner's file comes through again.
+     *
+     * @return whether anything was being insisted on
+     */
+    public boolean release(String key) {
+        return key != null && forced.remove(key) != null;
+    }
+
+    /** Which keys a plugin is insisting on — for a page that explains why an edit does nothing. */
+    public List<String> forcedKeys() {
+        List<String> keys = new ArrayList<>(forced.keySet());
+        keys.sort(String::compareTo);
+        return keys;
     }
 
     /** Every key the owner's file does not have — for a line at startup, or a menu. */
@@ -221,10 +330,13 @@ public final class Messages {
 
     /** Every key there is, for tab completion or a settings page. */
     public List<String> keys() {
-        List<String> all = new ArrayList<>(shipped.keySet());
-        theirs.keySet().stream().filter(key -> !all.contains(key)).forEach(all::add);
-        all.sort(String::compareTo);
-        return all;
+        java.util.Set<String> all = new java.util.LinkedHashSet<>(shipped.keySet());
+        all.addAll(defined.keySet());
+        all.addAll(theirs.keySet());
+        all.addAll(forced.keySet());
+        List<String> sorted = new ArrayList<>(all);
+        sorted.sort(String::compareTo);
+        return sorted;
     }
 
     // ---------------------------------------------------------------------------- internals
