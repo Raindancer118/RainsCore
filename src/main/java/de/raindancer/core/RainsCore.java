@@ -17,6 +17,7 @@ import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
+import de.raindancer.core.tablist.Tablists;
 import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
@@ -137,6 +138,12 @@ public interface RainsCore {
      * click does — what {@code /settings} and the settings menu both walk.
      */
     SettingsNavigation settingsNavigation();
+
+    /**
+     * The tablist: who is on, grouped by which world they are in, with the prefixes and suffixes
+     * from {@link #identities()} — so a rank set once shows in chat, above the head and here.
+     */
+    Tablists tablists();
 
     /** Clickable chat buttons, already pointed at the command that runs their callbacks. */
     ChatButtons buttons();

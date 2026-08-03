@@ -30,6 +30,8 @@ import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsRegistry;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
+import de.raindancer.core.tablist.TablistModel;
+import de.raindancer.core.tablist.Tablists;
 import de.raindancer.core.util.Scheduling;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -66,6 +68,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     /** How often saved places are written out, if anything changed. */
     private static final long SAVE_PERIOD_TICKS = 20L * 60L * 2L;
 
+    /**
+     * How often the tablist is rebuilt.
+     *
+     * <p>Two seconds. A player's world changes on an event and their ping changes continuously, so
+     * an event-only tablist shows a stale latency for ever — but nothing here is urgent, and a
+     * tablist rebuilt every tick is packets nobody asked for.
+     */
+    private static final long TABLIST_PERIOD_TICKS = 40L;
+
     private static volatile RainsCorePlugin instance;
 
     private SettingsStore<CoreConfig> settings;
@@ -88,6 +99,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     /** The same, merged into one tree for the menu and the command. */
     private final SettingsRegistry registry = new SettingsRegistry();
     private SettingsNavigation navigation;
+    private Tablists tablists;
 
     static RainsCorePlugin instance() {
         return instance;
@@ -129,6 +141,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         achievements = new Achievements(getDataFolder().toPath().resolve("achievements.yml"),
                 System::currentTimeMillis);
         achievements.load();
+
+        tablists = new Tablists(new TablistModel(identities), getServer().getMotd());
         clickActions = new ClickActions(System::currentTimeMillis);
         // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
         // whatever else a server has installed, and a button that resolved to somebody else's
@@ -154,6 +168,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 task -> actionBars.tick());
         Scheduling.globalTimer(this, SWEEP_PERIOD_TICKS, SWEEP_PERIOD_TICKS,
                 task -> clickActions.sweep());
+        Scheduling.globalTimer(this, TABLIST_PERIOD_TICKS, TABLIST_PERIOD_TICKS,
+                task -> tablists.refresh());
         // Written on a timer rather than on every change: a disk write every time somebody sets a
         // home would be a disk write on the main thread, and isDirty() means an idle server writes
         // nothing at all.
@@ -205,6 +221,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (achievements != null) {
             achievements.flush();
+        }
+        if (tablists != null) {
+            // Before anything else: the teams it makes live on the main scoreboard, and one left
+            // behind survives a /reload with nothing holding it.
+            tablists.shutdown();
         }
         if (bossBars != null) {
             bossBars.shutdown();
@@ -329,6 +350,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Tablists tablists() {
+        return tablists;
+    }
+
+    @Override
     public SettingsNavigation settingsNavigation() {
         return navigation;
     }
@@ -381,6 +407,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         scoreboards.forget(player.getUniqueId());
         itemAbilities.forget(player.getUniqueId());
         bossBars.forget(player.getUniqueId());
+        tablists.forget(player);
     }
 
     /**

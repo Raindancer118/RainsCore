@@ -1,0 +1,188 @@
+package de.raindancer.core.tablist;
+
+import de.raindancer.core.log.Log;
+import de.raindancer.core.log.LogChannel;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * The tablist, as the players see it.
+ *
+ * <h2>What is here and what is not</h2>
+ * Only the sending. Every decision — the grouping, the ordering, what a world is called, what a line
+ * says — is {@link TablistModel}, tested without a server. This turns that into packets.
+ *
+ * <h2>How the ordering actually works</h2>
+ * Minecraft does not let a server say "put these players in this order". It sorts the tablist by the
+ * scoreboard team each player is in, alphabetically, and that is the only lever there is. So every
+ * player is put in a team named by {@link TablistModel#sortKey}, which sorts world-first — and the
+ * grouping falls out of the ordering rather than being drawn.
+ *
+ * <p>Teams are made on the main scoreboard, with names that start with {@code rc-}, and are cleaned
+ * up on shutdown. A server using teams for something else keeps working: nothing here touches a team
+ * it did not make.
+ *
+ * <h2>Why it is refreshed on a timer as well as on events</h2>
+ * A player's world changes on an event and their ping changes continuously, so an event-only tablist
+ * shows a stale latency for ever. The timer is slow — a couple of seconds — because nothing here is
+ * urgent and a tablist rebuilt every tick is packets nobody asked for.
+ */
+public final class Tablists {
+
+    private static final LogChannel log = Log.of("tablist");
+
+    /** Teams we made, so nothing else's are touched. */
+    private static final String TEAM_PREFIX = "rc-";
+
+    private final TablistModel model;
+    private volatile String serverName;
+    private volatile boolean showWorldOnEachLine;
+
+    public Tablists(TablistModel model, String serverName) {
+        this.model = model;
+        this.serverName = serverName;
+    }
+
+    public void serverName(String name) {
+        this.serverName = name;
+    }
+
+    /**
+     * Whether each line also says which world that player is in.
+     *
+     * <p>Off by default: the ordering already groups them, and saying it twice is noise. On for a
+     * server that would rather have it beside every name.
+     */
+    public void showWorldOnEachLine(boolean show) {
+        this.showWorldOnEachLine = show;
+    }
+
+    public TablistModel model() {
+        return model;
+    }
+
+    /** Rebuilds everybody's tablist. Called on a timer, and when somebody joins or changes world. */
+    public void refresh() {
+        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+        List<TablistEntry> entries = new ArrayList<>(online.size());
+        for (Player player : online) {
+            entries.add(new TablistEntry(player.getUniqueId(), player.getName(),
+                    player.getWorld().getName(), player.getPing()));
+        }
+
+        Component header = model.header(entries, serverName);
+        Component footer = model.footer(entries);
+
+        for (Player player : online) {
+            try {
+                player.sendPlayerListHeaderAndFooter(header, footer);
+            } catch (RuntimeException gone) {
+                // Logged out between the list and the send. Normal, not exceptional.
+                log.debug("Could not send {} their tablist: {}", player.getName(), gone.toString());
+            }
+        }
+
+        applyOrder(entries);
+
+        for (int index = 0; index < online.size(); index++) {
+            Player player = online.get(index);
+            TablistEntry entry = entries.get(index);
+            try {
+                player.playerListName(showWorldOnEachLine
+                        ? model.lineWithWorld(entry)
+                        : model.line(entry));
+            } catch (RuntimeException gone) {
+                log.debug("Could not name {} in the tablist: {}", player.getName(),
+                        gone.toString());
+            }
+        }
+    }
+
+    /**
+     * Puts each player in the team that sorts them where they belong.
+     *
+     * <p>Only touched when it has changed: moving a player between teams is a packet to everybody
+     * on the server, and doing it every couple of seconds for every player would be a steady trickle
+     * of traffic saying nothing.
+     */
+    private void applyOrder(List<TablistEntry> entries) {
+        Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+        for (TablistEntry entry : entries) {
+            String wanted = TEAM_PREFIX + model.sortKey(entry);
+            Player player = Bukkit.getPlayer(entry.player());
+            if (player == null) {
+                continue;
+            }
+            try {
+                Team current = board.getEntryTeam(player.getName());
+                if (current != null && current.getName().equals(wanted)) {
+                    continue;
+                }
+                if (current != null && current.getName().startsWith(TEAM_PREFIX)) {
+                    current.removeEntry(player.getName());
+                } else if (current != null) {
+                    // Somebody else's team. Leaving it alone is the only safe thing to do: taking a
+                    // player out of another plugin's team to sort a list would break whatever that
+                    // team was for.
+                    continue;
+                }
+                Team team = board.getTeam(wanted);
+                if (team == null) {
+                    team = board.registerNewTeam(wanted);
+                }
+                team.addEntry(player.getName());
+            } catch (RuntimeException failure) {
+                log.debug("Could not sort {} in the tablist: {}", entry.name(),
+                        failure.toString());
+            }
+        }
+    }
+
+    /** Removes the teams this class made. Called from {@code onDisable}. */
+    public void shutdown() {
+        try {
+            Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+            for (Team team : new ArrayList<>(board.getTeams())) {
+                if (team.getName().startsWith(TEAM_PREFIX)) {
+                    team.unregister();
+                }
+            }
+        } catch (RuntimeException failure) {
+            log.debug("Could not tidy up the tablist teams: {}", failure.toString());
+        }
+    }
+
+    /** Forgets a player who has left, so their team does not linger. */
+    public void forget(Player player) {
+        if (player == null) {
+            return;
+        }
+        try {
+            Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+            Team team = board.getEntryTeam(player.getName());
+            if (team != null && team.getName().startsWith(TEAM_PREFIX)) {
+                team.removeEntry(player.getName());
+                if (team.getEntries().isEmpty()) {
+                    team.unregister();
+                }
+            }
+        } catch (RuntimeException failure) {
+            log.debug("Could not take {} out of their tablist team: {}", player.getName(),
+                    failure.toString());
+        }
+    }
+
+    /** Whether two entries are the same player in the same place — for a cheap change check. */
+    static boolean sameSpot(TablistEntry one, TablistEntry other) {
+        return one != null && other != null
+                && Objects.equals(one.player(), other.player())
+                && Objects.equals(one.world(), other.world());
+    }
+}
