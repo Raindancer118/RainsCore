@@ -37,6 +37,26 @@ Recorded here rather than absorbed quietly. All three are 2026-08-03.
   regenerated on a schedule without touching the main ones, with the portal linking between them
   kept inside the set.
 
+### Resource packs belong in Core — and Core is the foundation for *everything*
+
+Asked for 2026-08-03: *"for the resource packs too, I want core to be the foundation for really
+EVERYTHING."*
+
+This is the same argument as the action bar, and a strong one. **A player can have exactly one
+resource pack applied.** If the claims module wants custom menu icons, the record seller wants
+custom discs and the ghast lines want custom sounds, they cannot each send their own — the last one
+to send wins and the others silently vanish. That is the shared-slot collision Core exists to
+arbitrate, and `RainsResourcepackManager` already solves it by *merging* packs rather than fighting
+over the slot.
+
+So `core.pack` should own: the merge (`PackMerger`, ~conflict detection included), the store of
+installed packs, the hashing, the little HTTP server that serves the merged pack, and applying it to
+a player. What stays in `RainsResourcepackManager` is its catalogue, its browser GUI and its
+download/install flow — the things that are a *product* rather than a shared capability.
+
+The general rule this settles, for everything after it: **if two plugins could want it at once, or
+if two plugins would each write their own, it belongs in Core.**
+
 ### Added after the plan was written
 
 **Spec point 11 — a settings API, and player identity** (asked for 2026-08-03, after work started):
