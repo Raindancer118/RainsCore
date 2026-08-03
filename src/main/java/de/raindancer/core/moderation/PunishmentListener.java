@@ -38,10 +38,16 @@ public final class PunishmentListener implements Listener {
      * A muted player's message never reaches anybody.
      *
      * <p>{@code ignoreCancelled} so a message another plugin has already stopped is not answered
-     * twice, and {@code LOWEST} so this decision is made before anything spends work formatting a
-     * message that is not going to be sent.
+     * twice, and early so this is decided before anything spends work formatting a message that is
+     * not going to be sent.
+     *
+     * <p>{@code LOW} rather than {@code LOWEST} on purpose, and the one tick lower matters:
+     * {@code PromptListener} sits at {@code LOWEST} and consumes lines that are answers to a
+     * question rather than chat. If this ran first a muted player could not answer a settings
+     * prompt or name a claim — and a mute means "you may not talk to people", not "you may not use
+     * the menus". A prompt answer never reaches anybody either way.
      */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
         guard.speakRefusal(event.getPlayer().getUniqueId()).ifPresent(reason -> {
             event.setCancelled(true);

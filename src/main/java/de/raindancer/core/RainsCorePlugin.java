@@ -28,6 +28,8 @@ import de.raindancer.core.platform.BukkitAudiences;
 import de.raindancer.core.platform.BukkitBarViewers;
 import de.raindancer.core.identity.Identities;
 import de.raindancer.core.poi.PoiStore;
+import de.raindancer.core.prompt.ChatPrompts;
+import de.raindancer.core.prompt.PromptListener;
 import de.raindancer.core.scoreboard.FastBoardFactory;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsChatInput;
@@ -117,6 +119,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private final SettingsRegistry registry = new SettingsRegistry();
     private SettingsNavigation navigation;
     private Tablists tablists;
+    private ChatPrompts prompts;
     private Warps warps;
     private FarmWorlds farmWorlds;
 
@@ -197,11 +200,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         buttons = new ChatButtons(clickActions, getName().toLowerCase(Locale.ROOT) + ":rcclick");
         chat = chatFor("Core");
         navigation = new SettingsNavigation(registry);
+        // One chat listener for every prompt on the server. Three plugins each registering their
+        // own is three plugins fighting over the next line a player types.
+        prompts = new ChatPrompts(System::currentTimeMillis);
+        getServer().getPluginManager().registerEvents(new PromptListener(prompts), this);
         // The commands are registered by RainsCoreBootstrap, before this runs. Paper fires the
         // COMMANDS lifecycle event during bootstrap, so a handler registered here would never fire
         // at all — silently, which is how both commands were dead until a live server was tried.
-        getServer().getPluginManager().registerEvents(
-                new SettingsChatInput(this, navigation, chat, chat.brand()), this);
+        new SettingsChatInput(this, navigation, chat, chat.brand(), prompts);
 
         getServer().getPluginManager().registerEvents(this, this);
         // One listener for every menu in every plugin: a menu is its inventory's holder, so this
@@ -211,7 +217,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         Scheduling.globalTimer(this, ACTION_BAR_PERIOD_TICKS, ACTION_BAR_PERIOD_TICKS,
                 task -> actionBars.tick());
         Scheduling.globalTimer(this, SWEEP_PERIOD_TICKS, SWEEP_PERIOD_TICKS,
-                task -> clickActions.sweep());
+                task -> {
+                    clickActions.sweep();
+                    prompts.sweep();
+                });
         Scheduling.globalTimer(this, TABLIST_PERIOD_TICKS, TABLIST_PERIOD_TICKS,
                 task -> tablists.refresh());
         // Written on a timer rather than on every change: a disk write every time somebody sets a
@@ -460,6 +469,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public FarmWorlds farmWorlds() {
         return farmWorlds;
+    }
+
+    @Override
+    public ChatPrompts prompts() {
+        return prompts;
     }
 
     @Override

@@ -130,7 +130,11 @@ public final class SettingsMenu extends Menu {
                 if (setting.min() != null) {
                     chat.row(viewer, "<dark_gray>  from " + setting.min() + " to " + setting.max());
                 }
-                SettingsChatInput.expect(viewer.getUniqueId(), setting.key(), path);
+                if (!SettingsChatInput.expect(viewer, setting.key(), path)) {
+                    // Somebody else is already asking them something. Saying so beats quietly
+                    // taking over the answer they were about to give to another plugin.
+                    chat.warn(viewer, "<gray>Finish what you were asked first.");
+                }
             }
             case UNKNOWN -> chat.no(viewer, "<gray>That setting is not there any more.");
         }

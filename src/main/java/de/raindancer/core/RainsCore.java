@@ -17,6 +17,7 @@ import de.raindancer.core.moderation.PunishmentGuard;
 import de.raindancer.core.moderation.Punishments;
 import de.raindancer.core.moderation.VanillaBanBridge;
 import de.raindancer.core.poi.PoiStore;
+import de.raindancer.core.prompt.ChatPrompts;
 import de.raindancer.core.scoreboard.Scoreboards;
 import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsSchema;
@@ -165,6 +166,15 @@ public interface RainsCore {
      * from {@link #identities()} — so a rank set once shows in chat, above the head and here.
      */
     Tablists tablists();
+
+    /**
+     * Asking a player to type something.
+     *
+     * <p>Use this rather than registering a chat listener: the next line a player types is a thing
+     * only one plugin can have, and three of them each claiming it is three plugins fighting over
+     * one answer.
+     */
+    ChatPrompts prompts();
 
     /**
      * Named places anybody can be sent to. Stored as {@link #places()} entries, so a ghast line can
