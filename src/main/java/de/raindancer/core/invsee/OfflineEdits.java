@@ -103,6 +103,13 @@ public final class OfflineEdits {
         // just as importantly, rather than releasing it on the way past, which is exactly the bug
         // InventoryViews had.
         Held holder = held.compute(owner, (key, existing) -> {
+            if (existing != null && existing.superseded()) {
+                // Their owner came back. Not takeable again by anybody, least of all by the
+                // moderator whose edit was just dropped: letting them re-take it here would undo
+                // the decision the login made, and the close that follows would write the file of
+                // a player the server has already loaded.
+                return existing;
+            }
             if (existing == null || hasExpired(existing, now)
                     || existing.moderator().equals(moderator)) {
                 return new Held(moderator, now, false);

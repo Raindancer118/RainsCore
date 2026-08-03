@@ -62,6 +62,8 @@ public final class InventoryWindow implements InventoryHolder {
 
     /** What the window is showing, and for an offline player what will be written. */
     private Carried<ItemStack> carried;
+    /** What was read out of the owner when the window opened — the line between theirs and added. */
+    private final Carried<ItemStack> asFound;
     /** The ender chest is a second page of the same window. */
     private boolean showingEnderChest;
     private Inventory inventory;
@@ -79,6 +81,7 @@ public final class InventoryWindow implements InventoryHolder {
         this.live = live;
         this.source = source;
         this.carried = carried;
+        this.asFound = carried;
     }
 
     // ------------------------------------------------------------------------------ opening
@@ -125,6 +128,42 @@ public final class InventoryWindow implements InventoryHolder {
     /** What the window now says they are carrying — what an offline write puts in the file. */
     public Carried<ItemStack> carried() {
         return carried;
+    }
+
+    /**
+     * Gives back whatever the moderator put into a window whose changes are not being written.
+     *
+     * <p>Closing a window destroys what is in it. That is fine when the change was written, because
+     * the item is now the owner's; it is item deletion when the change was dropped — an offline edit
+     * superseded by its owner logging in, or a write that failed. What they added has to come back
+     * to them.
+     *
+     * <p>What was already the owner's is not given away: only the difference between what the window
+     * holds now and what was read out of the owner in the first place.
+     *
+     * @return how many stacks were handed back
+     */
+    public int giveBackAdditions() {
+        int given = 0;
+        for (Section section : Section.values()) {
+            for (int within = 0; within < section.size(); within++) {
+                ItemStack now = carried.at(section, within);
+                if (now == null || now.equals(asFound.at(section, within))) {
+                    continue;
+                }
+                for (ItemStack over : watcher.getInventory().addItem(now.clone()).values()) {
+                    // Their inventory is full. On the floor where they are standing is still better
+                    // than gone.
+                    watcher.getWorld().dropItemNaturally(watcher.getLocation(), over);
+                }
+                given++;
+            }
+        }
+        if (given > 0) {
+            log.info("Gave {} stack(s) back to {}: their changes to {} were not written.",
+                    given, watcher.getName(), ownerName);
+        }
+        return given;
     }
 
     // ----------------------------------------------------------------------------- painting
@@ -218,6 +257,13 @@ public final class InventoryWindow implements InventoryHolder {
         if (painting) {
             return true;
         }
+        if (windowSlot < 0) {
+            // Outside the window entirely — dropping what is on the cursor. That item is the
+            // moderator's own: everything they could have picked up out of the window, they were
+            // allowed to pick up. Cancelling here would leave them unable to put down something
+            // they are holding, with a full inventory and no way out but to close the window.
+            return false;
+        }
         Optional<Layout.Placed> placed = placedAt(windowSlot);
         if (placed.isEmpty()) {
             // Chrome, a gap, or the divider. A click here means nothing and must do nothing rather
@@ -292,6 +338,7 @@ public final class InventoryWindow implements InventoryHolder {
             return;
         }
         int changed = 0;
+        boolean protectedSlotTouched = false;
         for (Section section : Section.values()) {
             if (showingEnderChest != (section == Section.ENDER_CHEST)) {
                 // Only the page being looked at can have changed.
@@ -305,12 +352,17 @@ public final class InventoryWindow implements InventoryHolder {
                     continue;
                 }
                 if (!access.mayChange(section)) {
-                    // Should not be reachable — the click was cancelled — so if it happens, the
-                    // window is put back rather than the change being taken.
-                    log.warn("A change reached a protected part ({}) of {}'s inventory and was "
-                            + "put back.", section, ownerName);
-                    paint();
-                    return;
+                    // Should not be reachable — every click on a protected slot is cancelled — but
+                    // the gestures that reach a slot without ever naming it (a double-click
+                    // gathering matching items from the top inventory, most of all) have a way of
+                    // finding the one that was not thought of. That slot is put back and the rest
+                    // of the loop carries on.
+                    //
+                    // Carrying on is the point. Abandoning the loop here would throw away every
+                    // change in a slot this had not looked at yet — a moderator's five legitimate
+                    // edits lost because the sixth touched the armour.
+                    protectedSlotTouched = true;
+                    continue;
                 }
                 carried = carried.with(section, within, shown);
                 changed++;
@@ -318,6 +370,11 @@ public final class InventoryWindow implements InventoryHolder {
                     source.set(owner, section, within, shown);
                 }
             }
+        }
+        if (protectedSlotTouched) {
+            log.warn("A change reached a protected part of {}'s inventory and was put back.",
+                    ownerName);
+            paint();
         }
         if (changed > 0) {
             log.debug("{} changed {} slot(s) of {}'s inventory.", watcher.getName(), changed,

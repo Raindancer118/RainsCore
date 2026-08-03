@@ -2,6 +2,7 @@ package de.raindancer.core.invsee;
 
 import de.raindancer.core.log.Log;
 import de.raindancer.core.log.LogChannel;
+import de.raindancer.core.util.Scheduling;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -112,33 +114,71 @@ public final class Inventories {
     /**
      * Opens a window onto somebody.
      *
+     * <p>Answered through a callback rather than returned, because reading a logged-out player
+     * means reading and un-gzipping a file, and doing that on the thread a command arrived on is a
+     * stall on the thread that is also running the world. Everything that can be decided without
+     * touching the disk is decided immediately; the rest happens off the server's threads and comes
+     * back on the moderator's own.
+     *
      * <p>The order of the two locks matters. The file is claimed <em>before</em> it is read, so that
      * a player joining at any point from here on is noticed and the edit yields to them rather than
      * being written over the top of a player the server has since loaded.
+     *
+     * @param then told what happened, always on the moderator's own thread
      */
-    public Outcome open(Player watcher, UUID owner, String ownerName, Access wanted) {
+    public void open(Player watcher, UUID owner, String ownerName, Access wanted,
+                     Consumer<Outcome> then) {
+        Consumer<Outcome> answer = then == null ? outcome -> { } : then;
         if (watcher == null || owner == null) {
-            return Outcome.NOT_ALLOWED;
+            answer.accept(Outcome.NOT_ALLOWED);
+            return;
         }
         if (watcher.getUniqueId().equals(owner)) {
-            return Outcome.YOURSELF;
+            answer.accept(Outcome.YOURSELF);
+            return;
         }
         Access level = wanted == null ? Access.READ_ONLY : wanted;
         boolean live = isOnline.test(owner);
-        if (!live && !saved.has(owner)) {
-            return Outcome.NEVER_SEEN;
+        if (live) {
+            // Nothing to read from disk: it is all in memory, and it has to be read on the thread
+            // that owns the player anyway.
+            finishOpening(watcher, owner, ownerName, level, true, online.read(owner), answer);
+            return;
         }
-        if (!live && level.canEdit() && !offlineEdits.begin(owner, watcher.getUniqueId())) {
-            return Outcome.BEING_EDITED;
+        if (!saved.has(owner)) {
+            answer.accept(Outcome.NEVER_SEEN);
+            return;
         }
-        Optional<Carried<ItemStack>> carried = sourceFor(owner).read(owner);
+        if (level.canEdit() && !offlineEdits.begin(owner, watcher.getUniqueId())) {
+            answer.accept(Outcome.BEING_EDITED);
+            return;
+        }
+        Scheduling.async(plugin, () -> {
+            Optional<Carried<ItemStack>> carried = saved.read(owner);
+            Scheduling.entity(plugin, watcher, () ->
+                    finishOpening(watcher, owner, ownerName, level, false, carried, answer));
+        });
+    }
+
+    /** The half that has to happen on the moderator's thread: opening the window. */
+    private void finishOpening(Player watcher, UUID owner, String ownerName, Access level,
+                               boolean live, Optional<Carried<ItemStack>> carried,
+                               Consumer<Outcome> answer) {
         if (carried.isEmpty()) {
             offlineEdits.finish(owner, watcher.getUniqueId());
-            return Outcome.UNREADABLE;
+            answer.accept(Outcome.UNREADABLE);
+            return;
+        }
+        if (!watcher.isOnline()) {
+            // They left while their file was being read. Nothing to open, and the hold has to go.
+            offlineEdits.finish(owner, watcher.getUniqueId());
+            answer.accept(Outcome.NOT_ALLOWED);
+            return;
         }
         if (!views.open(watcher.getUniqueId(), owner, level)) {
             offlineEdits.finish(owner, watcher.getUniqueId());
-            return Outcome.BEING_EDITED;
+            answer.accept(Outcome.BEING_EDITED);
+            return;
         }
         InventoryWindow window = new InventoryWindow(plugin, watcher, owner,
                 nameOf(owner, ownerName), level, live, sourceFor(owner), carried.get());
@@ -146,7 +186,7 @@ public final class Inventories {
         log.info("{} is {} the inventory of {} ({}).", watcher.getName(),
                 level.saying().toLowerCase(), nameOf(owner, ownerName),
                 live ? "online" : "from their save file");
-        return Outcome.OPENED;
+        answer.accept(Outcome.OPENED);
     }
 
     private String nameOf(UUID who, String given) {
@@ -168,33 +208,51 @@ public final class Inventories {
      *
      * @return whether everything that needed writing was written
      */
-    public boolean closed(InventoryWindow window) {
+    public void closed(InventoryWindow window) {
         if (window == null) {
-            return true;
+            return;
         }
         UUID watcher = window.watcher().getUniqueId();
-        boolean written = true;
-        if (!window.isLive() && window.access().canEdit()) {
-            // Asked and done in one step. The other thing that can happen at this instant is the
-            // owner logging in, and "check, then write" as two steps is a write that lands after
-            // the server has already read that file — thrown away at best.
-            written = offlineEdits.writeAndFinish(window.owner(), watcher,
-                    () -> saved.write(window.owner(), window.carried()));
-            if (!written) {
-                if (offlineEdits.isBeingEdited(window.owner())) {
-                    log.error("The changes {} made to {}'s saved inventory could not be written. "
-                            + "Nothing has been lost — the file is as it was — but the edit is "
-                            + "gone.", window.watcher().getName(), window.ownerName());
-                } else {
-                    log.info("{}'s changes to {} were dropped: the player came back before the "
-                            + "window closed. Their file is untouched.",
-                            window.watcher().getName(), window.ownerName());
-                }
-            }
-        }
         views.close(watcher);
-        offlineEdits.finish(window.owner(), watcher);
-        return written;
+        if (window.isLive() || !window.access().canEdit()) {
+            // Nothing to write: a live inventory was changed as it went, and a read-only window
+            // changed nothing at all.
+            offlineEdits.finish(window.owner(), watcher);
+            return;
+        }
+        if (!offlineEdits.isStillTheirs(window.owner(), watcher)
+                && !isOnline.test(window.owner())) {
+            // Their hold lapsed while the window sat open — a moderator who went to make tea. The
+            // hold exists to stop a second moderator, not to void the first one's work, and the
+            // owner is still away, so it is taken again rather than the edit being thrown out. If
+            // somebody else has it by now, this fails and the change is given back below.
+            offlineEdits.begin(window.owner(), watcher);
+        }
+        Carried<ItemStack> toWrite = window.carried();
+        Scheduling.async(plugin, () -> {
+            // Asked and done in one atomic step. The other thing that can happen at this instant is
+            // the owner logging in, and "check, then write" as two steps is a write that lands
+            // after the server has already read that file — thrown away at best. The file write is
+            // inside that step on purpose; it is a few kilobytes of gzip, and the alternative is a
+            // window in which a login can be missed.
+            boolean written = offlineEdits.writeAndFinish(window.owner(), watcher,
+                    () -> saved.write(window.owner(), toWrite));
+            if (written) {
+                return;
+            }
+            Scheduling.entity(plugin, window.watcher(), () -> {
+                // Closing a window destroys what is in it, so anything the moderator added that is
+                // not now the owner's has to go back to them. Without this, "the change was not
+                // written" quietly means "the items are gone".
+                window.giveBackAdditions();
+                told(watcher, Component.text("Their inventory was not saved — nothing was changed, "
+                                + "and what you added is back with you.")
+                        .color(NamedTextColor.RED));
+            });
+            log.info("{}'s changes to {} were not written. Their file is untouched and the items "
+                    + "are back with the moderator.", window.watcher().getName(),
+                    window.ownerName());
+        });
     }
 
     /** Says the moderator is still there, so an offline hold does not expire under them. */

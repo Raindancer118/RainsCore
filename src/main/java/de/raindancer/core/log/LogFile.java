@@ -53,8 +53,9 @@ import java.util.stream.Stream;
 public final class LogFile implements AutoCloseable {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final String PREFIX = "rainscore-";
-    private static final String SUFFIX = ".log";
+    /** What an ordinary logfile is called. */
+    public static final String LOG_PREFIX = "rainscore-";
+    public static final String LOG_SUFFIX = ".log";
 
     /**
      * How many finished lines may wait to be written.
@@ -76,6 +77,17 @@ public final class LogFile implements AutoCloseable {
     private final Path directory;
     private final int retentionDays;
     private final ZoneId zone;
+    /**
+     * What the files are called.
+     *
+     * <p>Fields rather than the constants they were, because everything this class does — a queue, a
+     * writer thread that never blocks the caller, a file per day, parts when a day grows too large,
+     * and deleting what is older than the window — is exactly what an <em>audit journal</em> needs
+     * too. A second copy of it with two strings changed would be a second place for the retention
+     * arithmetic to be wrong in.
+     */
+    private final String prefix;
+    private final String suffix;
     /**
      * When a day's file is continued in another part.
      *
@@ -120,11 +132,24 @@ public final class LogFile implements AutoCloseable {
 
     /** @param maxBytesPerPart when to continue the day in another part */
     LogFile(Path directory, int retentionDays, ZoneId zone, long maxBytesPerPart) {
+        this(directory, retentionDays, zone, maxBytesPerPart, LOG_PREFIX, LOG_SUFFIX, "log");
+    }
+
+    /**
+     * @param prefix what the files are called before the date
+     * @param suffix and after it
+     * @param what   what this is a file of, for the writer thread's name — so a thread dump names
+     *               which of them is stuck rather than showing two threads with one name
+     */
+    public LogFile(Path directory, int retentionDays, ZoneId zone, long maxBytesPerPart,
+                   String prefix, String suffix, String what) {
         this.maxBytesPerPart = Math.max(1L, maxBytesPerPart);
         this.directory = directory;
         this.retentionDays = Math.max(1, retentionDays);
         this.zone = zone;
-        this.writer = new Thread(this::drain, "RainsCore-log");
+        this.prefix = prefix;
+        this.suffix = suffix;
+        this.writer = new Thread(this::drain, "RainsCore-" + what);
         this.writer.setDaemon(true);
         this.writer.start();
     }
@@ -274,7 +299,7 @@ public final class LogFile implements AutoCloseable {
     }
 
     private Path fileFor(LocalDate day, int part) {
-        String name = PREFIX + DAY.format(day) + (part <= 1 ? "" : "-" + part) + SUFFIX;
+        String name = prefix + DAY.format(day) + (part <= 1 ? "" : "-" + part) + suffix;
         return directory.resolve(name);
     }
 
@@ -293,7 +318,7 @@ public final class LogFile implements AutoCloseable {
             List<Path> expired = files
                     .filter(path -> {
                         String name = path.getFileName().toString();
-                        return name.startsWith(PREFIX) && name.endsWith(SUFFIX);
+                        return name.startsWith(prefix) && name.endsWith(suffix);
                     })
                     .filter(path -> dayOf(path).map(day -> day.isBefore(oldest)).orElse(false))
                     .sorted(Comparator.comparing(Path::getFileName))
@@ -308,7 +333,7 @@ public final class LogFile implements AutoCloseable {
 
     private Optional<LocalDate> dayOf(Path file) {
         String name = file.getFileName().toString();
-        String middle = name.substring(PREFIX.length(), name.length() - SUFFIX.length());
+        String middle = name.substring(prefix.length(), name.length() - suffix.length());
         // "2026-08-03" or "2026-08-03-2"; the date is always the first ten characters.
         if (middle.length() < 10) {
             return Optional.empty();
@@ -374,7 +399,7 @@ public final class LogFile implements AutoCloseable {
         if (stopping.get()) {
             return;
         }
-        Thread closer = new Thread(this::close, "RainsCore-log-close");
+        Thread closer = new Thread(this::close, "RainsCore-" + suffix.replace(".", "") + "-close");
         closer.setDaemon(true);
         closer.start();
     }

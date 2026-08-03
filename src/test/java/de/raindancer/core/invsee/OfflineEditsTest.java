@@ -360,6 +360,36 @@ class OfflineEditsTest {
         }
 
         @Test
+        @DisplayName("the moderator cannot simply take the hold again afterwards")
+        void cannotBeRetaken() {
+            OfflineEdits held = edits();
+            held.begin(owner, moderator);
+            held.ownerCameBack(owner);
+
+            assertThat(held.begin(owner, moderator))
+                    .as("re-taking it here would undo the decision the login made, and the close "
+                            + "that follows would write the file of a player the server has "
+                            + "already loaded")
+                    .isFalse();
+            assertThat(held.begin(owner, somebodyElse)).isFalse();
+            assertThat(held.writeAndFinish(owner, moderator, () -> true)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a hold that merely lapsed can be taken again, and then written")
+        void lapsedHoldCanBeResumed() {
+            OfflineEdits held = edits(Duration.ofMinutes(1));
+            held.begin(owner, moderator);
+            secondsPass(61);
+
+            assertThat(held.begin(owner, moderator))
+                    .as("a moderator who went to make tea has not forfeited their work; the hold "
+                            + "is there to stop a second moderator, not to void the first one")
+                    .isTrue();
+            assertThat(held.writeAndFinish(owner, moderator, () -> true)).isTrue();
+        }
+
+        @Test
         @DisplayName("a player nobody was editing simply logs in")
         void nobodyWasEditing() {
             OfflineEdits held = edits();

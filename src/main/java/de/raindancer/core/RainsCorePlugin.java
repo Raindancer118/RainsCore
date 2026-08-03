@@ -257,7 +257,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             org.bukkit.entity.Player looking =
                     getServer().getPlayer(java.util.UUID.fromString(watcher));
             if (looking != null) {
-                looking.closeInventory();
+                // On their own thread. A window is closed from wherever the reason arrived — a
+                // login on the connection thread, a quit on somebody else's region thread — and on
+                // Folia touching another player's inventory from the wrong region is an
+                // IllegalStateException that takes the event with it. On Paper this is simply the
+                // next tick.
+                Scheduling.entity(this, looking, looking::closeInventory);
             }
         });
         // The playerdata folder of the main world, which is where the server writes everybody who

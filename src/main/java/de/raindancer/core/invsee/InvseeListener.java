@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -56,6 +57,19 @@ public final class InvseeListener implements Listener {
             return;
         }
         inventories.stillLooking(window);
+
+        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR) {
+            // Double-clicking gathers every matching stack the player can see into the cursor —
+            // including the ones in the window above, and without a single click event ever naming
+            // those slots. A read-only moderator could empty somebody's backpack into their hand
+            // with two clicks in their own inventory, and the window would never know.
+            //
+            // Cancelled outright rather than worked out slot by slot: the gesture has no way to be
+            // told "these slots but not those", and losing one convenience is not a price worth
+            // arguing about against duplicating items.
+            event.setCancelled(true);
+            return;
+        }
 
         boolean clickedOwnInventory = event.getClickedInventory() != null
                 && event.getClickedInventory().getHolder() != window;
@@ -111,10 +125,9 @@ public final class InvseeListener implements Listener {
         // Read once more first: a drag that ended with no click, or an item dropped in and the
         // window shut in the same breath, has not been taken yet.
         window.sync();
-        if (!inventories.closed(window) && event.getPlayer() instanceof Player watcher) {
-            watcher.sendMessage(Component.text("Their inventory could not be saved — nothing was "
-                    + "changed. The log says why.").color(NamedTextColor.RED));
-        }
+        // Whether the write succeeded is answered later and on the moderator's own thread — it is a
+        // file, and this handler is on the thread running the world.
+        inventories.closed(window);
     }
 
     // ------------------------------------------------------------------------- coming and going
