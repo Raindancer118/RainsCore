@@ -90,7 +90,14 @@ public final class YamlStore {
         }
         YamlConfiguration yaml = new YamlConfiguration();
         try {
-            yaml.loadFromString(Files.readString(file));
+            String text;
+            synchronized (this) {
+                // Held across the read, so it cannot overlap the move in put(). Without this a
+                // reader could land exactly between the two and report a perfectly good file as
+                // corrupt — which is a false alarm that sends somebody looking for lost data.
+                text = Files.readString(file);
+            }
+            yaml.loadFromString(text);
             return yaml;
         } catch (IOException | InvalidConfigurationException | RuntimeException unreadable) {
             note("could not be read (" + unreadable.getMessage() + ")");

@@ -40,6 +40,24 @@ import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.tablist.TablistModel;
 import de.raindancer.core.tablist.Tablists;
+import de.raindancer.core.chunk.BukkitChunkLoader;
+import de.raindancer.core.chunk.ChunkHolds;
+import de.raindancer.core.effect.BukkitEffectSink;
+import de.raindancer.core.effect.Effects;
+import de.raindancer.core.invsee.InventoryViews;
+import de.raindancer.core.player.BukkitPlayerAdminSink;
+import de.raindancer.core.player.PlayerAdmin;
+import de.raindancer.core.vanish.BukkitVanishSink;
+import de.raindancer.core.vanish.Vanish;
+import de.raindancer.core.vanish.VanishListener;
+import de.raindancer.core.vote.Votes;
+import de.raindancer.core.pack.BukkitPackSink;
+import de.raindancer.core.pack.PackListener;
+import de.raindancer.core.pack.PackMode;
+import de.raindancer.core.pack.PackServer;
+import de.raindancer.core.pack.ResourcePacks;
+import de.raindancer.core.safety.BukkitBlocks;
+import de.raindancer.core.safety.Safety;
 import de.raindancer.core.warp.Warps;
 import de.raindancer.core.world.FarmWorldPortalListener;
 import de.raindancer.core.world.FarmWorldState;
@@ -92,6 +110,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     /** How often farm worlds are asked whether any is due. Cheap; the regeneration is not. */
     private static final long REGEN_CHECK_TICKS = 20L * 60L;
 
+    /**
+     * How long after startup the resource pack is built.
+     *
+     * <p>A tick after everything has enabled, not during our own onEnable: the plugins that
+     * contribute assets have not been enabled yet at that point, so building then would build a
+     * pack with nothing in it.
+     */
+    private static final long PACK_BUILD_DELAY_TICKS = 20L;
+
     private static volatile RainsCorePlugin instance;
 
     private SettingsStore<CoreConfig> settings;
@@ -122,6 +149,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatPrompts prompts;
     private Warps warps;
     private FarmWorlds farmWorlds;
+    private ResourcePacks resourcePacks;
+    private ChunkHolds chunks;
+    private Safety safety;
+    private Effects effects;
+    private Votes votes;
+    private Vanish vanish;
+    private PlayerAdmin players;
+    private InventoryViews inventoryViews;
+    private PackServer packServer;
 
     static RainsCorePlugin instance() {
         return instance;
@@ -191,13 +227,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(
                 new FarmWorldPortalListener(farmWorlds), this);
         clickActions = new ClickActions(System::currentTimeMillis);
-        // Namespaced deliberately: /rainscore:click always resolves to this plugin's command
-        // whatever else a server has installed, and a button that resolved to somebody else's
-        // command would be a button that did something nobody intended.
-        // Namespaced deliberately: /rainscore:rcclick always resolves to this plugin's command
-        // whatever else a server has installed. The name is fixed in RainsCoreBootstrap, which is
-        // where it has to be registered.
-        buttons = new ChatButtons(clickActions, getName().toLowerCase(Locale.ROOT) + ":rcclick");
+        // Deliberately empty: Core registers no commands at all, so it has no callback command to
+        // point buttons at until a plugin registers one and says what it called it. Until then
+        // buttons render as readable text without a click, rather than as a button that silently
+        // does nothing — see ChatButtons and CoreCommands.
+        buttons = new ChatButtons(clickActions, "");
         chat = chatFor("Core");
         navigation = new SettingsNavigation(registry);
         // One chat listener for every prompt on the server. Three plugins each registering their
@@ -208,6 +242,32 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // COMMANDS lifecycle event during bootstrap, so a handler registered here would never fire
         // at all — silently, which is how both commands were dead until a live server was tried.
         new SettingsChatInput(this, navigation, chat, chat.brand(), prompts);
+
+        effects = new Effects(new BukkitEffectSink(), System::currentTimeMillis);
+        votes = new Votes(System::currentTimeMillis);
+        players = new PlayerAdmin(new BukkitPlayerAdminSink());
+        vanish = new Vanish(new BukkitVanishSink(this));
+        getServer().getPluginManager().registerEvents(
+                new VanishListener(this, vanish, "rainscore.vanish.see"), this);
+        inventoryViews = new InventoryViews(watcher -> {
+            org.bukkit.entity.Player looking =
+                    getServer().getPlayer(java.util.UUID.fromString(watcher));
+            if (looking != null) {
+                looking.closeInventory();
+            }
+        });
+        applyNewSettings(settings.current());
+        chunks = new ChunkHolds(new BukkitChunkLoader(this));
+        // A world by name, or null when it is not loaded — the seam that keeps every rule about
+        // what is safe testable without a server.
+        safety = new Safety(chunks, BukkitBlocks::of);
+
+        // The one pack every plugin's assets end up in. Built off the main thread, because it is a
+        // zip of everything every plugin contributed and a server that stalls on startup for it is
+        // a server nobody waits for.
+        resourcePacks = new ResourcePacks(getDataFolder().toPath().resolve("packs"),
+                new BukkitPackSink());
+        startResourcePacks(settings.current());
 
         getServer().getPluginManager().registerEvents(this, this);
         // One listener for every menu in every plugin: a menu is its inventory's holder, so this
@@ -220,6 +280,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 task -> {
                     clickActions.sweep();
                     prompts.sweep();
+                    votes.sweep();
                 });
         Scheduling.globalTimer(this, TABLIST_PERIOD_TICKS, TABLIST_PERIOD_TICKS,
                 task -> tablists.refresh());
@@ -264,10 +325,82 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .print(getComponentLogger());
     }
 
+    /**
+     * Puts the settings for the newer subsystems into effect.
+     *
+     * <p>Called at startup and whenever the settings change, so a toggle in the menu takes hold
+     * without a restart — which is the difference between a setting somebody uses and one they read
+     * about.
+     */
+    private void applyNewSettings(CoreConfig config) {
+        effects.enabled(config.effectsEnabled());
+        effects.minimumGap(java.time.Duration.ofMillis(config.effectsRepeatGapMillis()));
+        vanish.flightWhileVanished(config.vanishFlight());
+    }
+
+    /**
+     * Brings the resource pack up: settings, the web server, then a build off the main thread.
+     *
+     * <p>Deliberately survives every part of itself failing. A port that is taken, a contributed
+     * pack that is not a zip, or no contributions at all must leave a server that starts normally
+     * and plays normally — a resource pack is not worth refusing to boot over.
+     */
+    private void startResourcePacks(CoreConfig config) {
+        resourcePacks.required(config.packsRequired());
+        resourcePacks.description(config.packsDescription());
+        resourcePacks.mode(config.packsCombine() ? PackMode.COMBINED : PackMode.STACKED);
+        if (!config.packsEnabled()) {
+            return;
+        }
+        if (config.packsServe()) {
+            packServer = new PackServer(getDataFolder().toPath().resolve("packs"),
+                    config.packsBind(), config.packsPort());
+            packServer.publicAddress(config.packsPublicAddress());
+            try {
+                packServer.start();
+                resourcePacks.urls(packServer::urlFor);
+            } catch (java.io.IOException failure) {
+                // Said plainly rather than thrown: the rest of the server is fine, and an owner
+                // whose port 8123 is taken needs to read that sentence, not a stack trace.
+                log.error("The resource pack server could not start on {}:{} ({}). Plugin assets "
+                        + "will not be sent.", config.packsBind(), config.packsPort(),
+                        failure.getMessage());
+                packServer = null;
+            }
+        }
+        getServer().getPluginManager().registerEvents(
+                new PackListener(resourcePacks, config.packsOnJoin()), this);
+        // Off the main thread on purpose, and after everything else has enabled: the plugins that
+        // contribute have not all been enabled yet at this point in our own onEnable.
+        Scheduling.globalLater(this, PACK_BUILD_DELAY_TICKS, () -> Scheduling.async(this, () -> {
+            if (resourcePacks.contributions().isEmpty()) {
+                return;
+            }
+            resourcePacks.rebuild().ifPresent(built -> log.info(
+                    "Resource pack ready: {} from {} contribution(s), {}",
+                    built.digest().substring(0, 12), built.contributions(), built.readableSize()));
+        }));
+    }
+
     @Override
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (chunks != null) {
+            // Before anything else that touches the world: a force-loaded chunk is written into the
+            // world's own data and survives a restart, so one left behind here is one ticking for
+            // ever with nothing to say why.
+            int released = chunks.releaseAll();
+            if (released > 0) {
+                log.info("Let go of {} chunk(s) that were being kept loaded.", released);
+            }
+        }
+        if (packServer != null) {
+            // Before anything else: it holds a port and two threads, and a reload that left them
+            // behind would stop the next start from binding at all.
+            packServer.stop();
+            packServer = null;
+        }
         if (places != null) {
             places.flush();
         }
@@ -469,6 +602,46 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public FarmWorlds farmWorlds() {
         return farmWorlds;
+    }
+
+    @Override
+    public ResourcePacks resourcePacks() {
+        return resourcePacks;
+    }
+
+    @Override
+    public Safety safety() {
+        return safety;
+    }
+
+    @Override
+    public ChunkHolds chunks() {
+        return chunks;
+    }
+
+    @Override
+    public Effects effects() {
+        return effects;
+    }
+
+    @Override
+    public Votes votes() {
+        return votes;
+    }
+
+    @Override
+    public Vanish vanish() {
+        return vanish;
+    }
+
+    @Override
+    public PlayerAdmin players() {
+        return players;
+    }
+
+    @Override
+    public InventoryViews inventoryViews() {
+        return inventoryViews;
     }
 
     @Override

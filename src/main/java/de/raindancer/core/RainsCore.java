@@ -23,6 +23,14 @@ import de.raindancer.core.settings.SettingsNavigation;
 import de.raindancer.core.settings.SettingsSchema;
 import de.raindancer.core.settings.SettingsStore;
 import de.raindancer.core.tablist.Tablists;
+import de.raindancer.core.chunk.ChunkHolds;
+import de.raindancer.core.effect.Effects;
+import de.raindancer.core.invsee.InventoryViews;
+import de.raindancer.core.player.PlayerAdmin;
+import de.raindancer.core.vanish.Vanish;
+import de.raindancer.core.vote.Votes;
+import de.raindancer.core.pack.ResourcePacks;
+import de.raindancer.core.safety.Safety;
 import de.raindancer.core.warp.Warps;
 import de.raindancer.core.world.FarmWorlds;
 import org.bukkit.plugin.Plugin;
@@ -187,6 +195,78 @@ public interface RainsCore {
      * be regenerated on a schedule without touching the main ones.
      */
     FarmWorlds farmWorlds();
+
+    /**
+     * The one resource pack every plugin's assets go into.
+     *
+     * <p>A player has one resource pack, so a plugin must never send its own: whichever sends last
+     * wins and everybody else's textures are simply not there, with nothing logged anywhere. Offer
+     * a {@link de.raindancer.core.pack.PackContribution} instead and this decides what is sent,
+     * builds it reproducibly, serves it, and reports the files two plugins both wanted.
+     */
+    ResourcePacks resourcePacks();
+
+    /**
+     * Whether it is safe to put a player somewhere, and where to put them instead.
+     *
+     * <p>Use it before every teleport. A warp set on a platform that has since been mined and a home
+     * in a house somebody flooded both end with a player suffocating in stone, and the plugin that
+     * put them there has no idea unless it asks.
+     */
+    Safety safety();
+
+    /**
+     * Keeping chunks loaded — for a moment, or until somebody lets go.
+     *
+     * <p>A permanent hold carries the name of whoever asked, because the flag is written into the
+     * world and survives a restart: a plugin that forgets leaves a server ticking chunks nobody can
+     * account for.
+     */
+    ChunkHolds chunks();
+
+    /**
+     * Every sound and every particle any plugin makes.
+     *
+     * <p>Ask by meaning — {@code play(player, Cues.NO)} — rather than by sound. That is what lets a
+     * server owner change how every menu in every plugin sounds from one place, and what stops nine
+     * plugins each choosing their own click.
+     */
+    Effects effects();
+
+    /**
+     * Asking everybody — or a named few — a question, and counting the answers.
+     *
+     * <p>One ballot per person, changeable until the deadline, and a tie stays a tie. Also what a
+     * town council approving a claim is: a vote with an electorate and a time limit.
+     */
+    Votes votes();
+
+    /**
+     * Being properly not here.
+     *
+     * <p>Ask {@code visibleOf} instead of {@code getOnlinePlayers()} and {@code isVanished} before
+     * naming anybody: vanish is a promise every subsystem has to keep, and nearly every place it
+     * leaks is a place that skipped one of those two calls.
+     */
+    Vanish vanish();
+
+    /**
+     * Doing things to a player from a management screen — heal, feed, starve, effects, flight,
+     * gamemode, kick.
+     *
+     * <p>Every action answers what happened rather than throwing, because the edges are where these
+     * go wrong: healing past the maximum, damaging past what somebody has, or acting on a player who
+     * logged out a moment ago.
+     */
+    PlayerAdmin players();
+
+    /**
+     * Who is looking inside whose inventory, and what they may touch there.
+     *
+     * <p>One editor at a time, whatever else is watching: two people dragging in the same inventory
+     * duplicates items every time.
+     */
+    InventoryViews inventoryViews();
 
     /**
      * Weighted loot tables, by tier — what comes out of a chest and how often. An entry may be a

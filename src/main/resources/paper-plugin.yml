@@ -7,6 +7,11 @@ description: The one implementation of everything Rain's plugins do to the game.
 author: Raindancer118
 website: https://github.com/Raindancer118/RainsCore
 
-# Deliberately no commands: block. The one command this plugin owns is registered through Paper's
-# Brigadier lifecycle in RainsCorePlugin, because a chat button has to point at a command whose
-# namespace is known — /rcore:click — and the plugin.yml form does not give a stable one.
+# Deliberately no commands: block, and a bootstrapper that registers nothing. This is a library —
+# taking a name like /warp on somebody's server is not its decision to make. The ready-made handlers
+# live in de.raindancer.core.command.CoreCommands and a plugin registers whichever it wants,
+# including the callback command chat buttons need (a command only because a chat click has to be).
+#
+# The empty bootstrapper is required, not leftover: Paper's bootstrap phase has its own registry, and
+# a plugin that declares no bootstrapper is not in it — so a dependent could not declare
+# `dependencies.bootstrap: RainsCore` and would fail to load with "Unknown/missing dependency".

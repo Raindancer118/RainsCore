@@ -134,11 +134,15 @@ public final class ChatButton {
     public Component render() {
         Component rendered = MINI.deserialize(label);
         ClickEvent effective = click;
-        if (action != null) {
+        if (action != null && owner.isClickable()) {
             String token = owner.actions().register(onlyFor, lifetime, oneShot, action);
             if (token != null) {
                 effective = ClickEvent.runCommand("/" + owner.command() + " " + token);
             }
+        } else if (action != null) {
+            // Rendered anyway, without the click. A label somebody can read beats a button that
+            // silently does nothing, and the warning below names the one line that fixes it.
+            owner.warnIfNotClickable();
         }
         if (effective != null) {
             rendered = rendered.clickEvent(effective);

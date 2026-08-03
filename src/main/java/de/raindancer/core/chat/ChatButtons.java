@@ -15,21 +15,65 @@ import java.util.function.Consumer;
  * <p>One per server, held by {@code RainsCore} and handed to every plugin. It knows the two things a
  * button needs and a plugin should not have to: where callbacks are registered
  * ({@link ClickActions}) and which command runs them.
+ *
+ * <h2>Somebody has to register that command</h2>
+ * A clickable thing in chat can only open a URL, put text in the box, or run a command — so a button
+ * with a server-side callback is a command by necessity. Core does not register one: it registers no
+ * commands at all, on purpose, because taking names on a server is not a library's decision.
+ *
+ * <p>So a plugin registers
+ * {@link de.raindancer.core.command.CoreCommands#clickCallback(io.papermc.paper.command.brigadier.Commands)}
+ * in its bootstrapper and calls {@link #callbackCommand(String)} with the name it used. Until one
+ * does, buttons still render — with their label and their tooltip — but nothing is clickable, and
+ * this says so once with the exact fix rather than leaving a server owner with buttons that do
+ * nothing when clicked.
  */
 public final class ChatButtons {
 
     /** What goes between two buttons in a row. A space, so they do not read as one word. */
     private static final Component GAP = Component.text(" ");
 
+    private static final de.raindancer.core.log.LogChannel log =
+            de.raindancer.core.log.Log.of("chat");
+
     private final ClickActions actions;
-    private final String command;
+    private volatile String command;
+    /** So the warning about there being no command is said once, not once per button. */
+    private final java.util.concurrent.atomic.AtomicBoolean warned =
+            new java.util.concurrent.atomic.AtomicBoolean();
 
     /**
-     * @param command the command that runs a callback, without its slash — one for the whole server
+     * @param command the command that runs a callback, without its slash — one for the whole server,
+     *                or empty until a plugin has registered one
      */
     public ChatButtons(ClickActions actions, String command) {
         this.actions = actions;
-        this.command = command;
+        this.command = command == null ? "" : command.trim();
+    }
+
+    /**
+     * Tells this which command runs its callbacks.
+     *
+     * <p>Called by whichever plugin registered it, with the name it used — namespaced is safest, as
+     * {@code myplugin:rcclick} always resolves to that plugin's command whatever else is installed.
+     * A button pointing at a name somebody else owns is a button that does something nobody meant.
+     */
+    public void callbackCommand(String command) {
+        this.command = command == null ? "" : command.trim().replaceFirst("^/", "");
+    }
+
+    /** Whether callbacks can actually run — false until a plugin has registered the command. */
+    public boolean isClickable() {
+        return !command.isEmpty();
+    }
+
+    /** Says once, with the fix, that buttons are not wired up. */
+    void warnIfNotClickable() {
+        if (!isClickable() && warned.compareAndSet(false, true)) {
+            log.warn("Chat buttons are being drawn but nothing has registered the command that "
+                    + "runs them, so they are not clickable. Register CoreCommands.clickCallback in "
+                    + "a plugin bootstrapper and call buttons().callbackCommand(\"<name>\").");
+        }
     }
 
     /** A button whose label is MiniMessage. */

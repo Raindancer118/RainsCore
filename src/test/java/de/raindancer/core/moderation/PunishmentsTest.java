@@ -344,7 +344,7 @@ class PunishmentsTest {
         @Test
         @DisplayName("a duration reads back the way somebody would say it")
         void writesThemOut() {
-            assertThat(Durations.describe(Duration.ofMinutes(90))).isEqualTo("1 hour 30 minutes");
+            assertThat(Durations.describe(Duration.ofMinutes(90))).isEqualTo("1 hour, 30 minutes");
             assertThat(Durations.describe(Duration.ofDays(1))).isEqualTo("1 day");
             assertThat(Durations.describe(Duration.ofSeconds(45))).isEqualTo("45 seconds");
             assertThat(Durations.describe(null)).isEqualTo("for ever");

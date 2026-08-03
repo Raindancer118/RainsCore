@@ -28,6 +28,16 @@ import org.bukkit.Material;
                 description = "How long a clickable button in chat stays good for."),
         @Topic(path = "appearance/tablist", title = "Tablist", icon = Material.PLAYER_HEAD,
                 description = "The player list: what it says, and how it is sorted."),
+        @Topic(path = "moderation/vanish", title = "Vanish", icon = Material.GLASS,
+                description = "Being properly not here, and who is allowed to notice."),
+        @Topic(path = "moderation/invsee", title = "Looking Inside", icon = Material.CHEST,
+                description = "Watching somebody's inventory, and what a watcher may touch."),
+        @Topic(path = "appearance/effects", title = "Sounds & Particles", icon = Material.NOTE_BLOCK,
+                description = "The cues every plugin plays, and how loud they are."),
+        @Topic(path = "config/safety", title = "Safe Teleports", icon = Material.FEATHER,
+                description = "What counts as somewhere safe to put a player."),
+        @Topic(path = "config/packs", title = "Resource packs", icon = Material.PAINTING,
+                description = "The one pack every plugin's assets go into, and how it is served."),
         @Topic(path = "moderation", title = "Moderation", icon = Material.IRON_AXE,
                 description = "Whether punishments are acted on, and what a punished player is "
                         + "told. The record is kept either way."),
@@ -138,7 +148,116 @@ public record CoreConfig(
 
         @In("moderation") @Title("Appeal message")
         @Describe("The line under a ban telling somebody how to appeal. Empty leaves it out.")
-        String appealMessage
+        String appealMessage,
+
+        @In("config/packs") @Title("Combine plugin resource packs")
+        @Describe("Whether the assets plugins contribute are built into one pack and sent. Off "
+                + "means nothing is built or served, and a plugin's icons simply are not there.")
+        boolean packsEnabled,
+
+        @In("config/packs") @Title("Combine into a single pack")
+        @Describe("Off sends each plugin's pack separately, stacked in order — the client has "
+                + "supported that since 1.20.3, and it means adding a plugin only costs players "
+                + "that plugin's download. On merges everything into one zip: one download and one "
+                + "entry in the client's list, but any change rebuilds all of it.")
+        boolean packsCombine,
+
+        @In("config/packs") @Title("Send it on join")
+        @Describe("Whether a player is offered the pack as they join, rather than only when "
+                + "something asks for it.")
+        boolean packsOnJoin,
+
+        @In("config/packs") @Title("Required")
+        @Describe("Whether refusing the pack disconnects the player. Leave this off unless the "
+                + "server genuinely does not work without it: it turns every download failure, "
+                + "including ones on the player's side, into somebody who cannot join.")
+        boolean packsRequired,
+
+        @In("config/packs") @Title("Pack description")
+        @Describe("What the client shows in its list of packs.")
+        String packsDescription,
+
+        @In("config/packs") @Title("Serve it over HTTP")
+        @Describe("Whether Core runs its own small web server for the pack. Turn this off if you "
+                + "already have a web server or a CDN, and set the public address instead.")
+        boolean packsServe,
+
+        @In("config/packs") @Title("Listen on")
+        @Describe("The address the pack server binds to. 0.0.0.0 is every interface.")
+        String packsBind,
+
+        @In("config/packs") @Title("Port") @Range(min = 0, max = 65535)
+        @Describe("The port the pack server listens on. 0 lets the system pick a free one, which "
+                + "is only useful with a public address that does not name a port.")
+        int packsPort,
+
+        @In("config/packs") @Title("Public address")
+        @Describe("What clients are told to download from, when that is not what the server binds "
+                + "to — behind a proxy, or on 0.0.0.0. Empty uses the bind address. Example: "
+                + "https://packs.example.com")
+        String packsPublicAddress,
+
+        @In("moderation/vanish") @Title("Vanish")
+        @Describe("Whether players can be hidden at all. Off leaves everything visible however "
+                + "many plugins ask.")
+        boolean vanishEnabled,
+
+        @In("moderation/vanish") @Title("Staff see each other while vanished")
+        @Describe("Whether somebody allowed to see hidden players sees other hidden staff. Off "
+                + "means two vanished moderators are invisible to one another and spend the "
+                + "evening walking into each other.")
+        boolean vanishStaffSeeStaff,
+
+        @In("moderation/vanish") @Title("Flight while vanished")
+        @Describe("Whether vanishing also grants flight. Somebody invisible and walking gives "
+                + "themselves away with footsteps and doors.")
+        boolean vanishFlight,
+
+        @In("moderation/vanish") @Title("Silent joining and leaving")
+        @Describe("Whether a hidden player's arrival and departure are announced.")
+        boolean vanishSilentJoin,
+
+        @In("moderation/invsee") @Title("Looking inside inventories")
+        @Describe("Whether inventories can be watched at all.")
+        boolean invseeEnabled,
+
+        @In("moderation/invsee") @Title("Allow editing")
+        @Describe("Whether a watcher may change what somebody is carrying, or only look. Only one "
+                + "person may edit an inventory at a time either way: two at once duplicates items.")
+        boolean invseeAllowEditing,
+
+        @In("moderation/invsee") @Title("Allow editing worn armour")
+        @Describe("Whether a watcher may change armour and the off-hand. Off protects them, so a "
+                + "click one slot too far cannot unequip somebody mid-fight.")
+        boolean invseeAllowEquipment,
+
+        @In("moderation/invsee") @Title("Show the ender chest")
+        @Describe("Whether the ender chest is shown beside the inventory.")
+        boolean invseeShowEnderChest,
+
+        @In("appearance/effects") @Title("Sounds and particles")
+        @Describe("Whether the shared cues every plugin plays are heard at all.")
+        boolean effectsEnabled,
+
+        @In("appearance/effects") @Title("Repeat gap in milliseconds") @Range(min = 0, max = 5000)
+        @Describe("How close together the same cue counts as a repeat. A plugin playing one every "
+                + "tick would otherwise deafen somebody. 0 switches the suppression off.")
+        int effectsRepeatGapMillis,
+
+        @In("config/safety") @Title("Refuse to arrive underwater")
+        @Describe("Whether a teleport to a spot underwater is treated as unsafe. Off for a server "
+                + "with warps deliberately placed in an ocean.")
+        boolean safetyRefuseWater,
+
+        @In("config/safety") @Title("Check the blocks around it") @Range(min = 0, max = 5)
+        @Describe("How far around a spot to look for lava or fire before calling it safe. 0 checks "
+                + "only the spot itself.")
+        int safetySurroundingRadius,
+
+        @In("config/safety") @Title("How far to search for somewhere safe") @Range(min = 0, max = 64)
+        @Describe("How far a teleport will look sideways for a safe spot before giving up. Larger "
+                + "means more of the world is loaded to answer.")
+        int safetySearchRadius
 
 ) {
 
@@ -159,5 +278,10 @@ public record CoreConfig(
             LogLevel.INFO, LogLevel.INFO, 14,
             15,
             true, true, false, "", "", 40,
-            true, true, true, true, "");
+            true, true, true, true, "",
+            true, false, true, false, "Server pack", true, "0.0.0.0", 8123, "",
+            true, true, true, true,
+            true, true, false, true,
+            true, 120,
+            true, 1, 8);
 }

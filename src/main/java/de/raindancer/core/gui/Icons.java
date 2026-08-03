@@ -6,7 +6,12 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
+
+import java.util.UUID;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +53,42 @@ public final class Icons {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /**
+     * A button showing somebody's actual head.
+     *
+     * <p>Their skin, not Steve's. A menu that says "Your settings" over a default head is a menu
+     * that has not noticed who is looking at it, and one listing players as identical heads is a
+     * list you have to read rather than recognise — which is the whole reason heads are used for
+     * players in the first place.
+     *
+     * <p>Falls back to a plain head rather than failing: a player the server has never seen, or one
+     * whose skin has not loaded yet, still needs a button.
+     */
+    public static ItemStack head(OfflinePlayer who, String name, String... lore) {
+        return head(who, name, List.of(lore));
+    }
+
+    public static ItemStack head(OfflinePlayer who, String name, List<String> lore) {
+        ItemStack item = of(Material.PLAYER_HEAD, name, lore);
+        if (who == null) {
+            return item;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof SkullMeta skull) {
+            // setOwningPlayer rather than the deprecated owner-by-name: a name lookup blocks on
+            // Mojang's servers, and doing that while drawing a menu freezes the main thread for
+            // everybody until it answers.
+            skull.setOwningPlayer(who);
+            item.setItemMeta(skull);
+        }
+        return item;
+    }
+
+    /** The same, by id — for a player who is not online and may never have been seen. */
+    public static ItemStack head(UUID who, String name, String... lore) {
+        return head(who == null ? null : Bukkit.getOfflinePlayer(who), name, List.of(lore));
     }
 
     /**

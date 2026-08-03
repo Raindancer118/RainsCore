@@ -323,4 +323,59 @@ class ChatButtonsTest {
             assertThat(actions.run(BOB, token)).isEqualTo(ClickResult.NOT_YOURS);
         }
     }
+
+    // ------------------------------------------------------------------ nobody registered it
+
+    /**
+     * What happens before a plugin has registered the callback command.
+     *
+     * <p>Core registers no commands at all, deliberately, so this is the state a fresh server is in.
+     * The behaviour that matters is that it degrades to readable text rather than to a button that
+     * looks live and does nothing when clicked — which is the version somebody reports as "the
+     * plugin is broken".
+     */
+    @Nested
+    @DisplayName("with no callback command registered")
+    class NotWiredUp {
+
+        @Test
+        @DisplayName("a button is drawn but is not clickable")
+        void rendersWithoutAClick() {
+            ChatButtons loose = new ChatButtons(actions, "");
+            assertThat(loose.isClickable()).isFalse();
+
+            Component button = loose.label("<green>[Yes]").forOnly(ALICE).does(accepted::add).render();
+
+            assertThat(PlainTextComponentSerializer.plainText().serialize(button))
+                    .as("the label still has to be readable; it is the click that is missing")
+                    .isEqualTo("[Yes]");
+            assertThat(button.style().clickEvent())
+                    .as("a button that looks live and does nothing is worse than plain text")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("no callback is registered for a click that cannot happen")
+        void doesNotLeakCallbacks() {
+            ChatButtons loose = new ChatButtons(actions, "");
+            loose.label("<green>[Yes]").forOnly(ALICE).does(accepted::add).render();
+
+            assertThat(actions.size())
+                    .as("registering a callback nothing can ever run is a slow leak")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("it becomes clickable once a plugin says what it registered")
+        void becomesClickable() {
+            ChatButtons loose = new ChatButtons(actions, "");
+            loose.callbackCommand("/myplugin:rcclick");
+
+            assertThat(loose.isClickable()).isTrue();
+            Component button = loose.label("<green>[Yes]").forOnly(ALICE).does(accepted::add).render();
+            assertThat(commandOf(button.style().clickEvent()))
+                    .as("a leading slash somebody typed must not become a double slash")
+                    .startsWith("/myplugin:rcclick ");
+        }
+    }
 }

@@ -97,6 +97,11 @@ public final class SettingsMenu extends Menu {
 
     private org.bukkit.inventory.ItemStack categoryIcon(SettingsTopic topic) {
         Material material = topic.icon() == Material.AIR ? Material.BOOK : topic.icon();
+        if (material == Material.PLAYER_HEAD) {
+            // The viewer's own face, not Steve's. "Your settings" over a default head is a menu that
+            // has not noticed who is looking at it.
+            return Icons.head(viewer(), "<white>" + topic.title(), navigation.describe(topic));
+        }
         return Icons.of(material, "<white>" + topic.title(), navigation.describe(topic));
     }
 

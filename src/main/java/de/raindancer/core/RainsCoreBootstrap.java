@@ -2,51 +2,31 @@ package de.raindancer.core;
 
 import io.papermc.paper.plugin.bootstrap.BootstrapContext;
 import io.papermc.paper.plugin.bootstrap.PluginBootstrap;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Registers this plugin's commands, before it is enabled.
+ * Exists so that other plugins can reach Core's classes before the server starts. Registers nothing.
  *
- * <h2>Why a bootstrapper and not {@code onEnable}</h2>
- * Because {@code onEnable} is too late, and nothing says so. Paper fires
- * {@link LifecycleEvents#COMMANDS} during the bootstrap phase; a handler registered in
- * {@code onEnable} is registered after that has already happened, so it never runs — with no
- * warning, no exception and no line in the log. The command simply does not exist, and
- * {@code dispatchCommand} answers false as though somebody had typed a word nobody has heard of.
+ * <h2>Why an empty bootstrapper is not a mistake</h2>
+ * Because Paper's bootstrap phase has its own registry, and a plugin that declares no bootstrapper
+ * is not in it. A dependent plugin that wants to register commands — which it must do in a
+ * bootstrapper, since {@code COMMANDS} fires before {@code onEnable} — cannot then declare a
+ * {@code dependencies.bootstrap} entry on Core: the server refuses it with "Unknown/missing
+ * dependency plugins: [RainsCore]" and the dependent does not load at all.
  *
- * <p>That is exactly how this was found: a live-server check tried {@code /settings list}, got
- * false, and the diagnostic line put inside the handler never printed. Both commands had been
- * written that way, so <em>every chat button in the library had been dead on a real server</em> —
- * the callback registry worked perfectly and the command it pointed at was not there. Nothing below
- * the server line could have caught it, because the machinery was right and only the registration
- * was in the wrong place.
+ * <p>So the foundation Core offers for writing commands ({@link de.raindancer.core.command.CoreCommands})
+ * is unusable unless this class is here. It was found the only way it could be: by deleting it,
+ * declaring the dependency properly in the test plugin, and watching a real server refuse to load it.
  *
- * <h2>Why the commands hold nothing</h2>
- * A bootstrapper runs before {@code onEnable}, so the registry, the chat, the warps and the farm
- * worlds do not exist yet. Each command therefore looks the running plugin up through
- * {@link de.raindancer.core.RainsCore#get()} when it is actually run, by which time everything is
- * up — and answers nothing at all if it is not, which is the state during a reload.
+ * <h2>What it deliberately does not do</h2>
+ * Register a single command. Not {@code /warp}, not {@code /settings}, not the callback command chat
+ * buttons need — taking a name on somebody's server is not a library's decision. Every one of those
+ * is a handler a plugin registers itself, by name, in its own bootstrapper.
  */
 public final class RainsCoreBootstrap implements PluginBootstrap {
 
     @Override
     public void bootstrap(@NotNull BootstrapContext context) {
-        context.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
-            event.registrar().register("rcclick",
-                    "Runs a button you clicked in chat.",
-                    new de.raindancer.core.chat.ClickCommand());
-            event.registrar().register("settings",
-                    "Everything every plugin on this server can be told to do.",
-                    java.util.List.of("rcsettings"),
-                    new de.raindancer.core.settings.SettingsCommand());
-            event.registrar().register("warp",
-                    "Go to a named place, or manage the list of them.",
-                    new de.raindancer.core.warp.WarpCommand());
-            event.registrar().register("farmworld",
-                    "Go to a farm world, or run one.",
-                    java.util.List.of("fw"),
-                    new de.raindancer.core.world.FarmWorldCommand());
-        });
+        // Nothing. See the class comment: being here at all is the entire job.
     }
 }

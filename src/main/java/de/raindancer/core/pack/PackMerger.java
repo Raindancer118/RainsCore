@@ -139,9 +139,12 @@ public final class PackMerger {
             throw new MergeException("None of the packs has a readable pack.mcmeta.");
         }
         if (minFormat > maxFormat) {
-            throw new MergeException("These packs do not share a single pack format "
-                    + "(needed " + minFormat + " … " + maxFormat + "). "
-                    + "Send them stacked instead: /rrp mode stacked");
+            // Not a failure of the merge so much as a fact about the packs. Said with both numbers
+            // because "they do not fit" without them leaves nobody able to work out which pack is
+            // the odd one out.
+            throw new MergeException("These packs do not share a single pack format (the newest "
+                    + "minimum is " + minFormat + ", the oldest maximum is " + maxFormat + "). "
+                    + "Send them stacked rather than combined.");
         }
         out.put("pack.mcmeta", mcmeta(description, minFormat, maxFormat));
 
