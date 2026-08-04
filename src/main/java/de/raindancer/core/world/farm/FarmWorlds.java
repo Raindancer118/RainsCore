@@ -200,6 +200,22 @@ public final class FarmWorlds {
 
     private Step regenerateOne(WorldSet set, String name, Location safety) {
         World world = Bukkit.getWorld(name);
+        // Read from the world itself, and read *now* — before the unload, while there is still a World
+        // to ask. It is the only authoritative answer to where a world's data actually is, and the one
+        // that cannot go stale when Paper moves its layout again.
+        //
+        // Which it did. This used to be `getWorldContainer().resolve(name)`, and on Paper 26.x a world
+        // made by WorldCreator lives at `<level-name>/dimensions/<namespace>/<name>` instead. The
+        // constructed path therefore never existed, the delete below was skipped by its own
+        // `Files.exists` guard, and `create` loaded the same region files straight back — so
+        // regenerating a farm world changed nothing at all and reported success. Nothing was logged,
+        // because the refusal path was never even reached. Found by regenerating a real farm world
+        // twice and noticing the terrain's md5 had not moved.
+        Path folder = world != null
+                ? world.getWorldFolder().toPath()
+                : FarmWorldState.findWorldFolder(Bukkit.getWorldContainer().toPath(),
+                        mainWorldName(), name).orElse(null);
+
         if (world != null) {
             if (evacuate(world, safety)) {
                 // Somebody was in it. Their teleport is in flight and will complete on this thread
@@ -216,8 +232,9 @@ public final class FarmWorlds {
                 return Step.FAILED;
             }
         }
-        Path folder = Bukkit.getWorldContainer().toPath().resolve(name);
-        if (Files.exists(folder) && !deleteWorldFolder(folder, name)) {
+        // holdsAWorld, not exists: an empty folder is nothing to remove, and treating it as a refusal
+        // would stop the regeneration and leave the world unloaded and not remade for no reason at all.
+        if (folder != null && FarmWorldState.holdsAWorld(folder) && !deleteWorldFolder(folder, name)) {
             // Deliberately NOT recreated. A half-deleted folder is the one case where making the
             // world again is worse than not having it: WorldCreator would generate fresh terrain
             // with a new seed around whatever region files survived, and the result is permanent
@@ -228,7 +245,86 @@ public final class FarmWorlds {
                     + "generate new terrain around the surviving chunks.", name, folder);
             return Step.FAILED;
         }
+        if (folder == null) {
+            // Nothing on disk to remove. Ordinary for a farm world that was defined and never made;
+            // said out loud at debug level rather than silently, because it is also what the defect
+            // above looked like from the outside for as long as it went unnoticed.
+            log.info("'{}' had no folder on disk, so there was nothing to delete before making it.",
+                    name);
+        }
         return create(set, name) != null ? Step.DONE : Step.FAILED;
+    }
+
+    /**
+     * Takes a farm world's worlds away for good, without making them again.
+     *
+     * <p>The difference from {@link #regenerate} is only the last step, and it is the whole point: this
+     * one does not put anything back. For an owner who is finished with a farm world rather than one
+     * who wants a fresh copy of it.
+     *
+     * <p>Main thread only, and every guard {@code regenerate} uses applies unchanged — everybody is
+     * moved out first, {@link FarmWorldState#mayDelete} still has to agree about every folder, and a
+     * folder that could not be fully removed stops the rest. What it does <em>not</em> do is touch the
+     * definition: the caller decides whether the farm world stays on the list, because "delete the
+     * worlds" and "forget the farm world" are two decisions and only the caller knows which was asked
+     * for.
+     *
+     * @return whether every one of its worlds is now gone
+     */
+    public boolean remove(WorldSet set) {
+        if (set == null) {
+            return false;
+        }
+        log.warn("Deleting the farm world '{}' — its worlds are being removed for good.", set.name());
+        Location safety = safeSpawn();
+        if (safety == null) {
+            log.error("Cannot delete '{}': there is nowhere to move players to.", set.name());
+            return false;
+        }
+
+        boolean allGone = true;
+        for (String name : set.worlds()) {
+            World world = Bukkit.getWorld(name);
+            Path folder = world != null
+                    ? world.getWorldFolder().toPath()
+                    : FarmWorldState.findWorldFolder(Bukkit.getWorldContainer().toPath(),
+                            mainWorldName(), name).orElse(null);
+
+            if (world != null) {
+                if (evacuate(world, safety)) {
+                    // Somebody is still in it and their teleport is in flight. Deliberately not
+                    // waiting: Bukkit refuses to unload a world with players in it, and forcing it
+                    // would put them in a world that no longer exists.
+                    log.info("'{}' still had players in it; they have been sent to spawn. Try again "
+                            + "in a moment.", name);
+                    return false;
+                }
+                if (!Bukkit.unloadWorld(world, false)) {
+                    log.error("Could not unload '{}', so it was left alone rather than half-removed.",
+                            name);
+                    allGone = false;
+                    continue;
+                }
+            }
+            if (!FarmWorldState.holdsAWorld(folder)) {
+                continue;   // never made, or already gone
+            }
+            if (!deleteWorldFolder(folder, name)) {
+                allGone = false;
+            }
+        }
+        return allGone;
+    }
+
+    /**
+     * The main world's name.
+     *
+     * <p>The first world the server loaded, which is what {@code level-name} names. Needed by the
+     * deletion guard, which refuses it outright: every other world now lives inside its folder.
+     */
+    private static String mainWorldName() {
+        List<World> worlds = Bukkit.getWorlds();
+        return worlds.isEmpty() ? "world" : worlds.getFirst().getName();
     }
 
     /**
@@ -294,7 +390,7 @@ public final class FarmWorlds {
      */
     private boolean deleteWorldFolder(Path folder, String name) {
         Path serverDirectory = Bukkit.getWorldContainer().toPath();
-        if (!FarmWorldState.mayDelete(serverDirectory, folder, name)) {
+        if (!FarmWorldState.mayDelete(serverDirectory, folder, name, mainWorldName())) {
             log.error("Refusing to delete '{}': it is not a farm world folder of ours.", folder);
             return false;
         }

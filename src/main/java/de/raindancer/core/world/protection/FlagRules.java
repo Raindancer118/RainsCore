@@ -108,6 +108,30 @@ public final class FlagRules {
     }
 
     /**
+     * Whether a flag that <em>makes something happen</em> applies here.
+     *
+     * <h2>Why this is a second question and not the same one</h2>
+     * {@link #isAllowed} answers "may this happen", and outside a protected area it answers yes — with no
+     * area there is no flag, nothing is interfering, and the thing goes ahead. That is right, and
+     * {@code WildernessIsNotProtectedTest} exists because it used to be wrong the other way.
+     *
+     * <p>It is only right for a flag whose {@code true} means <b>permitted</b>. A flag whose {@code true}
+     * means <b>done</b> — {@link LandFlag#KEEP_INVENTORY}, read by the death listener as an instruction to
+     * call {@code setKeepInventory} — inverts under the same rule: "nothing is interfering" became "keep
+     * everybody's inventory", everywhere, because unclaimed ground is most of a world. Reported as
+     * "keep inventory is on in the entire world and cannot be turned off by whatever I do", and it could
+     * not be: configuring a claim only changes the answer inside that claim.
+     *
+     * <p>So an acting flag asks this instead. No area, nothing asked for it, nothing happens.
+     *
+     * @param area null for unprotected ground, which is always false here — the opposite of
+     *             {@link #isAllowed}, deliberately
+     */
+    public boolean isAppliedTo(ProtectedArea area, LandFlag flag, LandAudience audience, UUID who) {
+        return area != null && isAllowed(area, flag, audience, who);
+    }
+
+    /**
      * The area-wide value. Correct for every flag that is not audience aware; for one that is, this is the
      * owner's own value, and a caller holding a player should use {@link #isAllowedFor} instead.
      */

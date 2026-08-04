@@ -216,6 +216,7 @@ land:
     monster-spawning: {name: "Monster spawning", description: "Hostile mobs may spawn naturally"}
     animal-spawning: {name: "Animal spawning", description: "Passive mobs may spawn naturally"}
     spawner-spawning: {name: "Spawner spawning", description: "Monster spawners keep working"}
+    potion-spawning: {name: "Potion spawning", description: "Mobs may spawn from a potion — silverfish from infestation, slimes from oozing"}
     monster-entry: {name: "Monster entry", description: "Hostile mobs may walk in"}
     monster-targeting: {name: "Monster targeting", description: "Hostile mobs may target players inside"}
     explosions: {name: "Explosions", description: "Creepers, TNT and beds may damage blocks"}

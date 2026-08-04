@@ -41,6 +41,20 @@ public enum LandFlag {
     MONSTER_SPAWNING(Material.ZOMBIE_HEAD, false),
     ANIMAL_SPAWNING(Material.WHEAT, true),
     SPAWNER_SPAWNING(Material.SPAWNER, true),
+
+    /**
+     * Whether a mob may spawn here as the side effect of a potion.
+     *
+     * <p>Separate from {@link #MONSTER_SPAWNING}, which is the world doing it on its own: this is somebody
+     * throwing a splash potion of infestation and getting a nest of silverfish, or one of oozing and getting
+     * a pile of slimes. Neither reason reaches {@code isNaturalReason} — a player chose to throw it — so
+     * without a flag of its own the spawn happened regardless of what {@code MONSTER_SPAWNING} said, which
+     * turned a "no monsters here" claim into one a single potion could still fill.
+     *
+     * <p>Not audience aware: the mobs that come out do not know who threw the potion, and a claim that keeps
+     * them out keeps them out for everybody.
+     */
+    POTION_SPAWNING(Material.LINGERING_POTION, false),
     MONSTER_ENTRY(Material.IRON_DOOR, false),
     MONSTER_TARGETING(Material.GHAST_TEAR, true, true),
     EXPLOSIONS(Material.TNT, false),

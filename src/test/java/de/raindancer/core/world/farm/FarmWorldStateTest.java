@@ -194,7 +194,7 @@ class FarmWorldStateTest {
             Files.createDirectories(folder.resolve("region"));
             Files.writeString(folder.resolve("level.dat"), "x");
 
-            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld")).isTrue();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world")).isTrue();
         }
 
         @Test
@@ -202,7 +202,7 @@ class FarmWorldStateTest {
         void refusesOutsideTheServer() throws IOException {
             Path elsewhere = serverDirectory.getParent().resolve("somewhere-else");
             Files.createDirectories(elsewhere);
-            assertThat(FarmWorldState.mayDelete(serverDirectory, elsewhere, "somewhere-else"))
+            assertThat(FarmWorldState.mayDelete(serverDirectory, elsewhere, "somewhere-else", "world"))
                     .isFalse();
         }
 
@@ -210,7 +210,7 @@ class FarmWorldStateTest {
         @DisplayName("never a path that climbs out with ..")
         void refusesTraversal() {
             Path escaping = serverDirectory.resolve("farmworld").resolve("..").resolve("..");
-            assertThat(FarmWorldState.mayDelete(serverDirectory, escaping, "farmworld")).isFalse();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, escaping, "farmworld", "world")).isFalse();
         }
 
         @Test
@@ -218,13 +218,13 @@ class FarmWorldStateTest {
         void refusesTheWrongFolder() throws IOException {
             Path plugins = serverDirectory.resolve("plugins");
             Files.createDirectories(plugins);
-            assertThat(FarmWorldState.mayDelete(serverDirectory, plugins, "farmworld")).isFalse();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, plugins, "farmworld", "world")).isFalse();
         }
 
         @Test
         @DisplayName("never the server directory itself")
         void refusesTheServerRoot() {
-            assertThat(FarmWorldState.mayDelete(serverDirectory, serverDirectory, "farmworld"))
+            assertThat(FarmWorldState.mayDelete(serverDirectory, serverDirectory, "farmworld", "world"))
                     .isFalse();
         }
 
@@ -233,7 +233,7 @@ class FarmWorldStateTest {
         void refusesAFile() throws IOException {
             Path file = serverDirectory.resolve("farmworld");
             Files.writeString(file, "not a world");
-            assertThat(FarmWorldState.mayDelete(serverDirectory, file, "farmworld")).isFalse();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, file, "farmworld", "world")).isFalse();
         }
 
         @Test
@@ -243,7 +243,7 @@ class FarmWorldStateTest {
             Files.createDirectories(folder);
             Files.writeString(folder.resolve("something.txt"), "not a world");
 
-            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld"))
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world"))
                     .as("a folder somebody happened to name after the world is not the world")
                     .isFalse();
         }
@@ -266,7 +266,7 @@ class FarmWorldStateTest {
             } catch (UnsupportedOperationException | IOException notSupported) {
                 return; // No links on this filesystem; nothing to assert.
             }
-            assertThat(FarmWorldState.mayDelete(serverDirectory, link, "farmworld"))
+            assertThat(FarmWorldState.mayDelete(serverDirectory, link, "farmworld", "world"))
                     .as("a recursive delete that follows a link is how the wrong thing gets removed")
                     .isFalse();
         }
@@ -274,8 +274,287 @@ class FarmWorldStateTest {
         @Test
         @DisplayName("nulls are refused rather than throwing inside a delete")
         void refusesNulls() {
-            assertThat(FarmWorldState.mayDelete(null, null, null)).isFalse();
-            assertThat(FarmWorldState.mayDelete(serverDirectory, null, "farmworld")).isFalse();
+            assertThat(FarmWorldState.mayDelete(null, null, null, "world")).isFalse();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, null, "farmworld", "world")).isFalse();
+        }
+    }
+
+    // ------------------------------------------------------------------ where Paper actually puts them
+
+    /**
+     * The layout Paper 26.x uses for a world that is not one of the server's own three.
+     *
+     * <h2>The defect these were written for</h2>
+     * Paper does not put a world created by {@code WorldCreator} beside the server's own — it puts it
+     * under the main world at {@code <level-name>/dimensions/<namespace>/<name>}. This class only ever
+     * allowed a folder sitting <em>directly</em> in the server directory, so every real farm world was
+     * refused before anything was deleted.
+     *
+     * <p>Refused silently, which is what made it expensive: {@code FarmWorlds} only calls this when the
+     * folder exists, the folder it built never did, so no refusal was ever logged. Regeneration
+     * unloaded the world, deleted nothing, created it again from the surviving region files, and
+     * announced success. Found on the test server by regenerating twice and checking that the terrain's
+     * md5 had not moved.
+     */
+    @Nested
+    @DisplayName("the dimensions layout Paper actually uses")
+    class DimensionsLayout {
+
+        /** {@code <server>/world/dimensions/minecraft/<name>}, with a level.dat in it. */
+        private Path aDimensionWorld(String levelName, String namespace, String name)
+                throws IOException {
+            Path folder = serverDirectory.resolve(levelName)
+                    .resolve("dimensions").resolve(namespace).resolve(name);
+            Files.createDirectories(folder.resolve("region"));
+            Files.writeString(folder.resolve("level.dat"), "x");
+            return folder;
+        }
+
+        @Test
+        @DisplayName("a farm world where Paper actually puts it may be deleted")
+        void allowsTheDimensionsLayout() throws IOException {
+            Path folder = aDimensionWorld("world", "minecraft", "farmworld");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world"))
+                    .as("this is the layout every real farm world has, and refusing it is why "
+                            + "regeneration deleted nothing and said it had worked")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("the nether and the end of a farm world too")
+        void allowsTheOtherTwoParts() throws IOException {
+            Path nether = aDimensionWorld("world", "minecraft", "farmworld_nether");
+            Path end = aDimensionWorld("world", "minecraft", "farmworld_the_end");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, nether, "farmworld_nether", "world")).isTrue();
+            assertThat(FarmWorldState.mayDelete(serverDirectory, end, "farmworld_the_end", "world")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a server whose main world is not called 'world' works the same way")
+        void theLevelNameIsNotAssumed() throws IOException {
+            // level-name is a server.properties setting and plenty of servers change it. Hard-coding
+            // "world" here would mean the fix worked on the test server and nowhere else.
+            Path folder = aDimensionWorld("survival", "minecraft", "farmworld");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world")).isTrue();
+        }
+
+        @Test
+        @DisplayName("the old layout still works, because a world folder may be either")
+        void theFlatLayoutStillWorks() throws IOException {
+            Path folder = serverDirectory.resolve("farmworld");
+            Files.createDirectories(folder);
+            Files.writeString(folder.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world"))
+                    .as("widening this must not narrow it — a world moved by hand, or an older "
+                            + "server, still sits directly in the server directory")
+                    .isTrue();
+        }
+
+        // -------------------------------------------------------------- and what it must still refuse
+
+        @Test
+        @DisplayName("never the main world, even though it is now on the way to the farm worlds")
+        void refusesTheMainWorld() throws IOException {
+            // The one that would end a server. `world` holds `dimensions`, so any rule loose enough to
+            // allow a folder *under* it has to still refuse the folder itself.
+            Path main = serverDirectory.resolve("world");
+            Files.createDirectories(main.resolve("region"));
+            Files.writeString(main.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, main, "world", "world")).isFalse();
+        }
+
+        @Test
+        @DisplayName("never the dimensions folder itself, which holds every farm world at once")
+        void refusesTheDimensionsFolder() throws IOException {
+            aDimensionWorld("world", "minecraft", "farmworld");
+            Path dimensions = serverDirectory.resolve("world").resolve("dimensions");
+            // Given a level.dat of its own, so it is refused by its shape rather than by accident.
+            Files.writeString(dimensions.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, dimensions, "dimensions", "world"))
+                    .as("one delete here takes every farm world on the server")
+                    .isFalse();
+            assertThat(FarmWorldState.mayDelete(serverDirectory,
+                    dimensions.resolve("minecraft"), "minecraft", "world"))
+                    .as("and the namespace folder holds them all as well")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("never a folder buried deeper than the layout allows")
+        void refusesSomethingDeeper() throws IOException {
+            // A rule written as "anywhere under the server directory" would allow this, and with it
+            // anything a plugin keeps in its own data folder.
+            Path deep = serverDirectory.resolve("world").resolve("dimensions")
+                    .resolve("minecraft").resolve("farmworld").resolve("region")
+                    .resolve("farmworld");
+            Files.createDirectories(deep);
+            Files.writeString(deep.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, deep, "farmworld", "world")).isFalse();
+        }
+
+        @Test
+        @DisplayName("never a plugin's data folder that happens to be shaped like the layout")
+        void refusesAPluginFolder() throws IOException {
+            // plugins/SomePlugin/dimensions/x/farmworld — the same shape, in the wrong place. The rule
+            // has to be anchored at the server directory rather than matched anywhere in the path.
+            Path pretending = serverDirectory.resolve("plugins").resolve("SomePlugin")
+                    .resolve("dimensions").resolve("minecraft").resolve("farmworld");
+            Files.createDirectories(pretending);
+            Files.writeString(pretending.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, pretending, "farmworld", "world")).isFalse();
+        }
+
+        /**
+         * A world that exists but has never been written out.
+         *
+         * <h2>Why this is not the same as "not a world"</h2>
+         * Core unloads a farm world with {@code save = false} — writing chunks to disk immediately before
+         * deleting them is a freeze that buys nothing. So a farm world created and regenerated without a
+         * {@code save-all} in between has region files and <b>no {@code level.dat}</b>, because nothing ever
+         * wrote one.
+         *
+         * <p>Refused for that, the regeneration stops half-way: the world is unloaded, the delete is refused,
+         * and {@code FarmWorlds} deliberately does not recreate a folder it may have half-removed. That is the
+         * right response to a real refusal and the wrong one here, and it left the nether and the end of a
+         * live farm world unloaded and not remade. Seen on the test server the first time this ran.
+         *
+         * <p>So a folder with region data in it is a world, whether or not the marker file has been written.
+         * The position and name checks are unchanged — this widens what counts as a world, not where one may
+         * be.
+         */
+        @Test
+        @DisplayName("a world that was never saved is still a world, and may still be deleted")
+        void allowsAWorldWithNoLevelDatYet() throws IOException {
+            Path folder = serverDirectory.resolve("world").resolve("dimensions")
+                    .resolve("minecraft").resolve("farmworld_nether");
+            Files.createDirectories(folder.resolve("region"));
+            Files.writeString(folder.resolve("region").resolve("r.0.0.mca"), "chunks");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld_nether", "world"))
+                    .as("unloaded with save=false, so nothing ever wrote a level.dat — refusing this "
+                            + "leaves a farm world with its nether unloaded and not remade")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("an empty folder is not a world, so there is nothing there to delete")
+        void refusesAnEmptyFolder() throws IOException {
+            Path folder = serverDirectory.resolve("world").resolve("dimensions")
+                    .resolve("minecraft").resolve("farmworld");
+            Files.createDirectories(folder);
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world"))
+                    .as("nothing in it is nothing to remove, and a folder somebody happened to make is "
+                            + "not ours to delete")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("still never a folder that is not a world")
+        void stillRefusesANonWorld() throws IOException {
+            Path folder = serverDirectory.resolve("world").resolve("dimensions")
+                    .resolve("minecraft").resolve("farmworld");
+            Files.createDirectories(folder);
+            Files.writeString(folder.resolve("something.txt"), "not a world");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "farmworld", "world")).isFalse();
+        }
+
+        @Test
+        @DisplayName("still never a folder whose name is not the world's")
+        void stillRefusesTheWrongName() throws IOException {
+            Path folder = aDimensionWorld("world", "minecraft", "farmworld");
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, folder, "somethingelse", "world")).isFalse();
+        }
+
+        @Test
+        @DisplayName("still never through a link")
+        void stillRefusesASymlink() throws IOException {
+            Path real = serverDirectory.resolve("elsewhere");
+            Files.createDirectories(real);
+            Files.writeString(real.resolve("level.dat"), "x");
+            Path parent = serverDirectory.resolve("world").resolve("dimensions").resolve("minecraft");
+            Files.createDirectories(parent);
+            Path link = parent.resolve("farmworld");
+            try {
+                Files.createSymbolicLink(link, real);
+            } catch (UnsupportedOperationException | IOException notSupported) {
+                return; // No links on this filesystem; nothing to assert.
+            }
+
+            assertThat(FarmWorldState.mayDelete(serverDirectory, link, "farmworld", "world")).isFalse();
+        }
+    }
+
+    // ------------------------------------------------------------------ finding the folder at all
+
+    /**
+     * Which folder holds a world, when the world is not loaded and cannot be asked.
+     *
+     * <p>{@code FarmWorlds} asks the loaded {@code World} itself wherever it can — that is the only
+     * authoritative answer. This is the fallback for a world that failed to load or was never made, and
+     * it is a pure function so that the two layouts are decided somewhere testable rather than inside a
+     * method that needs a running server.
+     */
+    @Nested
+    @DisplayName("finding a world's folder without a server")
+    class Finding {
+
+        @Test
+        @DisplayName("the dimensions layout is found")
+        void findsTheDimensionsLayout() throws IOException {
+            Path folder = serverDirectory.resolve("world").resolve("dimensions")
+                    .resolve("minecraft").resolve("farmworld");
+            Files.createDirectories(folder);
+            Files.writeString(folder.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, "world", "farmworld"))
+                    .contains(folder);
+        }
+
+        @Test
+        @DisplayName("the flat layout is found too")
+        void findsTheFlatLayout() throws IOException {
+            Path folder = serverDirectory.resolve("farmworld");
+            Files.createDirectories(folder);
+            Files.writeString(folder.resolve("level.dat"), "x");
+
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, "world", "farmworld"))
+                    .contains(folder);
+        }
+
+        @Test
+        @DisplayName("a world that is not on disk at all is empty, not a guess")
+        void findsNothingWhenThereIsNothing() {
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, "world", "farmworld"))
+                    .as("a guessed path is a path something would later try to delete")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a folder without a level.dat is not a world and is not returned")
+        void ignoresSomethingThatIsNotAWorld() throws IOException {
+            Files.createDirectories(serverDirectory.resolve("farmworld"));
+
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, "world", "farmworld"))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("nulls answer empty rather than throwing")
+        void survivesNulls() {
+            assertThat(FarmWorldState.findWorldFolder(null, "world", "farmworld")).isEmpty();
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, null, "farmworld")).isEmpty();
+            assertThat(FarmWorldState.findWorldFolder(serverDirectory, "world", null)).isEmpty();
         }
     }
 

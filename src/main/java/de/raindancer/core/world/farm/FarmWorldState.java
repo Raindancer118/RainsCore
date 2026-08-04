@@ -46,6 +46,16 @@ public final class FarmWorldState {
     /** What a directory must contain before it is believed to be a world. */
     private static final String WORLD_MARKER = "level.dat";
 
+    /**
+     * The other thing a world folder has, for one that has not been written out yet.
+     *
+     * <p>Core unloads a farm world with {@code save = false}, so a world created and regenerated without a
+     * save in between has chunks and no {@code level.dat} — nothing ever wrote one. Judged by the marker
+     * alone, such a world is refused, the regeneration stops half-way, and its nether and end are left
+     * unloaded and not remade.
+     */
+    private static final String CHUNKS = "region";
+
     private final Path file;
     private final YamlStore store;
     private final Map<String, WorldSet> sets = new ConcurrentHashMap<>();
@@ -172,10 +182,21 @@ public final class FarmWorldState {
      * @param serverDirectory where the server lives; nothing outside it is ever touched
      * @param candidate       the folder somebody wants removed
      * @param worldName       the world it is supposed to be
+     * @param levelName       the main world's name, from {@code level-name}. Required, and refused
+     *                        outright — it is the folder every other world now lives inside, so one
+     *                        delete there takes the server with it. It cannot be worked out from the
+     *                        shape of the directory (a main world only grows a {@code dimensions}
+     *                        folder once a second world exists) and it cannot be assumed to be
+     *                        {@code world}, which would protect a default installation and nothing
+     *                        else. A test found both of those attempts
      */
-    public static boolean mayDelete(Path serverDirectory, Path candidate, String worldName) {
+    public static boolean mayDelete(Path serverDirectory, Path candidate, String worldName,
+                                    String levelName) {
         if (serverDirectory == null || candidate == null || worldName == null
-                || worldName.isBlank()) {
+                || worldName.isBlank() || levelName == null || levelName.isBlank()) {
+            return false;
+        }
+        if (worldName.equalsIgnoreCase(levelName)) {
             return false;
         }
         try {
@@ -201,22 +222,146 @@ public final class FarmWorldState {
             if (folder.equals(server) || !folder.startsWith(server)) {
                 return false;
             }
-            // Directly inside the server directory, and named exactly after the world. A world
-            // folder nested somewhere else is not one we made.
-            if (!server.equals(folder.getParent())) {
+            if (!folder.getFileName().toString().equals(worldName)) {
                 return false;
             }
-            if (!folder.getFileName().toString().equals(worldName)) {
+            // In one of the two shapes a world folder is allowed to have, and nowhere else. See
+            // isAWorldFolderPosition — "anywhere under the server directory" would be every plugin's
+            // data folder, and "directly in the server directory" was every real farm world refused.
+            if (!isAWorldFolderPosition(server, folder)) {
                 return false;
             }
             // And it has to actually be a world. A folder somebody happened to name "farmworld" is
             // not the farm world, and deleting it would be deleting whatever it really was.
-            return Files.isRegularFile(folder.resolve(WORLD_MARKER));
+            //
+            // Either marker: the written one, or chunks on their own for a world that has not been saved
+            // yet. An empty folder is neither and stays refused.
+            return looksLikeAWorld(folder);
         } catch (IOException | RuntimeException unreadable) {
             // If it cannot even be resolved, it is certainly not something to delete.
             log.warn("Refusing to delete '{}': {}", candidate, String.valueOf(unreadable));
             return false;
         }
+    }
+
+    /**
+     * Whether a folder holds a world.
+     *
+     * <p>A {@code level.dat}, or a region directory with something in it. The second is what a world that
+     * has never been saved looks like, and it is the ordinary state of a farm world being regenerated.
+     */
+    public static boolean holdsAWorld(Path folder) {
+        return folder != null && Files.isDirectory(folder) && looksLikeAWorld(folder);
+    }
+
+    private static boolean looksLikeAWorld(Path folder) {
+        if (Files.isRegularFile(folder.resolve(WORLD_MARKER))) {
+            return true;
+        }
+        Path chunks = folder.resolve(CHUNKS);
+        if (!Files.isDirectory(chunks)) {
+            return false;
+        }
+        try (java.util.stream.Stream<Path> inside = Files.list(chunks)) {
+            return inside.findAny().isPresent();
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
+    /** The folder Paper nests every non-server world under, inside the main world's own folder. */
+    private static final String DIMENSIONS = "dimensions";
+
+    /**
+     * Whether a folder sits where a world folder is allowed to sit.
+     *
+     * <h2>The two shapes, and why it is a list of two rather than a depth check</h2>
+     * <ul>
+     *   <li><b>{@code <server>/<name>}</b> — the server's own worlds, and any world moved there by
+     *       hand. What this class used to allow, and only this.</li>
+     *   <li><b>{@code <server>/<level-name>/dimensions/<namespace>/<name>}</b> — where Paper 26.x
+     *       actually puts a world created through {@code WorldCreator}, which is every farm world.
+     *       Refusing it meant regeneration deleted nothing and reported success.</li>
+     * </ul>
+     *
+     * <p>Written as exactly these two positions rather than "somewhere under the server directory"
+     * because the loose version allows every plugin's data folder, and a farm world called
+     * {@code config} would then delete one. The level name and the namespace are not checked against
+     * anything — {@code level-name} is a server setting and a datapack may register its own namespace —
+     * but their <em>position</em> is fixed, so a folder of the same shape under {@code plugins/} is
+     * still refused.
+     *
+     * <p>The middle segment must be literally {@code dimensions}, which is what keeps the main world
+     * itself out: {@code <server>/world} has one segment, not four, and matches neither shape.
+     *
+     * @param server the server directory, already resolved to a real path
+     * @param folder the candidate, already resolved to a real path and known to be inside the server
+     */
+    private static boolean isAWorldFolderPosition(Path server, Path folder) {
+        // Belt and braces over the level-name check in mayDelete: a folder that has other worlds
+        // nested inside it is not a leaf, whatever it is called. Cheap, and this is the one function
+        // in the library where a second guard against the same mistake is worth its keep.
+        if (Files.isDirectory(folder.resolve(DIMENSIONS))) {
+            return false;
+        }
+        Path inside = server.relativize(folder);
+        if (inside.getNameCount() == 1) {
+            return true;
+        }
+        // <level-name>/dimensions/<namespace>/<name>. Exactly four, so neither the dimensions folder
+        // nor the namespace folder — each of which holds every farm world on the server — can match,
+        // and nor can anything buried deeper.
+        return inside.getNameCount() == 4
+                && inside.getName(1).toString().equals(DIMENSIONS);
+    }
+
+    /**
+     * Where a world's folder is, for a world that is not loaded and cannot be asked.
+     *
+     * <p>{@code FarmWorlds} asks the loaded {@link org.bukkit.World} itself wherever it can, because
+     * that is the only authoritative answer and the only one that cannot go stale when Paper changes
+     * its layout again. This is the fallback for a world that failed to load or was never made.
+     *
+     * <p>Empty when there is nothing there. Deliberately not "the path it would have been at": a
+     * guessed path is a path something would later hand to a delete, and the whole reason this class
+     * exists is that nothing about deleting is allowed to be a guess.
+     *
+     * @param serverDirectory where the server lives
+     * @param levelName       the main world's name, from {@code level-name}
+     * @param worldName       the world being looked for
+     */
+    public static Optional<Path> findWorldFolder(Path serverDirectory, String levelName,
+                                                 String worldName) {
+        if (serverDirectory == null || levelName == null || worldName == null
+                || levelName.isBlank() || worldName.isBlank()) {
+            return Optional.empty();
+        }
+        // The dimensions layout first: it is where anything this class made will actually be, so the
+        // common case does not depend on the fallback below being right.
+        List<Path> candidates = List.of(
+                serverDirectory.resolve(levelName).resolve(DIMENSIONS).resolve("minecraft")
+                        .resolve(worldName),
+                serverDirectory.resolve(worldName));
+        for (Path candidate : candidates) {
+            if (looksLikeAWorld(candidate)) {
+                return Optional.of(candidate);
+            }
+        }
+        // A namespace other than minecraft, which a datapack dimension may have. Looked for rather
+        // than guessed at, and only one level deep.
+        Path namespaces = serverDirectory.resolve(levelName).resolve(DIMENSIONS);
+        if (Files.isDirectory(namespaces)) {
+            try (java.util.stream.Stream<Path> found = Files.list(namespaces)) {
+                return found
+                        .map(namespace -> namespace.resolve(worldName))
+                        .filter(FarmWorldState::looksLikeAWorld)
+                        .findFirst();
+            } catch (IOException unreadable) {
+                log.warn("Could not look for '{}' under {}: {}", worldName, namespaces,
+                        String.valueOf(unreadable));
+            }
+        }
+        return Optional.empty();
     }
 
     // ---------------------------------------------------------------------------- the file

@@ -63,6 +63,30 @@ public final class LandFlags {
     }
 
     /**
+     * Whether a flag that <em>makes something happen</em> applies where this player is standing.
+     *
+     * <p>The acting counterpart to {@link #isAllowedAt}, and it differs in exactly one place: outside a
+     * protected area this is false where that is true. See {@code FlagRules.isAppliedTo} for why the two
+     * questions cannot share an answer — asking the permission question about keep-inventory switched it on
+     * for the whole world.
+     */
+    public boolean isAppliedAt(Location location, LandFlag flag, UUID who) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        if (bypassed(who)) {
+            // A bypassing admin is not interfered with, which for an acting flag means it does not act on
+            // them. The same reading as isAllowedAt, arriving at the opposite boolean for the same reason.
+            return false;
+        }
+        ProtectedArea area = land.areaAt(location).orElse(null);
+        if (land.isSuspendedIn(area)) {
+            return false;
+        }
+        return rules.isAppliedTo(area, flag, LandAudience.of(area, who), who);
+    }
+
+    /**
      * Whether this player's bypass answers the question before any flag does.
      *
      * <p><b>Here, and only here.</b> The bypass used to be remembered by each listener for itself: the teleport

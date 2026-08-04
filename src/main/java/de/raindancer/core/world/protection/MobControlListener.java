@@ -70,6 +70,14 @@ public final class MobControlListener implements Listener {
             }
             return;
         }
+        // A potion of infestation or oozing, not the world spawning something on its own — governed
+        // separately, see LandFlag.POTION_SPAWNING.
+        if (reason == CreatureSpawnEvent.SpawnReason.POTION_EFFECT) {
+            if (flagDenied(location, LandFlag.POTION_SPAWNING)) {
+                event.setCancelled(true);
+            }
+            return;
+        }
         // Only natural-ish spawns are governed; eggs, breeding and commands stay in the owner's control.
         if (!isNaturalReason(reason)) {
             return;

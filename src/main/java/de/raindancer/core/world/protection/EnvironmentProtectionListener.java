@@ -300,8 +300,13 @@ public final class EnvironmentProtectionListener implements Listener {
         Player player = event.getEntity();
         org.bukkit.Location where = player.getLocation();
 
+        // isAppliedAt, not isAllowedAt. This flag's true means "keep their things", not "keeping their
+        // things is permitted", and the permission question answers yes on unclaimed ground — which is most
+        // of a world. Asked the wrong way round, this switched keep-inventory on for the entire server and
+        // nothing an owner could configure turned it off again.
         if (land.landFlags().isEnforced(LandFlag.KEEP_INVENTORY)
-                && land.landFlags().isAllowedAt(where, LandFlag.KEEP_INVENTORY, player.getUniqueId())) {
+                && land.landFlags().isAppliedAt(where, LandFlag.KEEP_INVENTORY,
+                        player.getUniqueId())) {
             event.setKeepInventory(true);
             event.getDrops().clear();
             event.setKeepLevel(true);

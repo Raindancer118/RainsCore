@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -59,8 +60,13 @@ public final class Travel {
     private static final long A_SECOND_IN_TICKS = 20L;
 
     /** Everything about one journey, in one entry — three maps keyed alike is three to get wrong. */
+    /**
+     * @param groundwork the search for somewhere safe, started at departure rather than on arrival —
+     *                   see {@link #prepare}. Null when there is nothing to prepare
+     */
     private record Journey(Location destination, Trip trip, TravelWatcher watcher,
-                           ScheduledTask countdown) {
+                           ScheduledTask countdown,
+                           CompletableFuture<Optional<Spot>> groundwork) {
     }
 
     private final Plugin plugin;
@@ -153,7 +159,8 @@ public final class Travel {
             return;
         }
         if (!trip.hasWarmup()) {
-            arrive(traveller, destination, trip, told);
+            // Nothing to prepare during: there is no warm-up to do it in.
+            arrive(traveller, destination, trip, told, null);
             return;
         }
 
@@ -181,7 +188,11 @@ public final class Travel {
             told.refused(traveller, TravelReason.CANNOT_SCHEDULE, trip);
             return;
         }
-        journeys.put(who, new Journey(destination.clone(), trip, told, countdown));
+        // The warm-up is dead time the player is already standing through. Spending it on the work the
+        // arrival would otherwise do is what turns "you are being teleported" followed by four seconds of
+        // nothing into an arrival that happens when it says it does.
+        journeys.put(who, new Journey(destination.clone(), trip, told, countdown,
+                prepare(destination, trip)));
 
         // The window this closes: between begin() above and the put() on the line before, a movement
         // or a quit on another thread finds the departure and cancels it, but finds no journey — so
@@ -193,6 +204,41 @@ public final class Travel {
                 orphan.countdown().cancel();
                 orphan.watcher().cancelled(traveller, TravelReason.MOVED, trip);
             }
+        }
+    }
+
+    /**
+     * Starts the arrival's groundwork while the traveller is still standing still.
+     *
+     * <h2>Why this exists</h2>
+     * Finding somewhere safe means loading — and, at a scattered farm-world arrival, <em>generating</em> —
+     * the chunks around the destination. Done on arrival, that is several seconds between the countdown
+     * saying zero and the player actually moving, with nothing on screen to explain the gap. Reported as
+     * exactly that: "it said I was being teleported, then it took another four seconds."
+     *
+     * <p>So it is started at departure instead. The warm-up is time the player is already required to stand
+     * through, and this is the one useful thing that can be done with it. By the time the countdown finishes
+     * the terrain is usually generated and held, and the teleport is immediate.
+     *
+     * <p>Nothing depends on it having finished — {@code arrive} waits on the same future either way, so a
+     * warm-up shorter than the generation takes is simply the old behaviour with a head start. And nothing
+     * is cancelled if the trip is: the chunks were loaded {@code forAMoment}, so they are released on their
+     * own rather than held by a journey that never happened.
+     *
+     * @return the search in flight, or null when this trip does not need one
+     */
+    private CompletableFuture<Optional<Spot>> prepare(Location destination, Trip trip) {
+        if (safety == null || !trip.safeArrival()) {
+            return null;
+        }
+        try {
+            return safety.findSafe(spotOf(destination), trip.searchRadius());
+        } catch (RuntimeException couldNotStart) {
+            // Never at the cost of the journey. A failure here means the arrival does its own search, which
+            // is what it did before this existed.
+            log.warn("Could not start the arrival check for {}: {}", trip.what(),
+                    couldNotStart.toString());
+            return null;
         }
     }
 
@@ -210,7 +256,8 @@ public final class Travel {
             case ARRIVED -> {
                 task.cancel();
                 journeys.remove(who);
-                arrive(traveller, journey.destination(), journey.trip(), journey.watcher());
+                arrive(traveller, journey.destination(), journey.trip(), journey.watcher(),
+                        journey.groundwork());
             }
             // A stray tick from a task that was already cancelled. Nothing to do but stop.
             case NOTHING_PENDING -> {
@@ -337,13 +384,18 @@ public final class Travel {
      * is safe. Deliberately not "fall back to the exact spot": that puts the player in the place
      * already known to be dangerous, which is the whole thing the safety package exists to stop.
      */
-    private void arrive(Player traveller, Location destination, Trip trip, TravelWatcher watcher) {
+    private void arrive(Player traveller, Location destination, Trip trip, TravelWatcher watcher,
+                        CompletableFuture<Optional<Spot>> groundwork) {
         if (!trip.safeArrival() || safety == null) {
             teleport(traveller, destination, trip, watcher);
             return;
         }
         Spot around = spotOf(destination);
-        safety.findSafe(around, trip.searchRadius()).thenAccept(found ->
+        // The search started at departure when there was a warm-up to start it in; otherwise one now.
+        // Usually already complete by here, which is the whole point — thenAccept then runs immediately.
+        CompletableFuture<Optional<Spot>> search =
+                groundwork != null ? groundwork : safety.findSafe(around, trip.searchRadius());
+        search.thenAccept(found ->
                 // The answer arrives on whichever thread finished the chunk load. Everything below
                 // touches the player, so hop back onto them first.
                 onThePlayersThread(traveller, "arriving at " + trip.what(), () -> {
