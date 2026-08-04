@@ -24,7 +24,12 @@ public enum MobFamily {
      * The ones that come for you. What a wave is made of, and the first drawer for that reason.
      */
     HOSTILE("Hostile", "ZOMBIE_HEAD", names(
-            "zombie", "zombie_villager", "husk", "zombified_piglin", "zoglin",
+            // drowned belongs here as well as under AQUATIC, and that is not a duplicate to tidy
+            // away: the overlap *is* the design. of() walks the families in declaration order, so a
+            // creature in two of them lands in the first — and somebody building a wave of hostile
+            // mobs looks for a drowned under hostile, not among the squid. Removing it from here
+            // once made MobCatalogueTest#overlaps red for exactly that reason.
+            "zombie", "zombie_villager", "husk", "drowned", "zombified_piglin", "zoglin",
             "skeleton", "stray", "bogged", "wither_skeleton", "phantom",
             "creeper", "spider", "cave_spider", "silverfish", "endermite",
             "enderman", "blaze", "ghast", "happy_ghast", "magma_cube", "slime",
@@ -38,7 +43,7 @@ public enum MobFamily {
             "llama", "trader_llama", "camel", "sniffer", "armadillo", "goat", "bee",
             "villager", "wandering_trader", "iron_golem", "snow_golem", "cat", "ocelot",
             "wolf", "fox", "parrot", "panda", "polar_bear", "turtle", "frog", "tadpole",
-            "strider", "bat", "allay", "axolotl", "mooshroom", "skeleton_horse", "zombie_horse")),
+            "strider", "bat", "allay", "axolotl", "skeleton_horse", "zombie_horse")),
 
     /** The wet ones, which is a drawer because looking for a squid among the cows is hopeless. */
     AQUATIC("Water", "WATER_BUCKET", names(
