@@ -104,10 +104,15 @@ public final class BukkitVanishSink implements VanishSink {
                 .translatable(key, net.kyori.adventure.text.format.NamedTextColor.YELLOW,
                         net.kyori.adventure.text.Component.text(target.getName()));
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            // Not to them, and not to anybody who can see them anyway: telling the staff that a
-            // moderator "left" while they can still see them standing there is worse than saying
-            // nothing.
-            if (!viewer.equals(target) && !exceptThem.contains(viewer.getUniqueId())) {
+            // Not to anybody who can see them anyway: telling the staff a moderator "left" while
+            // they can still see them standing there is worse than saying nothing.
+            //
+            // But *always* to them. They are the one person who needs to know it happened, and
+            // withholding it made the whole feature unverifiable: alone on a test server, or with
+            // only staff online, the line went to nobody and looked exactly like a feature that had
+            // never been written. Two evenings went on deciding which of those it was.
+            boolean itIsThem = viewer.equals(target);
+            if (itIsThem || !exceptThem.contains(viewer.getUniqueId())) {
                 viewer.sendMessage(line);
             }
         }
