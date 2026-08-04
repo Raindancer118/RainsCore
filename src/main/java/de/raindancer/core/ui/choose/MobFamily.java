@@ -24,7 +24,7 @@ public enum MobFamily {
      * The ones that come for you. What a wave is made of, and the first drawer for that reason.
      */
     HOSTILE("Hostile", "ZOMBIE_HEAD", names(
-            "zombie", "zombie_villager", "husk", "drowned", "zombified_piglin", "zoglin",
+            "zombie", "zombie_villager", "husk", "zombified_piglin", "zoglin",
             "skeleton", "stray", "bogged", "wither_skeleton", "phantom",
             "creeper", "spider", "cave_spider", "silverfish", "endermite",
             "enderman", "blaze", "ghast", "happy_ghast", "magma_cube", "slime",
