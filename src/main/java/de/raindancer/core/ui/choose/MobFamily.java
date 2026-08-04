@@ -72,6 +72,19 @@ public enum MobFamily {
     /** Drawers a wave may be built from. A wave of cows is not a wave. */
     private static final Set<MobFamily> FIGHTABLE = Set.of(HOSTILE, BOSS);
 
+    /**
+     * Creatures that are not hostile and will fight anyway.
+     *
+     * <p>The families answer "what is this?", which is the right question for browsing — an iron golem
+     * is genuinely not hostile, and filing it under Hostile would be a lie to everybody looking for
+     * one. But a wave asks a different question, "can this fight", and answering it with the family
+     * alone left the golems out of packs entirely. A wave of iron golems is a perfectly reasonable
+     * event, and so is dropping two as a defence.
+     *
+     * <p>So the two questions are kept apart rather than one being bent to serve the other.
+     */
+    private static final Set<String> ALSO_FIGHTS = names("iron_golem", "snow_golem");
+
     private final String title;
     private final String icon;
     private final Set<String> members;
@@ -103,9 +116,27 @@ public enum MobFamily {
         return icon;
     }
 
-    /** Whether a wave may be made of these. */
+    /** Whether a wave may be made of this whole drawer. */
     public boolean fightable() {
         return FIGHTABLE.contains(this);
+    }
+
+    /**
+     * Whether one creature can be put in a pack or a wave.
+     *
+     * <p>Its drawer, or one of the few that fight without being hostile. Asked per creature rather
+     * than per family, because that is the shape of the real question.
+     */
+    public static boolean fightsBack(String entityType) {
+        if (entityType == null || entityType.isBlank()) {
+            return false;
+        }
+        return of(entityType).fightable() || ALSO_FIGHTS.contains(normalise(entityType));
+    }
+
+    /** The plain lower-case name, without a namespace. */
+    private static String normalise(String entityType) {
+        return entityType.trim().toLowerCase(Locale.ROOT).replace("minecraft:", "");
     }
 
     /**
@@ -119,7 +150,7 @@ public enum MobFamily {
         if (entityType == null || entityType.isBlank()) {
             return OTHER;
         }
-        String name = entityType.trim().toLowerCase(Locale.ROOT).replace("minecraft:", "");
+        String name = normalise(entityType);
         // Bosses first, then hostile, then the rest in declaration order — see the note above.
         for (MobFamily family : List.of(BOSS, HOSTILE, AQUATIC, PASSIVE, OBJECT)) {
             if (family.members.contains(name)) {

@@ -57,12 +57,9 @@ public final class MobCatalogue {
      * that can be fought and that will eventually die or be killed.
      */
     public List<String> fightable() {
-        List<String> everything = new ArrayList<>();
-        for (MobFamily family : MobFamily.values()) {
-            if (family.fightable()) {
-                everything.addAll(inFamily(family));
-            }
-        }
+        List<String> everything = new ArrayList<>(all().stream()
+                .filter(MobFamily::fightsBack)
+                .toList());
         everything.sort(String::compareTo);
         return everything;
     }

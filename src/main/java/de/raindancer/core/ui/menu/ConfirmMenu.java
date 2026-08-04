@@ -91,14 +91,14 @@ public class ConfirmMenu extends Menu {
 
         // Left. Nothing but going back — never the thing being confirmed, however the caller
         // arranged its lambdas.
-        band(MenuLayout.WHO, 2, Icons.of(Material.RED_CONCRETE, "<red>No, leave it alone",
+        band(MenuLayout.WHO, 6, Icons.of(Material.RED_CONCRETE, "<red>No, leave it alone",
                         "<gray>Nothing happens."),
                 click -> leave());
 
         band(MenuLayout.WHO, 4, Icons.of(Material.BOOK, "<gray>What this does", lore));
 
         // Right, always.
-        band(MenuLayout.WHO, 6, Icons.of(Material.LIME_CONCRETE, "<green>Yes, do it",
+        band(MenuLayout.WHO, 2, Icons.of(Material.LIME_CONCRETE, "<green>Yes, do it",
                         "<gray>Go ahead."),
                 click -> {
                     if (onYes != null) {

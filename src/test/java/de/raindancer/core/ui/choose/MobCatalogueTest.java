@@ -80,6 +80,27 @@ class MobCatalogueTest {
     }
 
     @Test
+    @DisplayName("the golems can be put in a wave without being called hostile")
+    void theOnesThatFightWithoutBeingHostile() {
+        // Two questions, and the families answer the other one. An iron golem is genuinely not
+        // hostile — filing it under Hostile would be a lie to anybody looking for one — but "can this
+        // fight" is what a wave asks, and answering it with the family alone left the golems out of
+        // packs entirely.
+        MobCatalogue catalogue = of("iron_golem", "snow_golem", "cow", "villager", "zombie");
+
+        assertThat(catalogue.fightable())
+                .containsExactlyInAnyOrder("iron_golem", "snow_golem", "zombie");
+        // Still filed where somebody would look for them.
+        assertThat(MobFamily.of("iron_golem")).isEqualTo(MobFamily.PASSIVE);
+        assertThat(MobFamily.of("snow_golem")).isEqualTo(MobFamily.PASSIVE);
+
+        assertThat(MobFamily.fightsBack("iron_golem")).isTrue();
+        assertThat(MobFamily.fightsBack("minecraft:iron_golem")).isTrue();
+        assertThat(MobFamily.fightsBack("cow")).isFalse();
+        assertThat(MobFamily.fightsBack(null)).isFalse();
+    }
+
+    @Test
     @DisplayName("searching finds it, and an exact match comes first")
     void searching() {
         MobCatalogue catalogue = of("zombie", "zombie_villager", "zombified_piglin", "cow");
