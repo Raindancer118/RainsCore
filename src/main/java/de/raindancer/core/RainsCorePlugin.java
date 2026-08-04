@@ -415,6 +415,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // does nothing — see ChatButtons and CoreCommands.
         buttons = new ChatButtons(clickActions, "");
         chat = chatFor("Core");
+        // Core's own sections, signed with Core's own brand. Until this, they were unowned, and an
+        // unowned section wears whatever plugin called prefixFrom last — which is how every warp and
+        // home line on the test server announced itself as "Moderation".
+        int signed = messages.claimSections(chat.brand()::chatPrefix);
+        if (signed > 0) {
+            log.debug("{} message section(s) signed as Core's own.", signed);
+        }
         navigation = new SettingsNavigation(registry);
         // One chat listener for every prompt on the server. Three plugins each registering their
         // own is three plugins fighting over the next line a player types.

@@ -690,6 +690,38 @@ public final class Messages {
     }
 
     /**
+     * Signs every section this file already defines, for whoever bundled it.
+     *
+     * <p>{@link #defineFrom} does this for a module, because a module hands over its wording and its
+     * brand together. {@link #load} could not: it is the <em>host's</em> own wording, loaded before
+     * the host has a brand to sign it with.
+     *
+     * <p>Which left Core's own sections unowned, and an unowned section falls back to the global
+     * prefix — whatever plugin called {@link #prefixFrom} last. On a server where moderation happens
+     * to enable last, that is every warp, home and teleport line on the server announcing itself as
+     * <code>Moderation</code>. It is not cosmetic: the prefix is how a player knows which plugin is
+     * talking to them, and the one thing worse than no answer is a confident wrong one.
+     *
+     * <p>{@code putIfAbsent}, so this can be called at any point without taking a section from the
+     * module that actually owns it — and so calling it twice changes nothing.
+     *
+     * @return how many sections were signed
+     */
+    public int claimSections(java.util.function.Supplier<String> signature) {
+        if (signature == null) {
+            return 0;
+        }
+        int signed = 0;
+        for (String key : keys()) {
+            int dot = key.indexOf('.');
+            if (dot > 0 && sectionPrefixes.putIfAbsent(key.substring(0, dot), signature) == null) {
+                signed++;
+            }
+        }
+        return signed;
+    }
+
+    /**
      * Insists on one message, over anything the owner wrote.
      *
      * <p>Rare on purpose. Every use is a line in somebody's {@code messages.yml} that silently does
