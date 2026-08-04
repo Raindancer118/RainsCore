@@ -383,6 +383,18 @@ public interface RainsCore {
      */
     Messages messages();
 
+    /**
+     * Every command on this server, as reported by whoever owns it.
+     *
+     * <p>What {@code /commands} is built from. A plugin declares what it offers as it enables — one
+     * sentence and its options per command — and the directory is the only place the whole list
+     * exists: no plugin can see past its own jar, and Bukkit's command map holds every vanilla name
+     * with none of the words a reader needs.
+     *
+     * <p>Reporting is optional and one line; not reporting means being absent from the book.
+     */
+    de.raindancer.core.platform.command.CommandDirectory commands();
+
     Audit audit();
 
     /**

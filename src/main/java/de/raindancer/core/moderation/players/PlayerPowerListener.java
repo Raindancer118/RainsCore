@@ -10,7 +10,7 @@ import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 /**
- * Where god mode and instakill stop being a set of ids and start mattering.
+ * Where god mode, instakill and instant breaking stop being sets of ids and start mattering.
  *
  * <h2>The two priorities, and why they are opposite ends</h2>
  * <b>God mode is {@code LOWEST} and {@code ignoreCancelled = false}.</b> It has to run before anything
@@ -46,6 +46,29 @@ public final class PlayerPowerListener implements Listener {
         if (event.getEntity() instanceof Player hurt
                 && powers.isInvulnerable(hurt.getUniqueId())) {
             event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Every block gives way at once — creative-mode breaking, in survival.
+     *
+     * <p><b>Why this is safe, and why it has to be done this way.</b> {@code setInstaBreak} changes how
+     * long a block takes and <em>nothing else</em>. The game still fires {@link
+     * org.bukkit.event.block.BlockBreakEvent} straight afterwards, so the land protection, the claim
+     * flags and every other plugin get exactly the say they had before — a moderator with this on still
+     * cannot break a block in somebody's claim, they simply fail to break it instantly.
+     *
+     * <p>The tempting alternative — breaking the block from here with {@code setType(AIR)} — would skip
+     * that event entirely, which is a hole through every protection on the server dressed up as a
+     * convenience. It is not implemented, deliberately.
+     *
+     * <p>{@code ignoreCancelled = true} for the same reason: a block-damage event another plugin has
+     * already refused stays refused.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockDamage(org.bukkit.event.block.BlockDamageEvent event) {
+        if (powers.breaksInstantly(event.getPlayer().getUniqueId())) {
+            event.setInstaBreak(true);
         }
     }
 

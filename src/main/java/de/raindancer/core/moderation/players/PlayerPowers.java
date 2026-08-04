@@ -5,7 +5,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Who cannot be hurt, and who hurts everything in one hit.
+ * Who cannot be hurt, who hurts everything in one hit, and for whom every block gives way at once.
  *
  * <h2>Why these are here rather than in a moderation plugin</h2>
  * Because they are answers to a damage event, and there must be exactly one plugin on the server
@@ -38,6 +38,7 @@ public final class PlayerPowers {
 
     private final Set<UUID> invulnerable = ConcurrentHashMap.newKeySet();
     private final Set<UUID> oneHit = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> instantBreakers = ConcurrentHashMap.newKeySet();
 
     // ---------------------------------------------------------------------------- god mode
 
@@ -107,12 +108,52 @@ public final class PlayerPowers {
         return Set.copyOf(oneHit);
     }
 
+    // ---------------------------------------------------------------------------- instant breaking
+
+    /**
+     * Blocks break the moment they are hit, whatever the block and whatever is being held.
+     *
+     * <p>Creative-mode breaking in survival, and no more than that: it changes how long a block takes,
+     * not whether somebody is allowed to break it. See {@code PlayerPowerListener#onBlockDamage} for
+     * why that distinction is load-bearing rather than a nicety.
+     *
+     * @return whether they now break instantly
+     */
+    public boolean toggleInstaBreak(UUID who) {
+        if (who == null) {
+            return false;
+        }
+        if (instantBreakers.remove(who)) {
+            return false;
+        }
+        instantBreakers.add(who);
+        return true;
+    }
+
+    /** Turns instant breaking on or off. @return whether this changed anything */
+    public boolean instaBreak(UUID who, boolean on) {
+        if (who == null) {
+            return false;
+        }
+        return on ? instantBreakers.add(who) : instantBreakers.remove(who);
+    }
+
+    /** Whether every block gives way at once for them. */
+    public boolean breaksInstantly(UUID who) {
+        return who != null && instantBreakers.contains(who);
+    }
+
+    /** Everybody currently breaking instantly, as a snapshot. */
+    public Set<UUID> instantBreakers() {
+        return Set.copyOf(instantBreakers);
+    }
+
     // ---------------------------------------------------------------------------- housekeeping
 
     /**
-     * Drops both for somebody who has left.
+     * Drops all three for somebody who has left.
      *
-     * <p>See the class note: neither of these is meant to outlive a session, and a set that is never
+     * <p>See the class note: none of these is meant to outlive a session, and a set that is never
      * cleaned also grows by an entry per player who has ever used one.
      */
     public void forget(UUID who) {
@@ -121,18 +162,21 @@ public final class PlayerPowers {
         }
         invulnerable.remove(who);
         oneHit.remove(who);
+        instantBreakers.remove(who);
     }
 
     /**
      * Drops everything. For a shutdown or a reload.
      *
-     * @return how many people had at least one of the two
+     * @return how many people had at least one of the three
      */
     public int forgetEverybody() {
         Set<UUID> everybody = new java.util.HashSet<>(invulnerable);
         everybody.addAll(oneHit);
+        everybody.addAll(instantBreakers);
         invulnerable.clear();
         oneHit.clear();
+        instantBreakers.clear();
         return everybody.size();
     }
 }

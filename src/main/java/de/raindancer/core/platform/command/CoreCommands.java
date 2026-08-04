@@ -84,6 +84,39 @@ public final class CoreCommands {
                 List.of(aliases), new WarpCommand());
     }
 
+    /** Whether {@code /commands} has already been taken this run. See {@link #commandList}. */
+    private static final java.util.concurrent.atomic.AtomicBoolean DIRECTORY_TAKEN =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * The directory of every command on this server, as a book.
+     *
+     * <p>The one command in this class that <b>declines a second registration</b>, and it has to. Every
+     * standalone module plugin registers it — none of them can know whether another is installed — and
+     * Paper answers a clash by namespacing the loser, so a server with six of them would list
+     * {@code /commands}, {@code /rainswarps:commands} and four more in its help, all showing the same
+     * book. It is the same book because the directory is Core's: the first registration is complete on
+     * its own, and the rest are noise.
+     *
+     * <p>This class's static state is shared across all of them precisely because it is Core's —
+     * {@code join-classpath: true} means one loaded copy of this class for every dependent plugin.
+     *
+     * @return whether this call is the one that registered it
+     */
+    public static boolean commandList(Commands registrar, String name, String... aliases) {
+        if (!DIRECTORY_TAKEN.compareAndSet(false, true)) {
+            return false;
+        }
+        registrar.register(name, "Every command on this server, in a book.", List.of(aliases),
+                new CommandsCommand());
+        return true;
+    }
+
+    /** The same, as {@code /commands}. */
+    public static boolean commandList(Commands registrar) {
+        return commandList(registrar, "commands", "cmds");
+    }
+
     /** Going to a farm world, and regenerating one. */
     public static void farmWorlds(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Go to a farm world, or run one.", List.of(aliases),

@@ -422,6 +422,27 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         if (signed > 0) {
             log.debug("{} message section(s) signed as Core's own.", signed);
         }
+        // Core's own commands, in the directory /commands reads. Reported rather than assumed: a
+        // server registers whichever of CoreCommands' handlers it wants, so this is what Core offers
+        // and the book is honest about a server that took none of them.
+        commandDirectory.declareAll(java.util.List.of(
+                de.raindancer.core.platform.command.CommandNote
+                        .of("Core", "commands", "This book.",
+                                "[plugin] — only that plugin's"),
+                de.raindancer.core.platform.command.CommandNote
+                        .of("Core", "settings", "Read and change what every plugin on this server does.")
+                        .needing("rainscore.settings"),
+                de.raindancer.core.platform.command.CommandNote
+                        .of("Core", "warp", "Go to a named place.",
+                                "<name> — go there",
+                                "list — every warp you may use")
+                        .needing("rainscore.warp.use"),
+                de.raindancer.core.platform.command.CommandNote
+                        .of("Core", "farmworld", "Go to a farm world, where digging is meant to happen.",
+                                "<name> — go to that one",
+                                "regen <name> confirm — rebuild it, which deletes it first")
+                        .needing("rainscore.farmworld.use")));
+
         navigation = new SettingsNavigation(registry);
         // One chat listener for every prompt on the server. Three plugins each registering their
         // own is three plugins fighting over the next line a player types.
@@ -1028,6 +1049,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Messages messages() {
         return messages;
+    }
+
+    /** Held here rather than built lazily: modules report into it during their own enable. */
+    private final de.raindancer.core.platform.command.CommandDirectory commandDirectory =
+            new de.raindancer.core.platform.command.CommandDirectory();
+
+    @Override
+    public de.raindancer.core.platform.command.CommandDirectory commands() {
+        return commandDirectory;
     }
 
     @Override
