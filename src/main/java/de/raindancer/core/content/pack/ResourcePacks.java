@@ -54,6 +54,16 @@ public final class ResourcePacks {
     private final Map<UUID, String> sentDigest = new ConcurrentHashMap<>();
     private final Map<UUID, PackStatus> status = new ConcurrentHashMap<>();
 
+    /**
+     * Packs that already exist somewhere, kept in the order they were registered.
+     *
+     * <p>A map so registering the same name twice replaces rather than sends two, and ordered so the
+     * order a server declared them in is the order the client applies them in. See {@link HostedPack}
+     * for why these go through here rather than round it.
+     */
+    private final Map<String, HostedPack> hosted =
+            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+
     private volatile PackBuild current;
     private volatile boolean required;
     private volatile String description = "Server pack";
@@ -121,6 +131,47 @@ public final class ResourcePacks {
 
     // ---------------------------------------------------------------------------- contributing
 
+    // ---------------------------------------------------------------------------- hosted packs
+
+    /**
+     * Takes a pack that is already hosted somewhere and adds it to what players are sent.
+     *
+     * <p>Registering the same {@link HostedPack#id()} again replaces it — two packs under one name is
+     * two downloads of the same thing and no way to withdraw either.
+     *
+     * @return whether it was taken; false means it was not usable and {@link #problems()} says why
+     */
+    public boolean host(HostedPack pack) {
+        if (pack == null) {
+            hostingProblems.add("a hosted pack was offered as nothing at all");
+            return false;
+        }
+        if (!pack.isUsable()) {
+            log.warn("Not sending a hosted pack: {}", pack.problem());
+            hostingProblems.add(pack.problem());
+            return false;
+        }
+        hosted.put(pack.id(), pack);
+        log.info("Hosted pack '{}' will be sent from {}", pack.id(), pack.url());
+        return true;
+    }
+
+    /** Takes one back, by name. For a module being disabled. */
+    public boolean unhost(String id) {
+        return id != null && hosted.remove(id.trim()) != null;
+    }
+
+    /** The hosted packs, in the order they are applied. */
+    public List<HostedPack> hosted() {
+        synchronized (hosted) {
+            return List.copyOf(hosted.values());
+        }
+    }
+
+    /** What was refused, and why. Kept separately from the builder's own troubles. */
+    private final java.util.List<String> hostingProblems =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
     /** Takes a plugin's assets. False means the source is not there; see {@link #problems()}. */
     public boolean contribute(PackContribution contribution) {
         return library.offer(contribution);
@@ -145,6 +196,9 @@ public final class ResourcePacks {
     public List<String> problems() {
         List<String> all = new java.util.ArrayList<>(library.problems());
         all.addAll(builder.problems());
+        synchronized (hostingProblems) {
+            all.addAll(hostingProblems);
+        }
         return List.copyOf(all);
     }
 
@@ -193,27 +247,46 @@ public final class ResourcePacks {
      * pack until they reconnect; a refusal is not, because that was their answer.
      */
     public void sendTo(UUID player) {
-        PackBuild build = current;
-        if (player == null || build == null || build.isEmpty()) {
+        if (player == null) {
             return;
         }
-        String digest = build.digest();
+        PackBuild build = current;
+        List<HostedPack> alreadyHosted = hosted();
+        boolean nothingBuilt = build == null || build.isEmpty();
+        if (nothingBuilt && alreadyHosted.isEmpty()) {
+            return;
+        }
+        // Over both halves. Taken from the built parts alone, a player already wearing the built pack
+        // would never be offered a hosted one added afterwards — and on a server that builds nothing
+        // of its own, would never be offered anything at all.
+        String digest = digestOf(build, alreadyHosted);
         if (digest.equals(sentDigest.get(player)) && !statusOf(player).isWorthRetrying()) {
             return;
         }
 
-        List<PackOffer> offers = new java.util.ArrayList<>(build.parts().size());
-        for (PackPart part : build.parts()) {
-            String url = urls.apply(part.fileName());
-            if (url == null || url.isBlank()) {
-                // Not the player's problem and not silently theirs to suffer: without a URL there is
-                // nothing to send, and an owner needs to know the pack they built is going nowhere.
-                log.warn("The resource pack is built but there is nowhere to download it from; "
-                        + "nothing was sent. Start the pack server or set a URL.");
-                return;
+        List<PackOffer> offers = new java.util.ArrayList<>();
+        // Hosted first. The client applies packs in order and the last one wins a conflict, so the
+        // server's own texture pack is the base and the plugins' specific assets — a custom item's
+        // model, a custom sound — go on top of it rather than under it.
+        for (HostedPack pack : alreadyHosted) {
+            // Its own URL, exactly as given. Putting an absolute link through urls() would point the
+            // client at this server for a file that is not here.
+            offers.add(new PackOffer(pack.offerId(), pack.url(), pack.sha1(), required, prompt));
+        }
+        if (!nothingBuilt) {
+            for (PackPart part : build.parts()) {
+                String url = urls.apply(part.fileName());
+                if (url == null || url.isBlank()) {
+                    // Not the player's problem and not silently theirs to suffer: without a URL there
+                    // is nothing to send, and an owner needs to know the pack they built is going
+                    // nowhere.
+                    log.warn("The resource pack is built but there is nowhere to download it from; "
+                            + "nothing was sent. Start the pack server or set a URL.");
+                    return;
+                }
+                offers.add(new PackOffer(Hashes.packId(part.label(), part.sha1()), url, part.sha1(),
+                        required, prompt));
             }
-            offers.add(new PackOffer(Hashes.packId(part.label(), part.sha1()), url, part.sha1(),
-                    required, prompt));
         }
 
         sentDigest.put(player, digest);
@@ -221,6 +294,23 @@ public final class ResourcePacks {
         // All of them in one request: the client applies them in order, and sending them one at a
         // time would be one prompt per pack and one chance per pack for the order to come out wrong.
         sink.send(player, List.copyOf(offers));
+    }
+
+    /**
+     * What identifies everything a player would be sent, hosted and built together.
+     *
+     * <p>One value over both, because "have they already got this" is a question about the whole set.
+     * Two separate answers would each be right about their own half and wrong about the player.
+     */
+    private static String digestOf(PackBuild build, List<HostedPack> hosted) {
+        StringBuilder everything = new StringBuilder();
+        for (HostedPack pack : hosted) {
+            everything.append(pack.id()).append(':').append(pack.sha1()).append('|');
+        }
+        if (build != null && !build.isEmpty()) {
+            everything.append(build.digest());
+        }
+        return everything.toString();
     }
 
     /** Offers it to everybody given — after a rebuild, so nobody is left on the old one. */
