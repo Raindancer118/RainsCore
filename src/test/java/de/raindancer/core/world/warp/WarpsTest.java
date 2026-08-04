@@ -129,6 +129,161 @@ class WarpsTest {
         }
     }
 
+    // ------------------------------------------------------------------ asking without spending
+
+    @Nested
+    @DisplayName("asking whether somebody may warp, without spending their go")
+    class AskingWithoutSpending {
+
+        @Test
+        @DisplayName("asking is free, however many times")
+        void askingCostsNothing() {
+            // What a caller with a warm-up needs. Consuming the cooldown up front and giving it back
+            // if the warm-up is interrupted means the refund is a blunt clear — which wipes whatever
+            // else was on that cooldown. Charging on arrival instead needs a speculative ask, and
+            // this is it.
+            warps.cooldown(Duration.ofSeconds(30));
+            warps.create("spawn", "world", 0, 64, 0, ALICE);
+
+            assertThat(warps.isReadyToWarp(ALICE)).isTrue();
+            assertThat(warps.isReadyToWarp(ALICE)).isTrue();
+            assertThat(warps.use(ALICE, "spawn"))
+                    .as("two speculative asks must not have spent the one real go")
+                    .isEqualTo(WarpUse.WENT);
+        }
+
+        @Test
+        @DisplayName("recording a use starts the wait")
+        void recordingCharges() {
+            warps.cooldown(Duration.ofSeconds(30));
+
+            warps.recordUse(ALICE);
+
+            assertThat(warps.isReadyToWarp(ALICE)).isFalse();
+            assertThat(warps.remaining(ALICE)).contains(Duration.ofSeconds(30));
+        }
+
+        @Test
+        @DisplayName("with no cooldown set, everybody is always ready")
+        void switchedOffMeansAlwaysReady() {
+            warps.cooldown(null);
+            warps.recordUse(ALICE);
+
+            assertThat(warps.isReadyToWarp(ALICE)).isTrue();
+        }
+
+        @Test
+        @DisplayName("nobody at all is ready, and recording nobody does nothing")
+        void nullIsHarmless() {
+            warps.cooldown(Duration.ofSeconds(30));
+
+            assertThat(warps.isReadyToWarp(null)).isTrue();
+            assertThatCode(() -> warps.recordUse(null)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("one player's wait is not anybody else's")
+        void waitsAreKeptApart() {
+            warps.cooldown(Duration.ofSeconds(30));
+
+            warps.recordUse(ALICE);
+
+            assertThat(warps.isReadyToWarp(BOB)).isTrue();
+        }
+    }
+
+    // ------------------------------------------------------------------ moving and labelling
+
+    @Nested
+    @DisplayName("moving a warp")
+    class Moving {
+
+        @Test
+        @DisplayName("it ends up where it was moved to, facing the way you were")
+        void movesIt() {
+            warps.create("spawn", "world", 0, 64, 0, ALICE);
+
+            assertThat(warps.move("spawn", "nether", 10, 20, 30, 90f, -12f)).isTrue();
+
+            Warp moved = warps.byName("spawn").orElseThrow();
+            assertThat(moved.world()).isEqualTo("nether");
+            assertThat(moved.poi().x()).isEqualTo(10);
+            assertThat(moved.poi().yaw())
+                    .as("a warp that drops you facing a wall is one everybody turns round in")
+                    .isEqualTo(90f);
+        }
+
+        @Test
+        @DisplayName("it keeps its permission, its category and its icon")
+        void keepsWhatWasConfigured() {
+            // The whole reason this exists rather than "create it again under the same name":
+            // creating replaces, and replacing would open a staff warp to the entire server the
+            // first time somebody nudged it two blocks out of a wall.
+            warps.create("staffroom", "world", 0, 64, 0, ALICE);
+            warps.setPermission("staffroom", "rainswarps.warp.staffroom");
+            warps.setCategory("staffroom", "staff");
+            warps.setIcon("staffroom", Material.BEACON);
+            String id = warps.byName("staffroom").orElseThrow().poi().id();
+
+            warps.move("staffroom", "world", 5, 70, 5, 0f, 0f);
+
+            Warp moved = warps.byName("staffroom").orElseThrow();
+            assertThat(moved.permission()).contains("rainswarps.warp.staffroom");
+            assertThat(moved.category()).contains("staff");
+            assertThat(moved.poi().icon()).isEqualTo(Material.BEACON);
+            assertThat(moved.poi().id())
+                    .as("anything pointing at this warp still points at it")
+                    .isEqualTo(id);
+        }
+
+        @Test
+        @DisplayName("there is nothing to move when there is no such warp")
+        void refusesTheUnknown() {
+            assertThat(warps.move("nowhere", "world", 1, 2, 3, 0f, 0f)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a warp with no world to move to stays where it is")
+        void refusesABlankWorld() {
+            warps.create("spawn", "world", 0, 64, 0, ALICE);
+
+            assertThat(warps.move("spawn", " ", 1, 2, 3, 0f, 0f)).isFalse();
+            assertThat(warps.move("spawn", null, 1, 2, 3, 0f, 0f)).isFalse();
+            assertThat(warps.byName("spawn").orElseThrow().world()).isEqualTo("world");
+        }
+
+        @Test
+        @DisplayName("a label is what a menu shows, and the name is still what you type")
+        void labelsIt() {
+            warps.create("oldquarry", "world", 0, 64, 0, ALICE);
+
+            assertThat(warps.setLabel("oldquarry", "The Old Quarry")).isTrue();
+
+            assertThat(warps.byName("oldquarry").orElseThrow().label()).isEqualTo("The Old Quarry");
+            assertThat(warps.byName("oldquarry"))
+                    .as("a permission was written against the name, so labelling must not move it")
+                    .isPresent();
+            assertThat(warps.byName("The Old Quarry")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a label can be taken away again")
+        void unlabelsIt() {
+            warps.create("oldquarry", "world", 0, 64, 0, ALICE);
+            warps.setLabel("oldquarry", "The Old Quarry");
+
+            assertThat(warps.setLabel("oldquarry", null)).isTrue();
+
+            assertThat(warps.byName("oldquarry").orElseThrow().label()).isEqualTo("oldquarry");
+        }
+
+        @Test
+        @DisplayName("there is nothing to label when there is no such warp")
+        void refusesLabellingTheUnknown() {
+            assertThat(warps.setLabel("nowhere", "Somewhere")).isFalse();
+        }
+    }
+
     // ------------------------------------------------------------------ who may use one
 
     @Nested

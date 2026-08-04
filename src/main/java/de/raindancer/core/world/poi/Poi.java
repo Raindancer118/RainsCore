@@ -101,6 +101,24 @@ public record Poi(String id, String name, String kind, UUID owner, String world,
                 tags);
     }
 
+    /**
+     * What a menu calls it, without touching what a command takes.
+     *
+     * <p>Null puts it back to being called by its name. The field is read directly rather than
+     * through {@link #label()}, which falls back to the name — going through the accessor would pin
+     * the label to the name on the first change and there would be no way back.
+     */
+    public Poi withLabel(String newLabel) {
+        return new Poi(id, name, kind, owner, world, x, y, z, yaw, pitch, icon, newLabel, shared,
+                tags);
+    }
+
+    /** The same place, looked at from a different angle — nothing else about it changes. */
+    public Poi withFacing(float newYaw, float newPitch) {
+        return new Poi(id, name, kind, owner, world, x, y, z, newYaw, newPitch, icon, label, shared,
+                tags);
+    }
+
     public Poi withShared(boolean nowShared) {
         return new Poi(id, name, kind, owner, world, x, y, z, yaw, pitch, icon, label, nowShared,
                 tags);

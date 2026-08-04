@@ -2,6 +2,7 @@ package de.raindancer.core.world.warp;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.platform.util.Cooldowns;
 import de.raindancer.core.world.poi.Poi;
 import de.raindancer.core.world.poi.PoiStore;
 import org.bukkit.Location;
@@ -12,11 +13,9 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 
@@ -47,7 +46,6 @@ public final class Warps {
     public static final String KIND = "warp";
 
     private final PoiStore places;
-    private final LongSupplier clock;
     /**
      * Whether a world is loaded.
      *
@@ -57,8 +55,7 @@ public final class Warps {
      */
     private final Predicate<String> worldLoaded;
     /** When each player last warped. One cooldown per player, not one per warp — see {@link #use}. */
-    private final Map<UUID, Long> lastUsed = new ConcurrentHashMap<>();
-    private volatile Duration cooldown;
+    private final Cooldowns<UUID> waits;
 
     /** @param clock milliseconds; injected so cooldowns can be tested without waiting */
     public Warps(PoiStore places, LongSupplier clock) {
@@ -68,18 +65,17 @@ public final class Warps {
     /** @param worldLoaded whether a world is loaded; the seam that keeps this testable */
     public Warps(PoiStore places, LongSupplier clock, Predicate<String> worldLoaded) {
         this.places = places;
-        this.clock = clock;
         this.worldLoaded = worldLoaded;
+        this.waits = new Cooldowns<>(clock);
     }
 
     /** How long between one player's warps. Null switches it off. */
     public void cooldown(Duration between) {
-        this.cooldown = between == null || between.isZero() || between.isNegative()
-                ? null : between;
+        waits.every(between);
     }
 
     public Optional<Duration> cooldown() {
-        return Optional.ofNullable(cooldown);
+        return waits.every();
     }
 
     // ---------------------------------------------------------------------------- making them
@@ -137,6 +133,57 @@ public final class Warps {
     }
 
     // ---------------------------------------------------------------------------- changing them
+
+    /**
+     * Moves an existing warp somewhere else, keeping everything that was configured on it.
+     *
+     * <p>Not {@code create} again under the same name. That replaces, and replacing loses the
+     * permission, the category, the icon and the id — so "the spawn warp is two blocks into a wall,
+     * let me redo it" would silently open a staff warp to the whole server. This is the one that has
+     * been safe to type since.
+     *
+     * @return true when there was a warp of that name to move
+     */
+    public boolean move(String name, String world, double x, double y, double z,
+                        float yaw, float pitch) {
+        if (world == null || world.isBlank()) {
+            return false;
+        }
+        return byName(name).map(warp -> {
+            // The facing goes with it: movedTo keeps the tags, the icon and the label, and a warp
+            // that drops you looking at a wall is one everybody turns round in the moment they land.
+            places.save(warp.poi().movedTo(world, x, y, z).withFacing(yaw, pitch));
+            return true;
+        }).orElse(false);
+    }
+
+    /**
+     * The same, from where somebody is standing.
+     *
+     * <p>The convenience over the one above, which takes plain values so that the rule — that
+     * moving keeps what was configured — can be tested without a running server.
+     */
+    public boolean move(String name, Location where) {
+        if (where == null || where.getWorld() == null) {
+            return false;
+        }
+        return move(name, where.getWorld().getName(), where.getX(), where.getY(), where.getZ(),
+                where.getYaw(), where.getPitch());
+    }
+
+    /**
+     * What a menu calls it, when that should differ from the name typed at the command.
+     *
+     * <p>Null puts it back to being called by its name. Kept apart from the name deliberately: the
+     * name is what {@code /warp <name>} takes and what a permission was written against, so a warp
+     * that wants a space or a capital in a menu must not have to change either.
+     */
+    public boolean setLabel(String name, String label) {
+        return byName(name).map(warp -> {
+            places.save(warp.poi().withLabel(label == null || label.isBlank() ? null : label.trim()));
+            return true;
+        }).orElse(false);
+    }
 
     /** Who may use it. Null opens it to everybody. */
     public boolean setPermission(String name, String permission) {
@@ -255,45 +302,48 @@ public final class Warps {
             // the warp works again when the world comes back.
             return WarpUse.WORLD_MISSING;
         }
-        Duration wait = cooldown;
-        if (wait != null) {
-            long now = clock.getAsLong();
-            // Checked and recorded in one step. Reading the last use and then writing it, as two
-            // steps, lets two requests arriving together both see the old value and both be allowed
-            // — which is a macro or a double-click getting a free warp past the cooldown. On Folia
-            // these really can be two threads.
-            //
-            // Recorded only once everything else has passed, so a typo or a locked warp does not
-            // cost thirty seconds.
-            // The answer is a flag rather than the value compute returned: with a clock that has not
-            // moved, the value kept and the value written are the same number, so comparing them
-            // cannot tell "allowed" from "refused". The first version of this fix did exactly that
-            // and let every second warp through.
-            java.util.concurrent.atomic.AtomicBoolean allowed =
-                    new java.util.concurrent.atomic.AtomicBoolean();
-            lastUsed.compute(player, (ignored, last) -> {
-                if (last != null && now - last < wait.toMillis()) {
-                    return last;
-                }
-                allowed.set(true);
-                return now;
-            });
-            if (!allowed.get()) {
-                return WarpUse.ON_COOLDOWN;
-            }
+        // Checked and recorded in one step, by Cooldowns. Reading the last use and then writing it,
+        // as two steps, lets two requests arriving together both see the old value and both be
+        // allowed — a macro or a double-click getting a free warp past the cooldown, and on Folia
+        // those really are two threads.
+        //
+        // Asked only once everything else has passed, so a typo or a locked warp does not cost
+        // thirty seconds.
+        if (!waits.tryUse(player)) {
+            return WarpUse.ON_COOLDOWN;
         }
         return WarpUse.WENT;
     }
 
     /** How long until this player may warp again. */
     public Optional<Duration> remaining(UUID player) {
-        Duration wait = cooldown;
-        Long last = player == null ? null : lastUsed.get(player);
-        if (wait == null || last == null) {
-            return Optional.empty();
-        }
-        long left = wait.toMillis() - (clock.getAsLong() - last);
-        return left <= 0 ? Optional.empty() : Optional.of(Duration.ofMillis(left));
+        return waits.remaining(player);
+    }
+
+    /**
+     * Whether this player's wait is over, <em>without</em> spending their go.
+     *
+     * <p>For the caller that does not teleport straight away. {@link #use} charges up front, which is
+     * right when the teleport happens on the next line; a caller with a warm-up in between would have
+     * to give the charge back when somebody is knocked out of it — and giving it back means clearing
+     * the wait, which wipes whatever else was on it. So: ask this, do the journey, and
+     * {@link #recordUse} when they actually arrive.
+     *
+     * <p>Also what a screen asks to grey a button. Opening a menu must not put somebody on cooldown
+     * for a warp they never took.
+     */
+    public boolean isReadyToWarp(UUID player) {
+        return waits.isReady(player);
+    }
+
+    /**
+     * Starts this player's wait, for a caller that has already decided.
+     *
+     * <p>The other half of {@link #isReadyToWarp}: called once somebody has actually arrived, so a
+     * warm-up they were knocked out of costs them nothing.
+     */
+    public void recordUse(UUID player) {
+        waits.start(player);
     }
 
     /** Where a warp actually is, when its world is loaded. */
@@ -303,8 +353,6 @@ public final class Warps {
 
     /** Forgets a player's cooldown. Called when they log out. */
     public void forget(UUID player) {
-        if (player != null) {
-            lastUsed.remove(player);
-        }
+        waits.forget(player);
     }
 }

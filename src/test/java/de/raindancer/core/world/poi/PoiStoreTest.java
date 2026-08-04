@@ -464,6 +464,52 @@ class PoiStoreTest {
         void labelFallsBackToName() {
             assertThat(home("base").label()).isEqualTo("base");
         }
+
+        @Test
+        @DisplayName("a label can be given and taken away again")
+        void theLabelCanBeChanged() {
+            Poi base = home("base");
+
+            assertThat(base.withLabel("The Old Quarry").label()).isEqualTo("The Old Quarry");
+            assertThat(base.withLabel("The Old Quarry").name())
+                    .as("the name is what a command takes and what a permission was written "
+                            + "against, so labelling must not touch it")
+                    .isEqualTo("base");
+            assertThat(base.withLabel("The Old Quarry").withLabel(null).label())
+                    .as("cleared, it goes back to being called by its name")
+                    .isEqualTo("base");
+        }
+
+        @Test
+        @DisplayName("which way you face can be changed without losing anything else")
+        void theFacingCanBeChanged() {
+            Poi base = home("base").withTag("permission", "staff.only").withLabel("Quarry");
+
+            Poi turned = base.withFacing(90f, -12f);
+
+            assertThat(turned.yaw()).isEqualTo(90f);
+            assertThat(turned.pitch()).isEqualTo(-12f);
+            assertThat(turned.id()).isEqualTo(base.id());
+            assertThat(turned.tag("permission"))
+                    .as("turning a place round must not open a staff-only one to everybody")
+                    .contains("staff.only");
+            assertThat(turned.label()).isEqualTo("Quarry");
+        }
+
+        @Test
+        @DisplayName("moving a place keeps its tags, its icon and its label")
+        void movingKeepsEverythingElse() {
+            // The reason move() exists rather than "just create it again": creating replaces, and
+            // replacing loses the permission — so redoing a badly placed staff warp would open it to
+            // the whole server without a word.
+            Poi base = home("base").withTag("permission", "staff.only").withLabel("Quarry");
+
+            Poi moved = base.movedTo("nether", 10, 20, 30);
+
+            assertThat(moved.tag("permission")).contains("staff.only");
+            assertThat(moved.label()).isEqualTo("Quarry");
+            assertThat(moved.id()).isEqualTo(base.id());
+        }
     }
 
     // ------------------------------------------------------------------ concurrency
