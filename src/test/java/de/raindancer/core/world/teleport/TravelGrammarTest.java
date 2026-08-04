@@ -143,6 +143,30 @@ class TravelGrammarTest {
     }
 
     @Test
+    @DisplayName("where they came from is read before they are moved, and recorded only on arrival")
+    void theWayBackIsRecordedProperly() {
+        // Two mistakes, both easy. Reading the origin after the teleport reads the destination, so
+        // /back would put somebody exactly where they already are. And recording it before the
+        // teleport offers the way back from a journey that was then refused.
+        String body = source();
+        int read = body.indexOf("Location cameFrom = traveller.getLocation()");
+        int move = body.indexOf("traveller.teleportAsync(");
+        int record = body.indexOf("returns.remember(");
+
+        assertThat(read).as("nothing reads where they came from").isPositive();
+        assertThat(move).as("the teleport is gone").isPositive();
+        assertThat(record).as("nothing records the way back").isPositive();
+
+        assertThat(read)
+                .as("the origin has to be read while they are still standing in it")
+                .isLessThan(move);
+        assertThat(record)
+                .as("recorded after the teleport has completed, or a refused journey still offers "
+                        + "somebody the way back from it")
+                .isGreaterThan(move);
+    }
+
+    @Test
     @DisplayName("the arrival never falls back to the spot known to be dangerous")
     void nowhereSafeIsARefusal() {
         // Falling back to the exact coordinates puts the player in the place the check has just said

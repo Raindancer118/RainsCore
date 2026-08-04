@@ -200,7 +200,11 @@ public final class ChatPrompts {
         }
         Question question = waiting.remove(player);
         if (question != null) {
-            run(question.onCancelled(), question.owner());
+            // Through the dispatcher, exactly like an answer. A plugin's onCancelled almost always
+            // reopens a menu, and opening an inventory from the thread a quit happened on throws on
+            // Folia. This used to call it inline, which meant the one path that runs on somebody
+            // else's thread was the one that did not hop back.
+            dispatcher.test(player, () -> run(question.onCancelled(), question.owner()));
         }
     }
 
@@ -217,7 +221,8 @@ public final class ChatPrompts {
             Question question = waiting.get(player);
             if (question != null && now >= question.expiresAt()
                     && waiting.remove(player, question)) {
-                run(question.onCancelled(), question.owner());
+                // The same again. A sweep runs on a timer thread, which owns nothing at all.
+                dispatcher.test(player, () -> run(question.onCancelled(), question.owner()));
             }
         }
     }

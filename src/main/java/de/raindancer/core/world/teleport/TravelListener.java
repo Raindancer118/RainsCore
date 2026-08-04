@@ -26,8 +26,17 @@ import org.bukkit.event.player.PlayerQuitEvent;
  */
 public final class TravelListener implements Listener {
 
-    /** How long the fall that follows a teleport is forgiven for. */
     private final Travel travel;
+
+    /**
+     * Where travellers came from, held directly rather than reached through {@link Travel}.
+     *
+     * <p>Because forgetting it is this class's job and not {@code Travel}'s: a journey ending is not
+     * a session ending, and {@code Travel.forget} is also called when a countdown is retired
+     * mid-wait — somebody interrupted there still wants {@code /back} to mean where they set off
+     * from. What must not survive is a player logging out, which is exactly what this listens for.
+     */
+    private final Returns returns;
 
     /** Whether being hurt gives up on the trip. */
     private final boolean hurtCancels;
@@ -43,6 +52,7 @@ public final class TravelListener implements Listener {
      */
     public TravelListener(Travel travel, boolean hurtCancels) {
         this.travel = travel;
+        this.returns = travel.cameFrom();
         this.hurtCancels = hurtCancels;
     }
 
@@ -91,5 +101,9 @@ public final class TravelListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         travel.forget(event.getPlayer().getUniqueId());
+        // A waypoint from before somebody logged out is a lie: the world has been running without
+        // them and the reason they were moved is long over. Kept, it is also an entry per player who
+        // has ever been teleported on this server.
+        returns.forget(event.getPlayer().getUniqueId());
     }
 }

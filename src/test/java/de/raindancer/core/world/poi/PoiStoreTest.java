@@ -423,6 +423,55 @@ class PoiStoreTest {
         }
     }
 
+    @Nested
+    @DisplayName("saying whether it wrote")
+    class Reporting {
+
+        @Test
+        @DisplayName("a flush that wrote says so")
+        void aGoodFlushSaysSo() {
+            // What a migration has to know. A caller that moves the old file aside on the strength of
+            // an import needs to be sure the import actually landed — otherwise the source is gone and
+            // the copy was never written.
+            store.save(home("base"));
+
+            assertThat(store.flush()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a flush with nothing to write also says so")
+        void nothingToWriteIsStillFine() {
+            // "Nothing changed" is not a failure. A caller that treated it as one would refuse to
+            // finish a migration that had already finished.
+            assertThat(store.flush()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a flush that could not write says that instead")
+        void aFailedFlushSaysSo() {
+            store.save(home("base"));
+            closeDatabase();
+
+            assertThat(store.flush())
+                    .as("the database is gone, so nothing was written — and a caller about to delete "
+                            + "its source data has to be told")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("what could not be written is still there to try again")
+        void aFailedFlushKeepsTheWork() {
+            store.save(home("base"));
+            closeDatabase();
+            store.flush();
+
+            assertThat(store.isDirty())
+                    .as("dropping the marks on a failed write would lose the places outright: "
+                            + "nothing else would ever write them")
+                    .isTrue();
+        }
+    }
+
     // ------------------------------------------------------------------ the value itself
 
     @Nested

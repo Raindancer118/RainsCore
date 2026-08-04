@@ -79,6 +79,18 @@ public final class Travel {
      * because on Folia two commands really can arrive on two threads.
      */
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
+    /**
+     * Where each traveller came from, so something can offer them the way back.
+     *
+     * <p>Recorded here rather than by each caller, which is the whole reason it is Core's: it used to
+     * live in the teleport-request plugin, so a home teleport recorded nothing and {@code /back} after
+     * {@code /home} took somebody to wherever their last teleport <em>request</em> had been from.
+     *
+     * <p>Whether {@code /back} exists at all is still the plugin's decision. Recording costs one map
+     * entry per player who has travelled, and a plugin that never offers the way back simply never
+     * asks.
+     */
+    private final Returns returns = new Returns();
 
     /**
      * @param safety where a safe arrival is worked out; null means every trip goes to its exact
@@ -92,6 +104,17 @@ public final class Travel {
     /** Who is part-way through going somewhere — what a listener and a diagnostic ask. */
     public Departures pending() {
         return departures;
+    }
+
+    /**
+     * Where each traveller came from.
+     *
+     * <p>What a {@code /back} is built on. Every arrival through this class records one, so a plugin
+     * that offers the way back gets warps, homes and teleport requests for free rather than only its
+     * own.
+     */
+    public Returns cameFrom() {
+        return returns;
     }
 
     // ------------------------------------------------------------------------ setting off
@@ -246,6 +269,10 @@ public final class Travel {
     public void forget(UUID traveller) {
         departures.cancel(traveller);
         inFlight.remove(traveller);
+        // Deliberately does NOT drop where they came from. A journey ending is not a session ending:
+        // this is also called when a countdown task is retired mid-wait, and somebody who was
+        // interrupted still wants /back to mean the place they set off from. Forgetting the waypoint
+        // is TravelListener's, on quit — see there.
         Journey journey = journeys.remove(traveller);
         if (journey != null) {
             journey.countdown().cancel();
@@ -258,6 +285,7 @@ public final class Travel {
         journeys.clear();
         departures.clear();
         inFlight.clear();
+        returns.clear();
     }
 
     /**
@@ -360,6 +388,8 @@ public final class Travel {
         // Gathered before the player is moved, because afterwards there is nothing standing near them
         // to gather: the dog is still where they were, and they are not there any more.
         List<Entity> travellingWith = companionsOf(traveller, trip);
+        // The same reason: where they came from has to be read while they are still standing in it.
+        Location cameFrom = traveller.getLocation().clone();
 
         // Async rather than a region-scheduled synchronous teleport: this is the one that handles
         // another plugin refusing the move — a world border, a closed dimension — without the
@@ -378,6 +408,11 @@ public final class Travel {
                         return;
                     }
                     bring(travellingWith, destination, trip);
+                    // Recorded only on a teleport that actually happened. Recording the intention
+                    // would offer somebody the way back from a journey that was refused.
+                    returns.remember(traveller.getUniqueId(),
+                            Waypoint.of(cameFrom, Waypoint.Cause.TELEPORT,
+                                    System.currentTimeMillis()));
                     watcher.arrived(traveller, destination, trip);
                 }));
     }

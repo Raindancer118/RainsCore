@@ -322,6 +322,49 @@ class ChatPromptsTest {
         }
 
         @Test
+        @DisplayName("a question dropped because they logged out is cancelled through the dispatcher")
+        void quittingCancelsThroughTheDispatcher() {
+            // Where this bites: a plugin's onCancelled almost always reopens a menu, and opening an
+            // inventory off the thread that owns the player throws on Folia and corrupts state on
+            // Paper. The answer path has always dispatched; these two did not, so the callback ran on
+            // whichever thread the quit or the sweep happened to be.
+            java.util.List<Runnable> held = new java.util.ArrayList<>();
+            prompts.runCallbacksOn((who, task) -> held.add(task));
+            java.util.concurrent.atomic.AtomicBoolean cancelled =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+            prompts.ask(ALICE, "homes", Duration.ofMinutes(2), answer -> {
+            }, () -> cancelled.set(true));
+
+            prompts.forget(ALICE);
+
+            assertThat(cancelled)
+                    .as("it ran where the quit happened rather than being handed to the dispatcher")
+                    .isFalse();
+            assertThat(held).hasSize(1);
+            held.getFirst().run();
+            assertThat(cancelled).isTrue();
+        }
+
+        @Test
+        @DisplayName("a question nobody answered is cancelled through the dispatcher too")
+        void sweepingCancelsThroughTheDispatcher() {
+            java.util.List<Runnable> held = new java.util.ArrayList<>();
+            prompts.runCallbacksOn((who, task) -> held.add(task));
+            java.util.concurrent.atomic.AtomicBoolean cancelled =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+            prompts.ask(ALICE, "homes", Duration.ofSeconds(30), answer -> {
+            }, () -> cancelled.set(true));
+
+            clock.addAndGet(Duration.ofSeconds(31).toMillis());
+            prompts.sweep();
+
+            assertThat(cancelled)
+                    .as("the sweep runs on a timer thread, which owns nothing")
+                    .isFalse();
+            assertThat(held).hasSize(1);
+        }
+
+        @Test
         @DisplayName("a dispatcher of nothing leaves the inline one in place")
         void refusesNull() {
             prompts.runCallbacksOn(null);

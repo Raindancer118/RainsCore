@@ -289,10 +289,19 @@ public final class PoiStore {
      * <p>Written to a temporary file and moved into place, so a server killed mid-write has either
      * the old file or the new one and never half of each — which is how a store of everybody's homes
      * gets truncated.
+     *
+     * @return whether everything is now on disk. Worth checking by anything about to delete the place
+     *         it read from: a failed write puts the marks back and tries again later, but a caller
+     *         that had already thrown away its source would have nothing left to try with
      */
-    public void flush() {
-        if (!isDirty() || !database.isUsable()) {
-            return;
+    public boolean flush() {
+        if (!isDirty()) {
+            // Nothing to write is not a failure. A caller that treated it as one would refuse to
+            // finish work that had already finished.
+            return true;
+        }
+        if (!database.isUsable()) {
+            return false;
         }
         // Drained, not snapshotted.
         //
@@ -373,5 +382,6 @@ public final class PoiStore {
             Marks.restore(changed, writing);
             Marks.restore(deleted, removing);
         }
+        return written;
     }
 }
