@@ -51,8 +51,49 @@ public final class Grants {
     private final ConcurrentHashMap<UUID, Set<String>> granted = new ConcurrentHashMap<>();
     private final YamlStore store;
 
+    /**
+     * Told whenever somebody's grants actually change, so their live session can follow.
+     *
+     * <p>Here rather than at the call sites because it was a call site's job before, and every call
+     * site forgot: a promotion written here did nothing until the player reconnected. Seven mutators
+     * each having to remember is seven chances to reintroduce it, and the failure is silent — the file
+     * says one thing and the player experiences another.
+     */
+    private final java.util.List<java.util.function.Consumer<UUID>> watchers =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
     public Grants(Path folder) {
         this.store = new YamlStore(folder.resolve("grants.yml"));
+    }
+
+    /**
+     * Ask to be told when somebody's grants change.
+     *
+     * <p>Wired to {@code GrantListener.apply} so a promotion or a revocation reaches the player who is
+     * standing there, and to vanish's may-see set, which is likewise decided once and then cached.
+     */
+    public void onChange(java.util.function.Consumer<UUID> watcher) {
+        if (watcher != null) {
+            watchers.add(watcher);
+        }
+    }
+
+    /**
+     * Says somebody changed. Only ever called when something really did — re-applying a preset that
+     * already matches happens on every menu render, and rebuilding an attachment per frame is a
+     * permission recalculation per frame.
+     */
+    private void changed(UUID who) {
+        for (java.util.function.Consumer<UUID> watcher : watchers) {
+            try {
+                watcher.accept(who);
+            } catch (RuntimeException refreshFailed) {
+                // The store is the durable half and has already been written. Letting this escape
+                // would half-apply a promotion: the file grants it, the menu shows it, and the caller
+                // sees an exception. Refreshing a session is the part that can be retried by relogging.
+                log.warn("Could not refresh {} after a grant change: {}", who, refreshFailed.toString());
+            }
+        }
     }
 
     /** Where they are kept — for a diagnostic, and for a test that wants to break the file. */
@@ -67,7 +108,11 @@ public final class Grants {
         if (who == null || node == null || node.isBlank()) {
             return false;
         }
-        return nodesOf(who).add(node.trim());
+        if (!nodesOf(who).add(node.trim())) {
+            return false;
+        }
+        changed(who);
+        return true;
     }
 
     /** Takes one back. @return whether they had it */
@@ -80,6 +125,7 @@ public final class Grants {
             return false;
         }
         forgetIfEmpty(who, theirs);
+        changed(who);
         return true;
     }
 
@@ -96,7 +142,10 @@ public final class Grants {
             return;
         }
         if (nodes == null || nodes.isEmpty()) {
-            granted.remove(who);
+            // Emptying somebody is a demotion by another name, so it announces itself like one.
+            if (granted.remove(who) != null) {
+                changed(who);
+            }
             return;
         }
         Set<String> fresh = ConcurrentHashMap.newKeySet();
@@ -106,15 +155,39 @@ public final class Grants {
             }
         }
         if (fresh.isEmpty()) {
-            granted.remove(who);
+            if (granted.remove(who) != null) {
+                changed(who);
+            }
             return;
         }
-        granted.put(who, fresh);
+        Set<String> before = granted.put(who, fresh);
+        if (before == null || !before.equals(fresh)) {
+            changed(who);
+        }
+    }
+
+    /** {@link #set} without announcing it. Only for {@link #load}; see the comment there. */
+    private void replaceQuietly(UUID who, Collection<String> nodes) {
+        Set<String> fresh = ConcurrentHashMap.newKeySet();
+        for (String node : nodes) {
+            if (node != null && !node.isBlank()) {
+                fresh.add(node.trim());
+            }
+        }
+        if (fresh.isEmpty()) {
+            granted.remove(who);
+        } else {
+            granted.put(who, fresh);
+        }
     }
 
     /** Takes everything away. @return whether they had anything */
     public boolean clear(UUID who) {
-        return who != null && granted.remove(who) != null;
+        if (who == null || granted.remove(who) == null) {
+            return false;
+        }
+        changed(who);
+        return true;
     }
 
     // ---------------------------------------------------------------------------- asking
@@ -184,7 +257,10 @@ public final class Grants {
                 unreadable.add(id);
                 continue;
             }
-            set(who, root.getStringList(id));
+            // Deliberately not set(): load runs at startup, before anybody is online and before the
+            // listener that refreshes sessions exists. Announcing here would be one wasted attachment
+            // rebuild per stored player, for players who are all about to be given theirs on join.
+            replaceQuietly(who, root.getStringList(id));
         }
         if (!unreadable.isEmpty()) {
             // Loud, because the consequence is somebody who should have permissions and silently does

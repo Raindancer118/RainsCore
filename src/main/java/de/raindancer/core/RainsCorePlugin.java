@@ -185,6 +185,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private PoiStore places;
     private Identities identities;
     private Grants grants;
+    /**
+     * Who can still see a vanished moderator.
+     *
+     * <p>Registered rather than left to Bukkit's default, and registered as {@code FALSE} — nobody,
+     * including operators. An unregistered node resolves to the operator default, which on a server
+     * where the staff are operators means every one of them sees straight through vanish, so the
+     * feature quietly does nothing for the people it exists for. It is granted explicitly instead.
+     */
+    private static final String SEE_VANISHED = "rainscore.vanish.see";
+
     private GrantListener grantListener;
     private Punishments punishments;
     private PunishmentGuard punishmentGuard;
@@ -299,9 +309,34 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // but the thing a server without one needs, and the thing the moderation module's staff
         // presets are built on. Registered LOWEST so everything else that fires on join already sees
         // what it grants.
+        // Registered before anything asks. An unregistered node answers with the operator default,
+        // which for this one means every operator sees through vanish — see SEE_VANISHED.
+        if (getServer().getPluginManager().getPermission(SEE_VANISHED) == null) {
+            getServer().getPluginManager().addPermission(new org.bukkit.permissions.Permission(
+                    SEE_VANISHED, "See players who have vanished",
+                    org.bukkit.permissions.PermissionDefault.FALSE));
+        }
+
         grants = new Grants(getDataFolder().toPath());
         grants.load();
         grantListener = new GrantListener(this, grants);
+        // What makes a promotion or a demotion take effect while the player is standing there. Without
+        // it the grant sat in grants.yml doing nothing until they reconnected — and the revocation case
+        // is the sharp one: somebody stripped of their powers kept them for the rest of the session.
+        // Registered here rather than left to each caller, because every caller forgot.
+        grants.onChange(who -> {
+            Player affected = getServer().getPlayer(who);
+            if (affected == null) {
+                return;     // they get it all on join anyway
+            }
+            grantListener.apply(affected);
+            // Vanish decides who may see hidden players once, at join, and caches it. A moderator who
+            // is granted that node mid-session would otherwise not be able to see anybody until they
+            // relogged — the same defect one layer up.
+            if (vanish != null) {
+                vanish.maySeeVanished(who, affected.hasPermission(SEE_VANISHED));
+            }
+        });
         getServer().getPluginManager().registerEvents(grantListener, this);
 
         punishments = new Punishments(databases.core(),
@@ -414,7 +449,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         vanish = new Vanish(new BukkitVanishSink(this));
         getServer().getPluginManager().registerEvents(
-                new VanishListener(this, vanish, "rainscore.vanish.see"), this);
+                new VanishListener(this, vanish, SEE_VANISHED), this);
         // Hiding a player's entity does not take them off a *custom* tablist — that list is built from
         // getOnlinePlayers(), so a vanished moderator was on it with their name, world and ping, in the
         // one place anybody looks to see who is about.
