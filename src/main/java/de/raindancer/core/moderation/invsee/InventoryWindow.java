@@ -76,6 +76,8 @@ public final class InventoryWindow implements InventoryHolder {
     private Audit audit;
     /** Where the wording comes from. Null on a server with no message file. */
     private Messages words;
+    /** Whether the ender chest is offered at all. On by default — see {@link #enderChest(boolean)}. */
+    private boolean enderChestAllowed = true;
 
     public InventoryWindow(Plugin plugin, Player watcher, UUID owner, String ownerName,
                            Access access, boolean live, InventorySource source,
@@ -123,6 +125,11 @@ public final class InventoryWindow implements InventoryHolder {
     /** Tells this where its wording comes from. */
     public void messages(Messages words) {
         this.words = words;
+    }
+
+    /** Tells this whether the ender chest is offered at all — set before the first {@link #paint()}. */
+    public void enderChest(boolean allowed) {
+        this.enderChestAllowed = allowed;
     }
 
     public UUID owner() {
@@ -218,13 +225,16 @@ public final class InventoryWindow implements InventoryHolder {
         // pane. A label there would be indistinguishable from a moderator putting a pane in that
         // slot, and telling those two apart by looking at the item is a guess — one that eats a
         // real item the first time somebody equips somebody with stained glass.
-        window.setItem(Layout.ENDER_CHEST, button(Material.ENDER_CHEST,
-                say("invsee.ender-chest-button.name", "Ender Chest"),
-                say("invsee.ender-chest-button.lore",
-                        "Their ender chest — " + carried.countIn(Section.ENDER_CHEST) + " of 27 used",
-                        "used", carried.countIn(Section.ENDER_CHEST),
-                        "total", Section.ENDER_CHEST.size()),
-                say("invsee.ender-chest-button.hint", "Click to look inside")));
+        window.setItem(Layout.ENDER_CHEST, enderChestAllowed
+                ? button(Material.ENDER_CHEST,
+                        say("invsee.ender-chest-button.name", "Ender Chest"),
+                        say("invsee.ender-chest-button.lore",
+                                "Their ender chest — " + carried.countIn(Section.ENDER_CHEST)
+                                        + " of 27 used",
+                                "used", carried.countIn(Section.ENDER_CHEST),
+                                "total", Section.ENDER_CHEST.size()),
+                        say("invsee.ender-chest-button.hint", "Click to look inside"))
+                : divider());
     }
 
     private void paintEnderChest(Inventory window) {
@@ -344,7 +354,10 @@ public final class InventoryWindow implements InventoryHolder {
     public void turnPage(int windowSlot) {
         boolean turning = (showingEnderChest && windowSlot == Layout.ARMOUR_FIRST)
                 || (!showingEnderChest && windowSlot == Layout.ENDER_CHEST);
-        if (!turning) {
+        if (!turning || (!showingEnderChest && !enderChestAllowed)) {
+            // The second half only matters if something else still calls this directly — paintCarried
+            // no longer draws a clickable button there once the ender chest is switched off, so a
+            // normal click can no longer reach this in the first place.
             return;
         }
         // Before the page changes, not after, and not on the scheduled sync a tick later.

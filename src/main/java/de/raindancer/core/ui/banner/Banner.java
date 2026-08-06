@@ -65,13 +65,30 @@ public final class Banner {
      * during {@code onEnable}, often before settings are loaded, and a banner that changed colour
      * depending on how far startup had got would be a puzzle rather than a feature.
      */
-    private static final List<TextColor> GRADIENT = List.of(
+    public static final List<TextColor> VIOLET = List.of(
             TextColor.color(0xE0CCFF),
             TextColor.color(0xC9A0FF),
             TextColor.color(0xB088F0),
             TextColor.color(0x9A72DC),
             TextColor.color(0x8664C8),
             TextColor.color(0x7C5CBF));
+
+    /**
+     * Gold, light at the top and deep at the bottom.
+     *
+     * <p>Here rather than in whichever plugin wanted it, because a gradient is six hex values that have to
+     * step evenly to look like one thing rather than six stripes — and a plugin author picking six golds by
+     * eye gets stripes. Offered as a named alternative for a plugin whose own identity is gold: the Hunger
+     * Games, whose every screen, icon and announcement is already {@code <gold>}, and for which the violet
+     * would be the one place on the server it did not look like itself.
+     */
+    public static final List<TextColor> GOLD = List.of(
+            TextColor.color(0xFFF3C4),
+            TextColor.color(0xFFE082),
+            TextColor.color(0xFFCA28),
+            TextColor.color(0xF5A623),
+            TextColor.color(0xD98A0B),
+            TextColor.color(0xB36F00));
 
     private static final TextColor LABEL = TextColor.color(0x8B949E);
     private static final TextColor VALUE = TextColor.color(0xE6EDF3);
@@ -83,6 +100,8 @@ public final class Banner {
     private final Map<String, String> facts = new LinkedHashMap<>();
     private final List<String> warnings = new ArrayList<>();
     private List<String> logo;
+    /** Violet unless a plugin asked for something else — see {@link #in(List)}. */
+    private List<TextColor> gradient = VIOLET;
     private String version;
     private String author;
     private Duration took;
@@ -103,6 +122,23 @@ public final class Banner {
     /** A logo of the plugin's own, instead of one drawn from its name. */
     public Banner logo(List<String> art) {
         this.logo = art == null ? null : List.copyOf(art);
+        return this;
+    }
+
+    /**
+     * Draws the logo in that gradient instead of the violet.
+     *
+     * <p>{@link #VIOLET} and {@link #GOLD} are the two Core offers; a plugin may pass its own, and one with
+     * fewer than six entries simply holds its last colour for the rows below — so a single-colour list is a
+     * flat logo rather than an error.
+     *
+     * <p>Empty is ignored rather than refused. A banner is printed once at startup, and a plugin that
+     * miscomputed its own gradient should get the house one and a working server, not a failed enable.
+     */
+    public Banner in(List<TextColor> colours) {
+        if (colours != null && !colours.isEmpty()) {
+            this.gradient = List.copyOf(colours);
+        }
         return this;
     }
 
@@ -191,7 +227,7 @@ public final class Banner {
             String line = clip(art.get(row), MAX_WIDTH - 2);
             // Down the rows rather than across the columns: a gradient per character would fight the
             // letters for attention, and this way each row reads as one stroke.
-            TextColor colour = GRADIENT.get(Math.min(row, GRADIENT.size() - 1));
+            TextColor colour = gradient.get(Math.min(row, gradient.size() - 1));
             drawn.add(Component.text("  " + line, colour));
         }
         return drawn;

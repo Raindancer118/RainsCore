@@ -444,10 +444,25 @@ public abstract class Menu implements InventoryHolder {
      * Whether clicks in the player's own inventory are their business.
      *
      * <p>False for every screen that is a set of buttons — shift-clicking from below would otherwise
-     * post items into a menu with nowhere to put them. The editable screens override it.
+     * post items into a menu with nowhere to put them. The editable screens override it, and answer
+     * {@link #handleBottomClick} too — saying yes here without also handling the click is what would
+     * hand vanilla's own shift-click straight to a top inventory that has no idea an item arrived.
      */
     public boolean allowBottomInventoryInteraction() {
         return false;
+    }
+
+    /**
+     * A click in the player's own inventory, for a screen that said yes to {@link
+     * #allowBottomInventoryInteraction}. Never called otherwise.
+     *
+     * <p>Cancelled by default, which is deliberately not "do nothing": a screen that opts in here but
+     * forgets to override this would otherwise let vanilla's own shift-click post an item into whatever
+     * the top inventory happens to be showing at that slot, silently overwriting a rendered button
+     * rather than being read as an item nobody asked to store.
+     */
+    public void handleBottomClick(InventoryClickEvent event) {
+        event.setCancelled(true);
     }
 
     /** Called when the view closes. Editable screens use it to flush a drag that had no click. */

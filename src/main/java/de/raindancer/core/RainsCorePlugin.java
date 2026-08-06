@@ -117,6 +117,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     /** How often expired chat buttons are swept. They are cheap; once a minute is plenty. */
     private static final long SWEEP_PERIOD_TICKS = 20L * 60L;
 
+    /**
+     * How long the protection bypass runs before somebody is asked whether they still need it.
+     *
+     * <p>Ten minutes, because that is comfortably longer than any normal fix — moving a chest,
+     * clearing a grief — and short enough that a forgotten toggle is caught the same session it was
+     * left on, not the next time somebody happens to notice their own claim has stopped protecting
+     * them.
+     */
+    private static final java.time.Duration BYPASS_REMINDER_AFTER = java.time.Duration.ofMinutes(10);
+
     /** How often saved places are written out, if anything changed. */
     /**
      * How often the stores are written, in the seconds the async scheduler counts in.
@@ -503,6 +513,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // not there until the plugin is enabling.
         inventories.audit(audit);
         inventories.messages(messages);
+        // Applied again now that it exists: applyModerationSettings() ran once already, before this
+        // constructor, and skipped these four because there was nothing yet to set them on.
+        applyModerationSettings();
         getServer().getPluginManager().registerEvents(new InvseeListener(inventories), this);
         applyNewSettings(settings.current());
         // Re-applied on every change, so a toggle in the menu takes hold without a restart —
@@ -549,6 +562,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                     // An offline edit whose moderator crashed would otherwise hold that player out
                     // of the server until a restart.
                     inventories.sweep();
+                    checkBypassReminders();
                 });
         Scheduling.globalTimer(this, TABLIST_PERIOD_TICKS, TABLIST_PERIOD_TICKS,
                 task -> tablists.refresh());
@@ -810,6 +824,20 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishmentGuard.enforce(PunishmentKind.MUTE, config.enforceMutes());
         punishmentGuard.enforce(PunishmentKind.FREEZE, config.enforceFreezes());
         punishmentGuard.appealMessage(config.appealMessage());
+
+        // Four settings the appearance/invsee page has had since it was written, and none of them
+        // did anything until now — Inventories never asked, so switching "Looking inside inventories"
+        // off in the running config changed nothing a player could see.
+        //
+        // Null the first time this runs: it is called once before Inventories exists yet, and again
+        // right after it is built, so the current config still reaches it immediately rather than
+        // waiting for the next change.
+        if (inventories != null) {
+            inventories.enabled(config.invseeEnabled());
+            inventories.allowEditing(config.invseeAllowEditing());
+            inventories.allowEquipment(config.invseeAllowEquipment());
+            inventories.showEnderChest(config.invseeShowEnderChest());
+        }
     }
 
     /**
@@ -824,6 +852,42 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         combat.pvp(config.combatPvp());
         combat.playersMayHurtMobs(config.combatPlayersMayHurtMobs());
         combat.mobsMayHurtPlayers(config.combatMobsMayHurtPlayers());
+    }
+
+    /**
+     * Asks whoever has been bypassing protection for a while whether they still need it.
+     *
+     * <p>One question, two ways to answer it — extend, or say "stop asking" outright — because the
+     * point is not to force the bypass off. Plenty of admin work genuinely runs long. The point is
+     * that it must never again be a thing somebody discovers by accident three days later.
+     */
+    private void checkBypassReminders() {
+        for (java.util.UUID id : land.dueForBypassReminder(BYPASS_REMINDER_AFTER)) {
+            org.bukkit.entity.Player player = getServer().getPlayer(id);
+            if (player == null) {
+                continue;
+            }
+            // Asked either way, so a player who never answers is asked again in another ten minutes
+            // rather than every minute until they do.
+            land.postponeBypassReminder(id);
+
+            de.raindancer.core.ui.chat.ChatButton stillWorking = buttons.label("<green>[Still working]</green>")
+                    .tooltip("<gray>Keep the bypass on — ask again in ten minutes")
+                    .forOnly(id).expiringIn(BYPASS_REMINDER_AFTER)
+                    .does(clicker -> {
+                        land.postponeBypassReminder(clicker);
+                        messages.send(player, "land.bypass-reminder-extended");
+                    });
+            de.raindancer.core.ui.chat.ChatButton stopAsking = buttons.label("<gray>[Stop asking]</gray>")
+                    .tooltip("<gray>Keep the bypass on without being asked again this session")
+                    .forOnly(id).expiringIn(BYPASS_REMINDER_AFTER)
+                    .does(clicker -> {
+                        land.silenceBypassReminder(clicker);
+                        messages.send(player, "land.bypass-reminder-silenced");
+                    });
+            player.sendMessage(messages.prefixed("land.bypass-reminder")
+                    .appendNewline().append(buttons.row(stillWorking, stopAsking)));
+        }
     }
 
     /** Reads the tablist's half of the settings onto it. */

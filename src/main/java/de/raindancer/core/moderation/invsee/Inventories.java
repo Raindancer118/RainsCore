@@ -61,7 +61,8 @@ public final class Inventories {
         BEING_EDITED("invsee.being-edited", "Somebody else is editing that inventory."),
         NEVER_SEEN("invsee.never-seen", "This server has never seen that player."),
         UNREADABLE("invsee.unreadable", "Their inventory could not be read — see the log."),
-        NOT_ALLOWED("invsee.not-allowed", "You may not do that.");
+        NOT_ALLOWED("invsee.not-allowed", "You may not do that."),
+        SWITCHED_OFF("invsee.switched-off", "Looking inside inventories is switched off on this server.");
 
         private final String key;
         private final String builtIn;
@@ -110,6 +111,15 @@ public final class Inventories {
 
     /** Where the wording lives. Null on a server that has not set one up. */
     private Messages messages = null;
+
+    /** Whether inventories can be watched at all. On by default — see {@link #enabled(boolean)}. */
+    private volatile boolean enabled = true;
+    /** Whether a watcher may change anything, rather than only look. */
+    private volatile boolean allowEditing = true;
+    /** Whether a watcher granted editing may also touch armour and the off-hand. */
+    private volatile boolean allowEquipment = true;
+    /** Whether the ender chest is offered beside the inventory. */
+    private volatile boolean showEnderChest = true;
 
     public Inventories(Plugin plugin, InventoryViews views, OfflineEdits offlineEdits,
                        Path playerData) {
@@ -164,6 +174,10 @@ public final class Inventories {
     public void open(Player watcher, UUID owner, String ownerName, Access wanted,
                      Consumer<Outcome> then) {
         Consumer<Outcome> answer = then == null ? outcome -> { } : then;
+        if (!enabled) {
+            answer.accept(Outcome.SWITCHED_OFF);
+            return;
+        }
         if (watcher == null || owner == null) {
             answer.accept(Outcome.NOT_ALLOWED);
             return;
@@ -172,7 +186,7 @@ public final class Inventories {
             answer.accept(Outcome.YOURSELF);
             return;
         }
-        Access level = wanted == null ? Access.READ_ONLY : wanted;
+        Access level = capToSettings(wanted == null ? Access.READ_ONLY : wanted);
         boolean live = isOnline.test(owner);
         if (live) {
             // Nothing to read from disk: it is all in memory, and it has to be read on the thread
@@ -193,6 +207,23 @@ public final class Inventories {
             Scheduling.entity(plugin, watcher, () ->
                     finishOpening(watcher, owner, ownerName, level, false, carried, answer));
         });
+    }
+
+    /**
+     * The server's own ceiling on what a watcher gets, whatever the caller asked for.
+     *
+     * <p>Applied here rather than trusted to every caller: a command that checks a permission for
+     * {@code EDIT} has no way to know the server turned editing off entirely afterwards, and a second
+     * copy of that check in every caller is the usual way one of them forgets it.
+     */
+    Access capToSettings(Access wanted) {
+        if (!allowEditing) {
+            return Access.READ_ONLY;
+        }
+        if (wanted == Access.EDIT_EVERYTHING && !allowEquipment) {
+            return Access.EDIT;
+        }
+        return wanted;
     }
 
     /** The half that has to happen on the moderator's thread: opening the window. */
@@ -219,6 +250,7 @@ public final class Inventories {
                 nameOf(owner, ownerName), level, live, sourceFor(owner), carried.get());
         window.audit(audit);
         window.messages(messages);
+        window.enderChest(showEnderChest);
         window.open();
         log.info("{} is {} the inventory of {} ({}).", watcher.getName(),
                 level.saying().toLowerCase(), nameOf(owner, ownerName),
@@ -377,6 +409,33 @@ public final class Inventories {
     /** The wording, for a caller that wants to say an outcome itself. */
     public Messages messages() {
         return messages;
+    }
+
+    /**
+     * Whether inventories can be watched at all. Off refuses every {@link #open}, whatever access was
+     * asked for — the one setting this whole class had until now silently ignored.
+     */
+    public void enabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /** Whether a watcher may change anything, rather than only look. */
+    public void allowEditing(boolean allowed) {
+        this.allowEditing = allowed;
+    }
+
+    /** Whether a watcher granted editing may also touch armour and the off-hand. */
+    public void allowEquipment(boolean allowed) {
+        this.allowEquipment = allowed;
+    }
+
+    /** Whether the ender chest is offered beside the inventory. */
+    public void showEnderChest(boolean show) {
+        this.showEnderChest = show;
     }
 
     /** Writes an entry, if there is a journal to write it to. */

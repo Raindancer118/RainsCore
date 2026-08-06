@@ -37,7 +37,11 @@ public final class MobControlListener implements Listener {
         if (!land.landFlags().isEnforced(flag)) {
             return false;
         }
-        return !land.landFlags().isAllowedAt(location, flag);
+        Optional<ProtectedArea> area = land.areaAt(location);
+        if (area.isEmpty()) {
+            return false;
+        }
+        return !land.flags().isAllowed(area.get(), flag);
     }
 
     /**
@@ -64,7 +68,12 @@ public final class MobControlListener implements Listener {
         LivingEntity entity = event.getEntity();
         Location location = entity.getLocation();
 
-        if (reason == CreatureSpawnEvent.SpawnReason.SPAWNER) {
+        // A trial spawner is a spawner block precisely as far as this flag is concerned — its own
+        // reason exists because vanilla tracks trial-chamber state separately, not because a claim
+        // owner would ever want the two treated differently. Without this a vault room's mobs walked
+        // straight past SPAWNER_SPAWNING and MONSTER_SPAWNING both, governed by nothing at all.
+        if (reason == CreatureSpawnEvent.SpawnReason.SPAWNER
+                || reason == CreatureSpawnEvent.SpawnReason.TRIAL_SPAWNER) {
             if (flagDenied(location, LandFlag.SPAWNER_SPAWNING)) {
                 event.setCancelled(true);
             }

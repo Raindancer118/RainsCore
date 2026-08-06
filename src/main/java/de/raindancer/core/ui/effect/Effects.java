@@ -65,6 +65,33 @@ public final class Effects {
     private volatile boolean enabled = true;
     private volatile long gapMillis = DEFAULT_GAP.toMillis();
 
+    /**
+     * How a sound that starts later actually gets there.
+     *
+     * <p>Defaults to running it immediately, which is wrong on a server and exactly right in a test: the
+     * whole sequence plays in order on the calling thread, so what a cue contains is checkable without a
+     * scheduler. A host calls {@link #delayedPlaybackVia} once at start-up.
+     */
+    private volatile Delayed delayedPlayback = (millis, what) -> what.run();
+
+    /** Running something a number of milliseconds from now. */
+    @FunctionalInterface
+    public interface Delayed {
+        void after(long millis, Runnable what);
+    }
+
+    /**
+     * Points delayed sounds at the server's scheduler.
+     *
+     * <p>Called once by whoever owns the plugin. Without it a layered cue still plays every sound — just all
+     * at once, which is the old behaviour rather than a new failure.
+     */
+    public void delayedPlaybackVia(Delayed how) {
+        if (how != null) {
+            this.delayedPlayback = how;
+        }
+    }
+
     /** @param clock milliseconds; injected so the repeat window can be tested without waiting */
     public Effects(EffectSink sink, LongSupplier clock) {
         this.sink = sink;
@@ -187,11 +214,31 @@ public final class Effects {
         if (effect == null || effect.isSilent() || tooSoon(player, cue)) {
             return;
         }
-        if (effect.sound() != null) {
-            sink.toPlayer(player, effect.sound());
+        playSounds(effect, step -> sink.toPlayer(player, step));
+        for (ParticleCue burst : effect.bursts().bursts()) {
+            if (!burst.isNothing()) {
+                sink.toPlayer(player, burst);
+            }
         }
-        if (effect.particles() != null && !effect.particles().isNothing()) {
-            sink.toPlayer(player, effect.particles());
+    }
+
+    /**
+     * Every sound in a cue, immediate ones now and delayed ones later.
+     *
+     * <p>The delays go through {@link #delayedPlayback}, which a host sets to the server's own scheduler and
+     * a test leaves alone — so a sequence plays fully in a test, on this thread, in order, and nothing has to
+     * pretend a scheduler exists to check that a cannon has sixteen sounds in it.
+     */
+    private void playSounds(Effect effect, java.util.function.Consumer<SoundCue> play) {
+        for (SoundSequence.Step step : effect.sounds().steps()) {
+            if (step.sound().isSilent()) {
+                continue;
+            }
+            if (step.delayMillis() <= 0) {
+                play.accept(step.sound());
+            } else {
+                delayedPlayback.after(step.delayMillis(), () -> play.accept(step.sound()));
+            }
         }
     }
 
@@ -209,11 +256,11 @@ public final class Effects {
         if (effect == null || effect.isSilent()) {
             return;
         }
-        if (effect.sound() != null) {
-            sink.atPlace(world, x, y, z, effect.sound());
-        }
-        if (effect.particles() != null && !effect.particles().isNothing()) {
-            sink.atPlace(world, x, y, z, effect.particles());
+        playSounds(effect, step -> sink.atPlace(world, x, y, z, step));
+        for (ParticleCue burst : effect.bursts().bursts()) {
+            if (!burst.isNothing()) {
+                sink.atPlace(world, x, y, z, burst);
+            }
         }
     }
 

@@ -85,6 +85,10 @@ public final class Land {
 
     private final Set<UUID> bypassing = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastRefusal = new ConcurrentHashMap<>();
+    /** When each bypass now running was switched on, so a reminder knows how long it has stood. */
+    private final Map<UUID, Long> bypassSince = new ConcurrentHashMap<>();
+    /** Who has said "stop asking" for their current bypass — cleared the moment it is toggled off. */
+    private final Set<UUID> bypassReminderSilenced = ConcurrentHashMap.newKeySet();
 
     /** @param clock milliseconds; injected so the refusal throttle can be tested without waiting for it */
     public Land(LandPolicy policy, Messages messages, LongSupplier clock) {
@@ -193,10 +197,60 @@ public final class Land {
     public boolean toggleBypass(Player player) {
         UUID id = player.getUniqueId();
         if (bypassing.remove(id)) {
+            bypassSince.remove(id);
+            bypassReminderSilenced.remove(id);
             return false;
         }
         bypassing.add(id);
+        bypassSince.put(id, clock.getAsLong());
         return true;
+    }
+
+    /**
+     * Whoever has been bypassing for at least this long and has not asked to stop hearing about it.
+     *
+     * <p>Found by a real report: bypass is meant to last exactly as long as the admin is actually
+     * working, and forgetting to switch it off is not rare — it is the normal way somebody's own
+     * claim quietly stops protecting them, with nothing anywhere saying why. A one-off reminder a
+     * player can extend or silence costs far less than the confusion a silent, indefinite bypass
+     * causes the one time somebody forgets it is on.
+     *
+     * <p>Called on a slow timer by whoever hosts this, which is also who actually sends the reminder —
+     * this only says who is due, since asking has nothing to do with the flag question the rest of
+     * this class answers.
+     */
+    public java.util.List<UUID> dueForBypassReminder(java.time.Duration after) {
+        long now = clock.getAsLong();
+        long threshold = after.toMillis();
+        java.util.List<UUID> due = new java.util.ArrayList<>();
+        for (UUID id : bypassing) {
+            if (bypassReminderSilenced.contains(id)) {
+                continue;
+            }
+            Long since = bypassSince.get(id);
+            if (since != null && now - since >= threshold) {
+                due.add(id);
+            }
+        }
+        return due;
+    }
+
+    /**
+     * Pushes the reminder clock back to now, whether that means "yes, still working" after being
+     * asked or simply having been asked at all — either way the next reminder is a full interval away,
+     * not immediately on the next check.
+     */
+    public void postponeBypassReminder(UUID id) {
+        if (id != null && bypassing.contains(id)) {
+            bypassSince.put(id, clock.getAsLong());
+        }
+    }
+
+    /** Stops asking, for as long as this particular bypass session lasts — cleared the next time it is toggled. */
+    public void silenceBypassReminder(UUID id) {
+        if (id != null) {
+            bypassReminderSilenced.add(id);
+        }
     }
 
     /**
@@ -247,6 +301,8 @@ public final class Land {
     public void forget(UUID id) {
         bypassing.remove(id);
         lastRefusal.remove(id);
+        bypassSince.remove(id);
+        bypassReminderSilenced.remove(id);
     }
 
     public boolean isServerAdmin(Player player) {

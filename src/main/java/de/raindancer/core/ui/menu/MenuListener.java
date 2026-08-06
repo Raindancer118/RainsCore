@@ -35,7 +35,9 @@ public final class MenuListener implements Listener {
             // Their own inventory. Only a screen that reads items out of it says yes here, and the
             // rest must still cancel — otherwise a shift-click posts an item into a menu that has
             // nowhere to put it and no idea it arrived.
-            if (!menu.allowBottomInventoryInteraction()) {
+            if (menu.allowBottomInventoryInteraction()) {
+                menu.handleBottomClick(event);
+            } else {
                 event.setCancelled(true);
             }
             return;

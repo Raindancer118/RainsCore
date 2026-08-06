@@ -85,6 +85,7 @@ invsee:
   never-seen: "<red>This server has never seen that player."
   unreadable: "<red>Their inventory could not be read — the log says why."
   not-allowed: "<red>You may not do that."
+  switched-off: "<red>Looking inside inventories is switched off on this server."
 
   # When an offline edit could not be saved. Nothing was changed either way.
   not-saved: "<red>Their inventory was not saved — nothing was changed, and what you added is back with you."
@@ -188,6 +189,10 @@ land:
   hit-mobs-refused: "<red>You may not hurt the animals in <white><claim></white>."
   hit-monsters-refused: "<red>You may not fight monsters in <white><claim></white>."
   interact-mobs-refused: "<red>You may not handle the animals in <white><claim></white>."
+
+  bypass-reminder: "<gold>Your protection bypass has been on for a while. <gray>Still working?"
+  bypass-reminder-extended: "<gray>Alright — asked again in ten minutes."
+  bypass-reminder-silenced: "<gray>Won't ask again until you toggle bypass off and back on."
 
   audience:
     owner:

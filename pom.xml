@@ -6,7 +6,7 @@
 
     <groupId>de.raindancer</groupId>
     <artifactId>RainsCore</artifactId>
-    <version>1.3.0</version>
+    <version>1.5.0</version>
     <packaging>jar</packaging>
 
     <name>RainsCore</name>
@@ -21,6 +21,9 @@
         <java.version>25</java.version>
         <paper.api.version>26.2.build.68-beta</paper.api.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Kept in step with Rain's Flexible Modules, so a class mocked in both behaves the same way. -->
+        <mockito.version>5.21.0</mockito.version>
     </properties>
 
     <repositories>
@@ -72,6 +75,39 @@
             <version>3.49.1.0</version>
             <scope>test</scope>
         </dependency>
+
+        <!--
+          Mockito, for the tests only, and for one specific job: the Bukkit types.
+
+          Nothing in this plugin's own design needs a mock. Everything Core decides is decided by a class
+          that takes plain values and can be constructed in a test — that is what the rules/services split
+          is for, and a test that mocks one of those is testing that we are consistent with ourselves.
+
+          What cannot be constructed in a test is Paper's half: Player, World, Block, Location, Server,
+          ItemStack. Those are interfaces with no implementation on the test classpath, so anything that
+          genuinely has to speak to one — a listener translating an event, a menu building an icon, a
+          teleport picking a destination — was previously untestable and simply had no test. That is the gap
+          this closes, and it is the only thing it is here for.
+
+          Two notes that have already cost time:
+            - The inline mock maker is what allows a *final* class with a package-private constructor to be
+              mocked. LogChannel is exactly that, and it is what a test wants to capture rather than print.
+            - Record a mock's calls with a default answer — mock(Type.class, call -> ...) — rather than
+              stubbing a varargs method. A matcher for Object... silently fails to bind the array, and the
+              assertion then checks an empty list and passes.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -108,6 +144,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+                <configuration>
+                    <!--
+                      Mockito instruments classes through Byte Buddy, which as shipped with the version
+                      above does not yet recognise Java 25 (class file 69) bytecode — the JDK this project
+                      already requires — and refuses to mock anything at all without this. Not a
+                      preference: see java.version for why 25 is not optional here.
+                    -->
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

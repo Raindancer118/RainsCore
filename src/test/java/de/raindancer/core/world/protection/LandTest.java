@@ -296,6 +296,85 @@ class LandTest {
 
             assertThat(land.can(admin.player(), somewhere, LandAction.BREAK)).isFalse();
         }
+
+        @Nested
+        @DisplayName("the reminder to switch it back off")
+        class Reminder {
+
+            private final java.time.Duration after = java.time.Duration.ofMinutes(10);
+
+            @Test
+            void nobodyIsDueTheMomentItGoesOn() {
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+
+                assertThat(land.dueForBypassReminder(after)).isEmpty();
+            }
+
+            @Test
+            void isDueOnceTheIntervalHasPassed() {
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+
+                clock.addAndGet(after.toMillis());
+
+                assertThat(land.dueForBypassReminder(after)).containsExactly(admin.id());
+            }
+
+            @Test
+            void postponingPutsTheClockBackToNow() {
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+                clock.addAndGet(after.toMillis());
+
+                land.postponeBypassReminder(admin.id());
+
+                assertThat(land.dueForBypassReminder(after))
+                        .as("asked or not, being checked at all buys another full interval")
+                        .isEmpty();
+            }
+
+            @Test
+            void silencingStopsItBeingAskedAgainThisSession() {
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+                clock.addAndGet(after.toMillis());
+
+                land.silenceBypassReminder(admin.id());
+
+                assertThat(land.dueForBypassReminder(after)).isEmpty();
+            }
+
+            @Test
+            void togglingOffAndOnAgainForgetsTheSilence() {
+                // A silenced reminder is a decision about this bypass, not about this player forever —
+                // otherwise switching it on next week for something else never asks again either.
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+                land.silenceBypassReminder(admin.id());
+
+                land.toggleBypass(admin.player());
+                land.toggleBypass(admin.player());
+                clock.addAndGet(after.toMillis());
+
+                assertThat(land.dueForBypassReminder(after)).containsExactly(admin.id());
+            }
+
+            @Test
+            void leavingForgetsBothTheClockAndTheSilence() {
+                FakePlayer admin = new FakePlayer().holding(Land.BYPASS_PERMISSION);
+                land.toggleBypass(admin.player());
+                land.silenceBypassReminder(admin.id());
+
+                land.forget(admin.id());
+                land.toggleBypass(admin.player());
+                clock.addAndGet(after.toMillis());
+
+                assertThat(land.dueForBypassReminder(after))
+                        .as("a fresh session after leaving is not still silenced from the last one")
+                        .containsExactly(admin.id());
+            }
+        }
     }
 
     @Nested
