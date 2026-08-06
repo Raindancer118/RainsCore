@@ -163,6 +163,23 @@ public record CustomItem(String plugin, String id, Material material, String dis
         return new CustomItem(plugin, id, material, displayName, lore, customModelData, nowGlowing, abilityKey, recipeRows, tags);
     }
 
+    /**
+     * The same item, crafted from something else.
+     *
+     * <h2>Why this was missing, and what it cost</h2>
+     * There was a {@code with…} for the material, the name, the lore, the model data, the glow and a tag — and
+     * none for the rows. So a server owner could <em>see</em> an item's recipe and never change it, and the
+     * plugin that used to carry a page for exactly that had been ported onto this registry. An item whose
+     * recipe cannot be edited is one somebody has to delete and rebuild.
+     *
+     * @param rows up to three rows of space-separated material names; {@code null} or empty removes the
+     *             recipe, which is how a screen says "this is not craftable" without building an empty list
+     */
+    public CustomItem withRecipe(List<String> rows) {
+        return new CustomItem(plugin, id, material, displayName, lore, customModelData, glowing, abilityKey,
+                rows == null ? List.of() : List.copyOf(rows), tags);
+    }
+
     public CustomItem withTag(String key, String value) {
         Map<String, String> updated = new LinkedHashMap<>(tags);
         if (value == null) {

@@ -49,6 +49,43 @@ public final class ItemRecipes {
      *
      * @param stack what crafting it produces — from {@link ItemFactory}
      */
+    /**
+     * The rows a grid actually needs, with empty edges removed.
+     *
+     * <h2>Why a screen has to be able to ask this</h2>
+     * A three-by-three grid with only the middle filled is not "one item in the middle" as far as Bukkit is
+     * concerned — it is a shape whose outer ring is empty, and the server refuses it with an exception naming
+     * none of this. {@link #build} has always cropped before registering, for that reason.
+     *
+     * <p>What was missing is a way to ask <em>before</em> saving. A page that shows somebody a nine-slot grid
+     * and then silently stores something narrower is a page whose preview and result disagree; one that stores
+     * the grid verbatim produces a recipe that fails at start-up, in a log the person who drew the grid will
+     * never read. So the same cropping is available on its own, and it is the same code rather than a second
+     * copy that agrees with this one until it does not.
+     *
+     * @return the cropped rows, or empty when nothing at all is in the grid — which a page must be able to
+     *         tell apart from a recipe made of air
+     */
+    public static List<String> crop(List<String> rows) {
+        CustomItem shaped = CustomItem.builder("core", "cropping").material(Material.STONE)
+                .recipe(rows == null ? List.of() : rows).build();
+        Material[][] grid = readGrid(shaped);
+        int[] bounds = boundsOf(grid);
+        if (bounds == null) {
+            return List.of();
+        }
+        List<String> cropped = new ArrayList<>();
+        for (int row = bounds[0]; row <= bounds[1]; row++) {
+            List<String> cells = new ArrayList<>();
+            for (int column = bounds[2]; column <= bounds[3]; column++) {
+                Material cell = grid[row][column];
+                cells.add(cell == null || cell == Material.AIR ? "AIR" : cell.name());
+            }
+            cropped.add(String.join(" ", cells));
+        }
+        return List.copyOf(cropped);
+    }
+
     public static Optional<ShapedRecipe> build(Plugin plugin, CustomItem item, ItemStack stack) {
         if (item == null || stack == null || !item.isCraftable()) {
             return Optional.empty();
