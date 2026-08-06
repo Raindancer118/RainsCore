@@ -252,6 +252,28 @@ public abstract class Menu implements InventoryHolder {
     }
 
     /** A tool in the toolbar row; the column orders it, as in a band. */
+    /**
+     * A toolbar button the viewer may not use: shown, greyed, with the reason.
+     *
+     * <p>The same courtesy {@link #band(int, int, boolean, ItemStack, String, Consumer)} already offered,
+     * missing from the toolbar — so every page with a conditional toolbar button drew it only when it worked
+     * and left a hole when it did not. A missing button cannot be explained: somebody looking for it does not
+     * learn that the round has moved on, they learn that the page is different from the one they remember. It
+     * also shifts everything after it, so the button they were reaching for is somewhere else under their
+     * cursor.
+     *
+     * @param allowed whether this viewer may use it right now
+     * @param reason  why not, in a sentence — "Teams are settled for this round"
+     */
+    protected void toolbar(int column, boolean allowed, ItemStack item, String reason,
+                           Consumer<InventoryClickEvent> handler) {
+        if (allowed) {
+            toolbar(column, item, handler);
+        } else {
+            toolbar(column, Icons.locked(item, reason), event -> { });
+        }
+    }
+
     protected void toolbar(int column, ItemStack item, Consumer<InventoryClickEvent> handler) {
         pendingToolbar.put(Math.max(1, Math.min(7, column)), new Placement(item, handler));
     }
