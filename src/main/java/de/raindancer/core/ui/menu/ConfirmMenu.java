@@ -104,6 +104,20 @@ public class ConfirmMenu extends Menu {
                     if (onYes != null) {
                         onYes.run();
                     }
+                    // And then out, always. This used to do nothing after the action, so the dialog stayed on
+                    // screen with no sign anything had happened — reported as "I click it and nothing
+                    // happens", and the action had in fact run every time.
+                    //
+                    // It went unnoticed in most plugins by luck: their callbacks open a page of their own,
+                    // which replaces this one and reads as an answer. A callback that instead refreshes the
+                    // page underneath redraws an inventory nobody is looking at, and then there is nothing to
+                    // see at all — the change only appears once somebody presses Back.
+                    //
+                    // After the action, never before: reopening first would redraw the parent from state the
+                    // action has not changed yet, so it would show the old world and only catch up on the next
+                    // click. And leaving is this dialog's own business — a caller that has to remember to
+                    // close the thing it opened is a caller that will not.
+                    backToWhoeverOpenedThis();
                 });
     }
 }

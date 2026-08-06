@@ -87,4 +87,39 @@ class ConfirmMenuGrammarTest {
         // screen, so somebody who opened the wrong warp's page sees the wrong warp's name here.
         assertThat(source()).contains("consequences");
     }
+
+    @Test
+    @DisplayName("confirming leaves the dialog, so a click is visibly answered")
+    void yesGoesSomewhere() {
+        // Reported from a live server: "I click it and nothing happens." The action ran — it always did — and
+        // the dialog stayed on screen with no sign it had, so the only feedback was pressing it again.
+        //
+        // It went unnoticed in the other plugins by luck: their callbacks open a page of their own, which
+        // replaces the dialog and looks like an answer. The Hunger Games' callbacks call refresh() on the page
+        // underneath, which redraws an inventory nobody is looking at — so there was nothing to see at all.
+        //
+        // Leaving is the dialog's own business, not the caller's. A caller that has to remember to close the
+        // thing that called it is a caller that will not.
+        String written = source();
+
+        assertThat(written)
+                .as("after onYes there is nothing: the dialog stays open and a click has no visible answer")
+                .contains("backToWhoeverOpenedThis()");
+    }
+
+    @Test
+    @DisplayName("the action still runs before the dialog goes away")
+    void theActionComesFirst() {
+        // Order matters and is easy to get backwards. Reopening the parent first would redraw it from state
+        // the action has not changed yet, so the page would show the old world and only agree with reality
+        // after the next click.
+        String written = source();
+        int runsIt = written.indexOf("onYes.run()");
+        int leaves = written.indexOf("backToWhoeverOpenedThis()");
+
+        assertThat(runsIt).as("onYes.run() is gone").isGreaterThan(0);
+        assertThat(leaves)
+                .as("the parent must be reopened after the action, or it redraws stale state")
+                .isGreaterThan(runsIt);
+    }
 }
