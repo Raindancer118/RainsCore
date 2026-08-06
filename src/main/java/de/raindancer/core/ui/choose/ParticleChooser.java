@@ -120,10 +120,11 @@ public final class ParticleChooser extends PaginatedMenu<ParticleGroup> {
         @Override
         protected void onClick(String particle, InventoryClickEvent event) {
             if (event.isRightClick()) {
-                viewer().closeInventory();
                 if (chosen != null) {
                     chosen.accept(particle);
                 }
+                // Back to the page that asked, rather than leaving the viewer looking at nothing.
+                backToWhoeverOpenedThis();
                 return;
             }
             preview(particle);

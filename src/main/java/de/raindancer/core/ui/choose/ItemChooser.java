@@ -207,10 +207,11 @@ public final class ItemChooser extends PaginatedMenu<Category> {
             play(Cues.OK);
             // Closed first: a callback that opens another window would otherwise be fighting this
             // one for the same screen, and the player would see whichever won.
-            viewer().closeInventory();
             if (chosen != null) {
                 chosen.accept(found);
             }
+            // Back to the page that asked, rather than leaving the viewer looking at nothing.
+            backToWhoeverOpenedThis();
         }
     }
 }

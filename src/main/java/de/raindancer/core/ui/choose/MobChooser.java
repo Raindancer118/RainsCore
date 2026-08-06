@@ -184,10 +184,11 @@ public final class MobChooser extends PaginatedMenu<MobFamily> {
         protected void onClick(String type, InventoryClickEvent event) {
             // Closed before the callback, not after: what the caller does next is usually opening
             // another screen, and closing on top of that would shut the one it just opened.
-            viewer().closeInventory();
             if (chosen != null) {
                 chosen.accept(type);
             }
+            // Back to the page that asked, rather than leaving the viewer looking at nothing.
+            backToWhoeverOpenedThis();
         }
     }
 }

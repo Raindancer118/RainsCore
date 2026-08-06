@@ -116,10 +116,11 @@ public final class EffectChooser extends PaginatedMenu<String> {
     @Override
     protected void onClick(String cue, InventoryClickEvent event) {
         if (event.isRightClick()) {
-            viewer().closeInventory();
             if (chosen != null) {
                 chosen.accept(cue);
             }
+            // Back to the page that asked, rather than leaving the viewer looking at nothing.
+            backToWhoeverOpenedThis();
             return;
         }
         if (effects != null) {

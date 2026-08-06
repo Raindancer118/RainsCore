@@ -159,5 +159,8 @@ public final class PlayerChooser extends PaginatedMenu<PlayerEntry> {
         if (chosen != null) {
             chosen.accept(person);
         }
+        // This one did not even close itself: choosing a player did nothing visible, because the list stayed
+        // on screen and the page that wanted the answer was never shown. See Menu.backToWhoeverOpenedThis.
+        backToWhoeverOpenedThis();
     }
 }

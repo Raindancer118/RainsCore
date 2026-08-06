@@ -119,6 +119,31 @@ public abstract class Menu implements InventoryHolder {
         viewer.openInventory(target);
     }
 
+    /**
+     * Back to the page that opened this one, or out of the menus entirely when there is none.
+     *
+     * <h2>Why this is a method rather than two lines at each call site</h2>
+     * Because it was two lines at each call site, and five of six choosers did not write them. Picking a
+     * player, an item, a sound, an effect or a mob answered the caller's callback and then either closed the
+     * window or left the list on screen — so the page that wanted the answer was never seen again. A server
+     * owner reported it as "the screens do not close on a click and do not go back".
+     *
+     * <p>The plugins had been papering over it: a callback ending in {@code refresh()}, which redraws a menu
+     * that is not the one being looked at, and every caller had to know to do it. That is a convention, and
+     * five of six proved a convention does not hold. This is the mechanism.
+     *
+     * <p>Closing the inventory is the honest fallback when nothing opened this — a command can open a chooser
+     * with no parent, and there is nowhere to go back to.
+     */
+    protected void backToWhoeverOpenedThis() {
+        Menu opener = parent();
+        if (opener != null) {
+            opener.open();
+        } else {
+            viewer.closeInventory();
+        }
+    }
+
     /** Rebuilds the contents in place; the view stays open, which is what a toggle needs. */
     public void refresh() {
         if (inventory == null) {

@@ -119,11 +119,8 @@ public final class AmountChooser extends Menu {
                         onAccept.accept(value);
                     }
                     // Back to whoever opened this, so the caller's screen redraws with the new number.
-                    if (parent() != null) {
-                        parent().open();
-                    } else {
-                        viewer.closeInventory();
-                    }
+                    // This one always did; the other five did not, which is why it is a shared method now.
+                    backToWhoeverOpenedThis();
                 });
 
         set(15, Icons.of(Material.BEACON, "<yellow>Most <gray>(" + max + ")"),
