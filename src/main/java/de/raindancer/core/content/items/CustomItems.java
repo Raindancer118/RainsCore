@@ -69,17 +69,32 @@ public final class CustomItems {
     /**
      * Defines it only if nobody has yet — how a plugin ships a default.
      *
-     * @return whether it was added; false means the owner's version was kept
+     * <h2>The one part of an existing definition this does overwrite</h2>
+     * Which ability the item performs. Everything else here is the owner's: a name they changed, a lore line
+     * they rewrote, a model number their resource pack needs. The ability is not — it is <em>code</em>, and
+     * which one an item runs is a fact about the release rather than a preference.
+     *
+     * <p>Found by deploying. A server that had run an earlier build kept its {@code items.yml} from then, so
+     * an item that gained an ability in a later release never got it: the definition was present, so this
+     * declined, and the item stayed inert on exactly the servers that had been running longest. Nothing
+     * said so — the boot log still counted the item.
+     *
+     * @return whether it was added; false means the owner's version was kept (its ability aside)
      */
     public boolean defineIfAbsent(CustomItem item) {
         if (item == null) {
             return false;
         }
-        boolean added = byKey.putIfAbsent(item.key(), item) == null;
-        if (added) {
+        CustomItem existing = byKey.putIfAbsent(item.key(), item);
+        if (existing == null) {
+            dirty.set(true);
+            return true;
+        }
+        if (!existing.ability().equals(item.ability())) {
+            byKey.put(item.key(), existing.withAbility(item.ability().orElse(null)));
             dirty.set(true);
         }
-        return added;
+        return false;
     }
 
     /** Removes a definition. Items already made from it are unaffected. */

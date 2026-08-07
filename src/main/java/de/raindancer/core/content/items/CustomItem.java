@@ -176,6 +176,17 @@ public record CustomItem(String plugin, String id, Material material, String dis
         return new CustomItem(plugin, id, material, displayName, lore, newModelData, glowing, abilityKey, recipeRows, tags);
     }
 
+    /**
+     * The same item pointing at a different ability.
+     *
+     * <p>Its own method because the ability is the one part of a definition that is <em>code</em> rather
+     * than configuration — see {@link CustomItems#defineIfAbsent}.
+     */
+    public CustomItem withAbility(String newAbility) {
+        return new CustomItem(plugin, id, material, displayName, lore, customModelData, glowing, newAbility,
+                recipeRows, tags);
+    }
+
     public CustomItem withGlowing(boolean nowGlowing) {
         return new CustomItem(plugin, id, material, displayName, lore, customModelData, nowGlowing, abilityKey, recipeRows, tags);
     }

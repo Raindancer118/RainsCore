@@ -302,6 +302,52 @@ class ClickingACustomItemDoesSomethingTest {
         }
     }
 
+    @Nested
+    @DisplayName("an upgrading server")
+    class AnExistingItemsFile {
+
+        @Test
+        @DisplayName("an item that gained an ability gets it, even though the definition is already there")
+        void theAbilityIsRefreshed() {
+            // Found by deploying. A server running since an earlier build keeps its items.yml, so
+            // defineIfAbsent declined — and the item stayed inert on exactly the servers that had been
+            // running longest, with the boot log still counting it.
+            CustomItems existing = new CustomItems(Path.of("target", "no-such-items.yml"));
+            existing.define(CustomItem.builder("hungergames", "stupidness-protector")
+                    .material(Material.NAUTILUS_SHELL)
+                    .name("<dark_aqua>Somebody's own renamed protector")
+                    .build());
+
+            existing.defineIfAbsent(CustomItem.builder("hungergames", "stupidness-protector")
+                    .material(Material.NAUTILUS_SHELL)
+                    .name("<dark_aqua>Stupidness Protector")
+                    .ability("stupidness-protector")
+                    .build());
+
+            CustomItem stored = existing.byKey("hungergames:stupidness-protector").orElseThrow();
+            assertThat(stored.ability())
+                    .as("which ability an item runs is code, not a preference")
+                    .contains("stupidness-protector");
+            assertThat(stored.name())
+                    .as("everything else is still the owner's — a name they changed, a lore line they wrote")
+                    .isEqualTo("<dark_aqua>Somebody's own renamed protector");
+        }
+
+        @Test
+        @DisplayName("an unchanged definition is left completely alone")
+        void nothingIsTouchedForNothing() {
+            CustomItems existing = new CustomItems(Path.of("target", "no-such-items.yml"));
+            CustomItem theirs = CustomItem.builder("hungergames", "medikit")
+                    .material(Material.PAPER).name("<red>Theirs").ability("medikit").build();
+            existing.define(theirs);
+
+            existing.defineIfAbsent(CustomItem.builder("hungergames", "medikit")
+                    .material(Material.GLISTERING_MELON_SLICE).name("<red>Ours").ability("medikit").build());
+
+            assertThat(existing.byKey("hungergames:medikit")).contains(theirs);
+        }
+    }
+
     @Test
     @DisplayName("the dispatcher is actually registered, which is the half that was missing")
     void theDispatcherIsActuallyRegistered() throws Exception {

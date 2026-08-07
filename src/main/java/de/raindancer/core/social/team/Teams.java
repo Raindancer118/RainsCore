@@ -339,6 +339,31 @@ public final class Teams {
         return oldTeam;
     }
 
+    /**
+     * Swaps one UUID for another inside whichever team {@code from} is on, regardless of {@code frozen}.
+     *
+     * <p>For the one case that is not a membership decision at all: a roster host who whitelisted somebody
+     * by name before they had ever joined, keyed on a placeholder UUID derived from that name, and now
+     * knows their real one. That is not "leave and rejoin" — a normal join would be refused the moment
+     * teams are frozen, which for a tournament is most of the evening, and the person did not change
+     * teams, only which UUID means them. Captaincy moves with them, because losing it by an accident of
+     * timing (whitelisted before the real UUID was known) is not a decision anybody made.
+     *
+     * @return the team it moved within, or empty if {@code from} was not on one
+     */
+    public Optional<TeamId> reassign(UUID from, UUID to) {
+        Optional<TeamId> current = teamIdOf(from);
+        current.ifPresent(id -> {
+            MutableTeam team = teams.get(id);
+            team.members.remove(from);
+            team.members.add(to);
+            if (from.equals(team.captain)) {
+                team.captain = to;
+            }
+        });
+        return current;
+    }
+
     public TeamOutcome setCaptain(TeamId id, UUID player) {
         MutableTeam team = teams.get(id);
         if (team == null) {

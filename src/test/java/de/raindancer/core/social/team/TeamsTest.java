@@ -742,4 +742,73 @@ class TeamsTest {
             assertThat(second.status().isSuccess()).isTrue();
         }
     }
+
+    @Nested
+    @DisplayName("swapping one UUID for another within a team")
+    class Reassignment {
+
+        @Test
+        @DisplayName("membership moves to the new UUID")
+        void membershipMoves() {
+            TeamId id = teams.create("Red", TeamColour.RED).team().orElseThrow().id();
+            teams.join(p1, id);
+
+            Optional<TeamId> moved = teams.reassign(p1, p2);
+
+            assertThat(moved).contains(id);
+            assertThat(teams.teamIdOf(p2)).contains(id);
+            assertThat(teams.teamIdOf(p1))
+                    .as("the old UUID must not still hold the seat too — that is two members for one person")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("captaincy moves with it")
+        void captaincyMoves() {
+            policy = policy.withCaptains(true);
+            TeamId id = teams.create("Red", TeamColour.RED).team().orElseThrow().id();
+            teams.join(p1, id);
+            teams.setCaptain(id, p1);
+
+            teams.reassign(p1, p2);
+
+            assertThat(teams.team(id).orElseThrow().captain())
+                    .as("losing captaincy to an accident of timing is not a decision anybody made")
+                    .contains(p2);
+        }
+
+        @Test
+        @DisplayName("somebody who is not on a team moves nothing and reports so")
+        void nobodyToMove() {
+            assertThat(teams.reassign(p1, p2)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("it works even while the roster is frozen")
+        void ignoresFrozen() {
+            // Not a membership decision by a player — the same person is receiving their real identity, and
+            // a normal join would be refused the moment teams are frozen, which for a tournament is most of
+            // the evening.
+            TeamId id = teams.create("Red", TeamColour.RED).team().orElseThrow().id();
+            teams.join(p1, id);
+            frozen = true;
+
+            Optional<TeamId> moved = teams.reassign(p1, p2);
+
+            assertThat(moved).contains(id);
+            assertThat(teams.teamIdOf(p2)).contains(id);
+        }
+
+        @Test
+        @DisplayName("a teammate who is not being reassigned is left alone")
+        void teammateUntouched() {
+            TeamId id = teams.create("Red", TeamColour.RED).team().orElseThrow().id();
+            teams.join(p1, id);
+            teams.join(p3, id);
+
+            teams.reassign(p1, p2);
+
+            assertThat(teams.team(id).orElseThrow().members()).containsExactlyInAnyOrder(p2, p3);
+        }
+    }
 }
