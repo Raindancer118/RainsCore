@@ -155,6 +155,21 @@ combat:
   # because Core does not know which plugin said no or why.
   protected: "<red>Something is protecting that."
 
+# ─────────────────────────────────────────────────────────── custom items
+#
+#  Said when a custom item was clicked and did not do its thing. There is no
+#  line for the case where it worked: the item itself is the message, and a
+#  chat line saying "you used the smoke bomb" on top of a cloud of smoke is
+#  noise. A miss — a grappling hook aimed at the sky — is also silent, and
+#  deliberately: it costs nothing, so it should read as a miss rather than as
+#  a refusal.
+items:
+  cooling-down: "<yellow><item> is not ready yet — <white><seconds>s</white>."
+  used-up: "<yellow><item> has nothing left in it."
+  # The ability threw. The reason is in the log with its stack trace; the
+  # player gets a sentence rather than an item that silently does nothing.
+  went-wrong: "<red><item> did not work. Somebody should look at the log."
+
 # ────────────────────────────────────────────────────────────── farm worlds
 farm-world:
   # Said to anybody standing in a farm world that is about to be made again.

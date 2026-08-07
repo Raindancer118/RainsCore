@@ -119,6 +119,23 @@ public record CustomItem(String plugin, String id, Material material, String dis
     }
 
     /**
+     * The ability's full key, as {@link ItemAbilities} holds it — {@code hungergames:medikit}.
+     *
+     * <p>An item may name its ability with a bare id, and every one written so far does:
+     * {@code .ability(MEDIKIT)} beside {@code CustomItem.builder(PLUGIN, MEDIKIT)} reads better than
+     * repeating the namespace, and repeating it is a second place for a plugin to be renamed. So the
+     * namespace is filled in here, from the item's own — an item and its ability belong to the same
+     * plugin or they are not each other's.
+     *
+     * <p>This is what anything dispatching a use must look up with. It matters more than it reads:
+     * {@code abilities.byKey("medikit")} finds nothing, and an ability nobody can find is an item that
+     * does nothing at all when it is clicked — no error, no log line, just a stick.
+     */
+    public Optional<String> abilityInFull() {
+        return ability().map(named -> named.indexOf(':') >= 0 ? named : plugin + ":" + named);
+    }
+
+    /**
      * The crafting recipe, as up to three rows of material names — {@code "LIGHTNING_ROD
      * DIAMOND_BLOCK LIGHTNING_ROD"}. Empty for an item nobody can craft.
      *

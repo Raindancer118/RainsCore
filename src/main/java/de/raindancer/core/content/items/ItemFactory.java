@@ -8,6 +8,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -113,5 +114,39 @@ public final class ItemFactory {
     /** Whether this stack is that custom item. */
     public boolean is(ItemStack stack, String key) {
         return key != null && keyOf(stack).map(key::equalsIgnoreCase).orElse(false);
+    }
+
+    /**
+     * Takes one of a custom item out of an inventory, wherever it is in there.
+     *
+     * <p>For the case an item's own click cannot cover: something that is <em>paid for later</em>. The
+     * Hunger Games medikit works three seconds after it is used, and is only spent when it works — so at
+     * that moment there is no click, no held stack and no event, just a player who may or may not still have
+     * one. Somebody who dropped it, traded it or put it in a chest during those three seconds does not get
+     * healed by an item they no longer have, and this returning {@code false} is how that is known.
+     *
+     * <p>By the persistent-data key and nothing else, like everything else here: comparing display names
+     * would let an anvil and a book forge one.
+     *
+     * @return whether one was found and taken
+     */
+    public boolean takeOne(Inventory inventory, String key) {
+        if (inventory == null || key == null) {
+            return false;
+        }
+        ItemStack[] contents = inventory.getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack stack = contents[slot];
+            if (stack == null || !is(stack, key)) {
+                continue;
+            }
+            if (stack.getAmount() > 1) {
+                stack.setAmount(stack.getAmount() - 1);
+            } else {
+                inventory.setItem(slot, null);
+            }
+            return true;
+        }
+        return false;
     }
 }

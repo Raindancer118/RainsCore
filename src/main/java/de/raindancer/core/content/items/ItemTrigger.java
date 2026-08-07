@@ -49,5 +49,29 @@ public enum ItemTrigger {
      * environmental damage and is consumed doing it. An ability here is expected to say whether it
      * actually saved them, because the damage is only cancelled if it did.
      */
-    LETHAL_DAMAGE
+    LETHAL_DAMAGE;
+
+    /**
+     * Which of these a {@code PlayerInteractEvent}'s action is, if it is one at all.
+     *
+     * <p>Here rather than in the listener because of the bug it exists to prevent: Bukkit reports a
+     * right click as {@code RIGHT_CLICK_AIR} <em>or</em> {@code RIGHT_CLICK_BLOCK} depending on what
+     * happened to be in front of the player, and every hand-rolled version of this check has
+     * eventually handled one and forgotten the other — after which an item works in the open and does
+     * nothing when its holder is standing next to a wall, which is not a bug report anybody files
+     * usefully.
+     *
+     * <p>Physical (a pressure plate, a tripwire) is deliberately absent: that is the world acting on
+     * the player rather than the player using what they are holding.
+     */
+    public static java.util.Optional<ItemTrigger> forClick(org.bukkit.event.block.Action action) {
+        if (action == null) {
+            return java.util.Optional.empty();
+        }
+        return switch (action) {
+            case RIGHT_CLICK_AIR, RIGHT_CLICK_BLOCK -> java.util.Optional.of(RIGHT_CLICK);
+            case LEFT_CLICK_AIR, LEFT_CLICK_BLOCK -> java.util.Optional.of(LEFT_CLICK);
+            default -> java.util.Optional.empty();
+        };
+    }
 }

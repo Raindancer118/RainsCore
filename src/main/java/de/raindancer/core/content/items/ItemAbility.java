@@ -21,11 +21,20 @@ import java.util.function.Predicate;
  * that never went anywhere is the sort of thing that makes an item feel broken. {@link Builder#does}
  * is the shorthand for an ability that always succeeds.
  *
+ * <h2>Charges and consuming the item are different questions</h2>
+ * {@link #maxCharges} limits how often <em>a player</em> may ever use it; {@link #consumesItem} takes
+ * one physical item out of their hand every time it works. An item whose lore says "single use" wants
+ * the second: a player handed a second medikit by a sponsor has to be able to use it, and a per-player
+ * charge of one says they may not — the first one they ever used spent the only charge they will get,
+ * and every medikit after that is a melon slice.
+ *
  * @param cooldownMillis how long before the same player may use it again; null for no cooldown
  * @param maxCharges     how many times, ever; null for unlimited
+ * @param consumesItem   whether one is taken from the stack each time it actually works
  */
 public record ItemAbility(String plugin, String id, ItemTrigger trigger, String description,
-                          Long cooldownMillis, Integer maxCharges, Predicate<ItemUse> effect) {
+                          Long cooldownMillis, Integer maxCharges, boolean consumesItem,
+                          Predicate<ItemUse> effect) {
 
     public ItemAbility {
         if (plugin == null || plugin.isBlank()) {
@@ -68,6 +77,7 @@ public record ItemAbility(String plugin, String id, ItemTrigger trigger, String 
         private String description;
         private Long cooldownMillis;
         private Integer maxCharges;
+        private boolean consumesItem;
         private Predicate<ItemUse> effect;
 
         private Builder(String plugin, String id) {
@@ -98,6 +108,19 @@ public record ItemAbility(String plugin, String id, ItemTrigger trigger, String 
             return this;
         }
 
+        /**
+         * One of these is taken out of the holder's hand every time the effect actually works.
+         *
+         * <p>What "single use" means for a thing you are given rather than a thing you learn. Not
+         * {@code charges(1)}: that is a limit on the player, so the second medikit a sponsor sends is
+         * refused because the first one was used — the sort of failure that is reported as "the shop
+         * sold me a broken item".
+         */
+        public Builder consumesItem() {
+            this.consumesItem = true;
+            return this;
+        }
+
         /** An effect that always happens. */
         public Builder does(java.util.function.Consumer<ItemUse> value) {
             this.effect = use -> {
@@ -118,7 +141,7 @@ public record ItemAbility(String plugin, String id, ItemTrigger trigger, String 
 
         public ItemAbility build() {
             return new ItemAbility(plugin, id, trigger, description, cooldownMillis, maxCharges,
-                    effect);
+                    consumesItem, effect);
         }
     }
 }

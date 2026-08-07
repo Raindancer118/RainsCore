@@ -16,6 +16,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.permission.GrantListener;
 import de.raindancer.core.platform.permission.Grants;
+import de.raindancer.core.content.items.CustomItemListener;
 import de.raindancer.core.content.items.CustomItems;
 import de.raindancer.core.content.items.ItemAbilities;
 import de.raindancer.core.content.items.ItemFactory;
@@ -364,6 +365,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         items.load();
         itemFactory = new ItemFactory(this);
         itemAbilities = new ItemAbilities(System::currentTimeMillis);
+        // The one thing that makes a custom item do anything when it is clicked. Without it every
+        // definition and every ability on the server is inert, and nothing says so: the boot log still
+        // counts the items, and clicking one is indistinguishable from clicking the block it is made of.
+        getServer().getPluginManager().registerEvents(
+                new CustomItemListener(items, itemFactory, itemAbilities, messages), this);
 
         lootTables = new LootTables(getDataFolder().toPath().resolve("loot.yml"));
         lootTables.load();
