@@ -41,6 +41,13 @@ public final class Vanish {
     private final Set<UUID> maySee = ConcurrentHashMap.newKeySet();
     /** Who could already fly before they vanished, so they are not grounded when they come back. */
     private final Set<UUID> couldAlreadyFly = ConcurrentHashMap.newKeySet();
+    /**
+     * Who was told to fake a departure on the way in — asked again on {@link #reveal}, rather than
+     * read off {@link #fakeDeparture} at that later moment. The flag is server-wide and can change
+     * between the two calls; a caller who vanished somebody silently must get a silent reveal back,
+     * whatever the flag says by then.
+     */
+    private final Set<UUID> departureWasFaked = ConcurrentHashMap.newKeySet();
 
     private volatile boolean flightWhileVanished = true;
 
@@ -82,6 +89,20 @@ public final class Vanish {
      *                        something it never gave, which is how a builder lands in the void.
      */
     public boolean vanish(UUID who, boolean couldFlyAlready) {
+        return vanish(who, couldFlyAlready, fakeDeparture);
+    }
+
+    /**
+     * The same, deciding for itself whether this particular hiding pretends to be a departure —
+     * overriding {@link #fakeDeparture(boolean)}'s server-wide default for this one call.
+     *
+     * <p>For somebody who is not leaving in any sense a departure message would be honest about: an
+     * eliminated tribute stays connected and stays a spectator on the same server, and a "left the
+     * game" line about them would be exactly the kind of confident wrong answer this class exists to
+     * avoid. Staff vanish keeps using the two-argument form, which still means what the server has
+     * configured.
+     */
+    public boolean vanish(UUID who, boolean couldFlyAlready, boolean announceAsDeparture) {
         if (who == null || !hidden.add(who)) {
             // Already hidden. Re-hiding re-sends packets to every player on the server for nothing.
             return false;
@@ -95,10 +116,11 @@ public final class Vanish {
         if (flightWhileVanished && !couldFlyAlready) {
             sink.allowFlight(who, true);
         }
-        if (fakeDeparture) {
+        if (announceAsDeparture) {
             // So vanishing looks exactly like logging off. Without it, everybody watching sees a
             // player simply stop existing mid-sentence, which is a louder signal than a leave message.
             sink.announceDeparture(who, Set.copyOf(maySee));
+            departureWasFaked.add(who);
         }
         log.info("{} vanished.", who);
         return true;
@@ -117,7 +139,7 @@ public final class Vanish {
             // land in the void when they return.
             sink.allowFlight(who, false);
         }
-        if (fakeDeparture) {
+        if (departureWasFaked.remove(who)) {
             // The other half, and not optional if the first half happened: a moderator who "left" and
             // then reappears without ever "joining" is a moderator everybody works out was hiding.
             sink.announceArrival(who, Set.copyOf(maySee));
@@ -235,6 +257,7 @@ public final class Vanish {
             hidden.remove(who);
             maySee.remove(who);
             couldAlreadyFly.remove(who);
+            departureWasFaked.remove(who);
         }
     }
 }

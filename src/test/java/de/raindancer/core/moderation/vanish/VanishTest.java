@@ -137,6 +137,34 @@ class VanishTest {
         }
 
         @Test
+        @DisplayName("a per-call override says nothing, even though the server-wide default would")
+        void aSilentVanishOverridesTheDefault() {
+            // For somebody who is not leaving in any sense a departure message would be honest about
+            // — an eliminated tribute who stays connected and stays a spectator on the same server.
+            Vanish vanish = vanish();
+
+            vanish.vanish(MOD, false, false);
+            vanish.reveal(MOD);
+
+            assertThat(faked).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a silent vanish still reveals silently, whatever the flag says by then")
+        void theRevealMatchesWhatActuallyHappened() {
+            // The flag is asked at vanish time and remembered, not re-read at reveal time — a caller
+            // who vanished somebody silently must get a silent reveal back even if the server-wide
+            // default changed in between.
+            Vanish vanish = vanish();
+
+            vanish.vanish(MOD, false, false);
+            vanish.fakeDeparture(true);
+            vanish.reveal(MOD);
+
+            assertThat(faked).isEmpty();
+        }
+
+        @Test
         @DisplayName("vanishing twice announces one departure")
         void notTwice() {
             // Re-hiding somebody already hidden does nothing at all, and a second leave message would
