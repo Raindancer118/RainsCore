@@ -35,9 +35,10 @@ class SettingsNavigationTest {
             @In("config/limits/claims") @Title("Claims per player") @Range(min = 1, max = 20)
             int claimsPerPlayer,
             @In("management/fences") @Title("Show fences") boolean fencesEnabled,
-            @In("management/fences") @Title("Fence style") Style fenceStyle) {
+            @In("management/fences") @Title("Fence style") Style fenceStyle,
+            @In("management/fences") @Title("Fence block") Material fenceBlock) {
 
-        static final ClaimConfig DEFAULTS = new ClaimConfig(40_000, 5, true, Style.SOLID);
+        static final ClaimConfig DEFAULTS = new ClaimConfig(40_000, 5, true, Style.SOLID, Material.OAK_FENCE);
     }
 
     enum Style { SOLID, DASHED, NONE }
@@ -206,6 +207,20 @@ class SettingsNavigationTest {
         }
 
         @Test
+        @DisplayName("a block or item asks for Core's chooser, not a typed value")
+        void materialsNeedTheChooser() {
+            // The bug this guards against: a Material setting fell through to NEEDS_TYPING, edited by
+            // typing a name into chat — which is how a server ended up with its lobby walls built out
+            // of "gray_candle". A name that parses is not the same as a name somebody meant to type.
+            assertThat(navigation.canCycle(setting("fence-block"))).isFalse();
+            assertThat(navigation.click("fence-block"))
+                    .isEqualTo(SettingsNavigation.Click.NEEDS_MATERIAL_CHOICE);
+            assertThat(registry.display("fence-block"))
+                    .as("clicking must not have changed it")
+                    .isEqualTo("oak_fence");
+        }
+
+        @Test
         @DisplayName("a setting nobody knows does nothing")
         void unknownDoesNothing() {
             assertThat(navigation.click("nothing-like-this"))
@@ -241,6 +256,13 @@ class SettingsNavigationTest {
         void listsChoices() {
             assertThat(navigation.describe(setting("fence-style")))
                     .anySatisfy(line -> assertThat(line).contains("dashed"));
+        }
+
+        @Test
+        @DisplayName("a block or item says to choose rather than to type")
+        void describesAMaterial() {
+            assertThat(navigation.describe(setting("fence-block")))
+                    .anySatisfy(line -> assertThat(line).containsIgnoringCase("choose"));
         }
 
         @Test

@@ -135,6 +135,13 @@ public final class SettingsMenu extends Menu {
                 navigation.registry().saveAll();
                 refresh();
             }
+            case NEEDS_MATERIAL_CHOICE -> new de.raindancer.core.ui.choose.ItemChooser(viewer, brand(), this,
+                    "Choose " + setting.title(),
+                    chosen -> {
+                        navigation.registry().set(setting.key(), chosen.name());
+                        navigation.registry().saveAll();
+                        refresh();
+                    }).open();
             case NEEDS_TYPING -> {
                 // Typed in chat rather than in an anvil: an anvil cannot show what the value is now
                 // or what it is allowed to be, and both matter more than not leaving the window.
