@@ -54,10 +54,13 @@ public record Team(
         // told apart by colour, not a team in an incomplete state. Every caller that reads an emblem would
         // otherwise have to null-check it, and one of them would not.
         emblem = emblem == null ? TeamEmblem.NONE : emblem;
-        // Falls back to the emblem's own suggestion rather than to a fixed material, so a team that has never
-        // chosen still looks like itself. Never null: every screen draws this, and one null is a page that
-        // throws while forty people are picking teams.
-        badge = badge == null ? emblem.suggestedBadge() : badge;
+        // Falls back to the emblem's own suggestion, or — for a plain team with no emblem — to a banner in the
+        // team's own colour rather than TeamEmblem.NONE's fixed WHITE_BANNER. Without this, a red team that
+        // never touched the item chooser is drawn as a white banner in every screen that reads this field,
+        // while its name and nametag are correctly red — two data paths for one identity, silently disagreeing.
+        // Never null: every screen draws this, and one null is a page that throws while forty people are
+        // picking teams.
+        badge = badge == null ? (emblem.isVisible() ? emblem.suggestedBadge() : colour.bannerMaterial()) : badge;
         Objects.requireNonNull(captain, "captain");
         // Copied rather than wrapped: a caller holding on to the set it passed in could otherwise add somebody
         // to a team nobody asked to change, and the change would show up in a screen with no event fired and

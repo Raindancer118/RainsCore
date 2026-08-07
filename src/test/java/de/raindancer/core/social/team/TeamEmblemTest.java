@@ -181,6 +181,17 @@ class TeamEmblemTest {
         }
 
         @Test
+        @DisplayName("a plain team with no emblem falls back to a banner in its own colour, not white")
+        void thePlainFallbackIsColoured() {
+            // The bug this guards: TeamEmblem.NONE suggests a fixed WHITE_BANNER, so a plain orange team that
+            // never visited the item chooser used to be drawn white in every screen reading Team.badge(),
+            // while its name and nametag were correctly orange — two data paths for one identity, disagreeing.
+            Team plain = Team.of(TeamId.fromName("orange"), "Orange", TeamColour.ORANGE);
+
+            assertThat(plain.badge()).isEqualTo(TeamColour.ORANGE.bannerMaterial());
+        }
+
+        @Test
         @DisplayName("a chosen badge is kept exactly, however odd")
         void whateverTheyPicked() {
             Team odd = Team.of(TeamId.fromName("cake"), "Cake", TeamColour.PINK)

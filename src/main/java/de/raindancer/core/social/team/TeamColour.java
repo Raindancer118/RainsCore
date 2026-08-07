@@ -4,6 +4,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Color;
 import org.bukkit.DyeColor;
+import org.bukkit.Material;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -73,6 +74,19 @@ public enum TeamColour {
     /** The same colour as an RGB value, which is what leather armour meta actually takes. */
     public Color armourColour() {
         return dye.getColor();
+    }
+
+    /**
+     * The banner a team with no emblem or custom badge of its own shows.
+     *
+     * <p>Bukkit names every banner material after its dye colour exactly — {@code ORANGE_BANNER},
+     * {@code LIGHT_BLUE_BANNER} and so on — so this is a lookup, not a second table to keep in step with
+     * {@link #dyeColour()}. A hand-written table is exactly the kind of duplicate this enum's own class note
+     * warns against: it would agree with {@code dye} today and drift the day somebody adds a colour to one
+     * and not the other.
+     */
+    public Material bannerMaterial() {
+        return Material.valueOf(dye.name() + "_BANNER");
     }
 
     /** What the name above their head, the scoreboard entry and their chat lines are coloured. */
