@@ -166,6 +166,37 @@ public final class Grants {
         }
     }
 
+    /**
+     * Adds every one of these nodes, leaving whatever they already hold — granted or revoked —
+     * completely alone.
+     *
+     * <p>{@link #set} answers "what should this person hold, exactly" and is right for a promotion or
+     * a deliberate reset. This answers a narrower question: "has anything new appeared that they
+     * should have too", where "new" means new to the <em>preset</em>, not new to them — a node
+     * somebody explicitly {@link #revoke}d stays revoked, because a preset gaining a node it always
+     * granted is not the admin who took that one node away changing their mind. See
+     * {@code StaffRoster#topUpFromPreset}, the one caller that needs exactly this rather than
+     * {@link #set}.
+     *
+     * @return whether anything was actually new
+     */
+    public boolean grantAll(UUID who, Collection<String> nodes) {
+        if (who == null || nodes == null || nodes.isEmpty()) {
+            return false;
+        }
+        Set<String> theirs = nodesOf(who);
+        boolean changed = false;
+        for (String node : nodes) {
+            if (node != null && !node.isBlank() && theirs.add(node.trim())) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            changed(who);
+        }
+        return changed;
+    }
+
     /** {@link #set} without announcing it. Only for {@link #load}; see the comment there. */
     private void replaceQuietly(UUID who, Collection<String> nodes) {
         Set<String> fresh = ConcurrentHashMap.newKeySet();

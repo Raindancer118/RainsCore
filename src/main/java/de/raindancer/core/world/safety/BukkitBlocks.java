@@ -97,6 +97,14 @@ public final class BukkitBlocks implements Blocks {
         return NATURAL_GROUND.contains(world.getBlockAt(spot.x(), spot.y(), spot.z()).getType());
     }
 
+    @Override
+    public boolean isGrass(Spot spot) {
+        if (!isLoaded(spot) || spot.y() < world.getMinHeight() || spot.y() >= world.getMaxHeight()) {
+            return false;
+        }
+        return world.getBlockAt(spot.x(), spot.y(), spot.z()).getType() == Material.GRASS_BLOCK;
+    }
+
     /**
      * One block, as one of six answers.
      *

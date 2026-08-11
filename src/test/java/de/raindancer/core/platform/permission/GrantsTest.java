@@ -185,6 +185,76 @@ class GrantsTest {
     }
 
     @Nested
+    @DisplayName("adding a whole preset without touching the rest")
+    class AddingAll {
+
+        @Test
+        @DisplayName("every node in the collection is granted")
+        void everythingAdded(@TempDir Path folder) {
+            Grants grants = new Grants(folder);
+
+            boolean changed = grants.grantAll(ayla,
+                    List.of("rains.moderation.mute", "rains.moderation.kick"));
+
+            assertThat(changed).isTrue();
+            assertThat(grants.nodesFor(ayla))
+                    .containsExactlyInAnyOrder("rains.moderation.mute", "rains.moderation.kick");
+        }
+
+        @Test
+        @DisplayName("this class alone cannot tell a revoke from a node never granted")
+        void hasNoOpinionAboutWhyANodeIsMissing(@TempDir Path folder) {
+            // grantAll only ever asks "is this node held" — it does not, and cannot, know whether
+            // an absent node was refused on purpose or simply never reached. Handed the same node
+            // twice, it grants it again the second time exactly as readily as the first. Telling
+            // "revoked on purpose" apart from "never granted" is StaffRoster#topUpFromPreset's own
+            // job, done with its own denied list before this is ever called — not something this
+            // narrower, lower-level method can or should decide for it.
+            Grants grants = new Grants(folder);
+            grants.grantAll(ayla, List.of("rains.moderation.mute"));
+            grants.revoke(ayla, "rains.moderation.mute");
+
+            boolean changed = grants.grantAll(ayla, List.of("rains.moderation.mute"));
+
+            assertThat(changed).isTrue();
+            assertThat(grants.has(ayla, "rains.moderation.mute")).isTrue();
+        }
+
+        @Test
+        @DisplayName("an extra node held by hand survives")
+        void extraNodeSurvives(@TempDir Path folder) {
+            Grants grants = new Grants(folder);
+            grants.grant(ayla, "rains.moderation.freeze");
+
+            grants.grantAll(ayla, List.of("rains.moderation.mute"));
+
+            assertThat(grants.nodesFor(ayla))
+                    .containsExactlyInAnyOrder("rains.moderation.freeze", "rains.moderation.mute");
+        }
+
+        @Test
+        @DisplayName("nothing new to add reports no change")
+        void reportsNoChange(@TempDir Path folder) {
+            Grants grants = new Grants(folder);
+            grants.grant(ayla, "rains.moderation.mute");
+
+            boolean changed = grants.grantAll(ayla, List.of("rains.moderation.mute"));
+
+            assertThat(changed).isFalse();
+        }
+
+        @Test
+        @DisplayName("a null person or an empty collection changes nothing")
+        void nulls(@TempDir Path folder) {
+            Grants grants = new Grants(folder);
+
+            assertThat(grants.grantAll(null, List.of("rains.moderation.mute"))).isFalse();
+            assertThat(grants.grantAll(ayla, List.of())).isFalse();
+            assertThat(grants.grantAll(ayla, null)).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("across a restart")
     class Persisting {
 

@@ -6,7 +6,7 @@
 
     <groupId>de.raindancer</groupId>
     <artifactId>RainsCore</artifactId>
-    <version>1.10.0</version>
+    <version>1.12.0</version>
     <packaging>jar</packaging>
 
     <name>RainsCore</name>
@@ -138,6 +138,15 @@
                     <compilerArgs>
                         <arg>-Xlint:all,-serial,-processing</arg>
                     </compilerArgs>
+                    <!--
+                      fork=true: the in-process javac this plugin uses by default started throwing a
+                      bare NullPointerException (no message, no useful stack) on a cold `clean install`
+                      once the module passed a few hundred source files — reproducible on this JDK 25
+                      toolchain, gone on a warm recompile, and gone for good once javac runs in its own
+                      process instead of Maven's. A forked process costs a JVM start per compile, which
+                      is nothing next to a build that cannot be trusted to finish.
+                    -->
+                    <fork>true</fork>
                 </configuration>
             </plugin>
             <plugin>

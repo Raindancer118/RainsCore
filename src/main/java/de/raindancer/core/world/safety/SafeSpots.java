@@ -44,6 +44,17 @@ public final class SafeSpots {
     private static final int LOOK_DOWN = 96;
 
     /**
+     * How far {@link #groundInColumn}'s fallback walk may wander from the heightmap's own answer
+     * before giving up on the column rather than accepting whatever open pocket it finds next.
+     *
+     * <p>Generous enough to clear a thick canopy, an overhang, or the lip of a cave mouth — all
+     * genuinely "the ground is a little further from here than the heightmap said" cases — while
+     * still refusing to tunnel through open rock into an unrelated cavern far below. See that
+     * method's note, and {@link #safeInColumn(Spot, int)}, for why this bound exists at all.
+     */
+    private static final int SURFACE_FALLBACK_SLACK = 40;
+
+    /**
      * The longest {@link #nearestConsistentHeight} is allowed to spend looking, however bad the
      * terrain turns out to be.
      *
@@ -361,7 +372,7 @@ public final class SafeSpots {
                         // far already ruled out as either better or unavailable.
                         return agreeing.isEmpty()
                                 ? Optional.ofNullable(bestDisagreeing)
-                                : agreeing.stream().min(Comparator.comparingLong(from::distanceSquaredTo));
+                                : preferred(agreeing, from);
                     }
                     Optional<Spot> found = groundInColumn(from.offset(dx, 0, dz));
                     if (found.isEmpty()) {
@@ -380,13 +391,70 @@ public final class SafeSpots {
                 }
             }
             if (!agreeing.isEmpty()) {
-                return agreeing.stream().min(Comparator.comparingLong(from::distanceSquaredTo));
+                return preferred(agreeing, from);
             }
         }
         // Nowhere in the whole radius had ground that agreed with itself — rugged terrain
         // everywhere, most likely. Better an isolated pocket than a refusal, and it was already
         // found on the way past, so there is nothing left to search for it.
         return Optional.ofNullable(bestDisagreeing);
+    }
+
+    /** How far above a candidate this looks for a canopy, a roof, or anything else overhead. */
+    private static final int CLEAR_ABOVE_CHECK = 10;
+
+    /**
+     * The nicest of an agreeing ring to actually land on, nearest first among whichever are nicest.
+     *
+     * <h2>What "nicest" means</h2>
+     * Every spot here already passed {@link #isStandingSpot} and {@link #agreesWithNeighbours} — this
+     * only decides, among spots that are all equally <em>safe</em>, which one somebody would rather
+     * arrive at. Grass over sand, gravel or bare stone; open sky over a spot sitting under a tree's
+     * canopy. Neither is a safety question — both are already fine to land on — so this never widens
+     * the search or refuses a ring over it, it only breaks the tie within one.
+     *
+     * <p>Graded rather than filtered strictly on each trait in turn: a grassy spot under a tree still
+     * beats a sandy one under the same tree, so the two traits are summed into one score and the best
+     * score wins, nearest breaking any tie within it. A ring with nothing grassy or nothing clear of
+     * canopy still returns its nearest spot regardless — this is a preference among what is already
+     * safe, never a reason to say no.
+     */
+    private Optional<Spot> preferred(List<Spot> agreeing, Spot from) {
+        int best = agreeing.stream().mapToInt(this::niceness).max().orElse(0);
+        return agreeing.stream()
+                .filter(spot -> niceness(spot) == best)
+                .min(Comparator.comparingLong(from::distanceSquaredTo));
+    }
+
+    private int niceness(Spot standingSpot) {
+        int score = 0;
+        if (blocks.isGrass(standingSpot.offset(0, -1, 0))) {
+            score++;
+        }
+        if (clearAbove(standingSpot)) {
+            score++;
+        }
+        return score;
+    }
+
+    /**
+     * Whether nothing sits over this spot for a stretch above it — no branch, no leaf, no roof.
+     *
+     * <p>Only asks about what it can already see: an unloaded column above is not held against the
+     * spot, the same reasoning as everywhere else in this class that a chunk nobody has loaded should
+     * not count against what is loaded.
+     */
+    private boolean clearAbove(Spot standingSpot) {
+        for (int dy = 2; dy <= CLEAR_ABOVE_CHECK; dy++) {
+            Spot above = standingSpot.offset(0, dy, 0);
+            if (above.y() >= blocks.highestY() || !blocks.isLoaded(above)) {
+                break;
+            }
+            if (blocks.at(above) == BlockKind.SOLID) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -416,9 +484,15 @@ public final class SafeSpots {
             // pointed. That is the sky for a scattered arrival, and a fallback that starts there
             // re-introduces the exact quadratic walk this whole method exists to avoid: the heightmap
             // already said where the ground roughly is, so the walk starts there instead.
-            return safeInColumn(column.atHeight(surface));
+            //
+            // Bounded, too — see SURFACE_FALLBACK_SLACK. Unbounded, "a cave mouth" is exactly the
+            // case this used to get wrong: a column with no room to stand near the reported surface
+            // is not a promise that the next standing room found by walking down is anywhere near
+            // it, and a search that accepted the first pocket found however deep is how a scattered
+            // arrival ended up in caves.
+            return safeInColumn(column.atHeight(surface), SURFACE_FALLBACK_SLACK);
         }
-        return safeInColumn(column);
+        return safeInColumn(column, SURFACE_FALLBACK_SLACK);
     }
 
     /**
@@ -522,6 +596,25 @@ public final class SafeSpots {
      * one going up". A player pushed out of a floor should end up on it, not on the roof.
      */
     private Optional<Spot> safeInColumn(Spot around) {
+        return safeInColumn(around, Integer.MAX_VALUE);
+    }
+
+    /**
+     * The same search, refusing to wander more than {@code maxDistance} away from where it started.
+     *
+     * <p>{@link #groundInColumn} is the caller that needs this: its fallback walk starts from the
+     * heightmap's own answer precisely because that answer is close to the real surface even when it
+     * is not close <em>enough</em> — a thick canopy, an overhang, a cave mouth. But "not exact" and
+     * "not real" are different problems, and an unbounded walk cannot tell them apart: pointed at a
+     * spike, a cliff edge or exactly a cave mouth with no room to stand in the window above it, the
+     * unbounded version tunnels straight through however much solid rock lies beneath, and gladly
+     * accepts the first open pocket it meets — some unrelated cavern, however deep, is still "a
+     * standing spot" as far as {@link #isStandingSpot} is concerned. Bounding the walk turns a column
+     * that has no real surface nearby into a column this method gives up on, which is what it should
+     * do — the ring search this feeds just tries a different column, rather than a scattered arrival
+     * landing however far underground the nearest hole in the rock happened to be.
+     */
+    private Optional<Spot> safeInColumn(Spot around, int maxDistance) {
         if (!blocks.isLoaded(around)) {
             return Optional.empty();
         }
@@ -530,8 +623,10 @@ public final class SafeSpots {
         }
         int up = around.y();
         int down = around.y();
-        int ceiling = blocks.highestY() - 2;
-        int floor = blocks.lowestY();
+        // Long arithmetic: maxDistance arrives as Integer.MAX_VALUE for the unbounded case, and
+        // around.y() + that overflows a plain int right back around into a ceiling below the floor.
+        int ceiling = (int) Math.min(blocks.highestY() - 2, (long) around.y() + maxDistance);
+        int floor = (int) Math.max(blocks.lowestY(), (long) around.y() - maxDistance);
         while (up < ceiling || down > floor) {
             if (++up < ceiling && isStandingSpot(around.atHeight(up))) {
                 return Optional.of(around.atHeight(up));

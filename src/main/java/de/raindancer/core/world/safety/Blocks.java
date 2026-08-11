@@ -61,4 +61,17 @@ public interface Blocks {
     default boolean isNaturalGround(Spot spot) {
         return true;
     }
+
+    /**
+     * Whether the block here is grass — the natural ground a scattered arrival would rather land on
+     * than sand, stone or gravel, when there is a choice between otherwise-equal spots.
+     *
+     * <p>Default answers false, for the same reason {@link #isNaturalGround} defaults to true: most
+     * callers have no opinion on which kind of ground they land on, only whether it is ground at all.
+     * {@link BukkitBlocks} narrows this by material for the one caller that cares — see
+     * {@link SafeSpots#nearestConsistentHeight}.
+     */
+    default boolean isGrass(Spot spot) {
+        return false;
+    }
 }
