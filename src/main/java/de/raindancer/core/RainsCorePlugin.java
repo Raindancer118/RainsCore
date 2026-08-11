@@ -612,6 +612,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                         + registry.topics().visibleRoots().size() + " categories")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
+                // A home is a Poi of kind "home", the same way a warp is one of kind "warp" — see
+                // homes-module's HomeCatalogue. RainsCore has no domain class of its own for homes the
+                // way it does for Warps, since nothing in Core needs to reach for one directly; the
+                // count is still worth its own line rather than being lost inside "Places" reasoned
+                // about as a single undifferentiated total.
+                .fact("Homes", places.ofKind("home").size() + " kept")
                 .fact("Warps", warps.all().size() + " set")
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
