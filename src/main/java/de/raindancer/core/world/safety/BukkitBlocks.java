@@ -6,6 +6,9 @@ import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * Turning the server's thousand-odd materials into the six things standing somewhere cares about.
  *
@@ -54,6 +57,43 @@ public final class BukkitBlocks implements Blocks {
     @Override
     public int highestY() {
         return world.getMaxHeight();
+    }
+
+    /**
+     * Paper's own cached heightmap — one lookup, no per-block cost, and already kept up to date as
+     * the world changes. Exactly what a search dropped in from the sky wants to seed itself with
+     * rather than falling through open air one block-by-block {@code check()} at a time.
+     */
+    @Override
+    public int highestSolidY(int x, int z) {
+        return world.getHighestBlockYAt(x, z);
+    }
+
+    /**
+     * The terrain itself, as opposed to a tree, a building or anything else standing on it.
+     *
+     * <p>A whitelist rather than a blacklist: a block a future version adds is ground nobody asked to
+     * exclude only once it has actually been added here, and until then a random arrival lands
+     * somewhere the search has to keep looking for — safer than the other way around, where a new kind
+     * of leaf or a new kind of log would silently count as ground because nobody had listed it yet.
+     */
+    private static final Set<Material> NATURAL_GROUND = EnumSet.of(
+            Material.STONE, Material.GRANITE, Material.DIORITE, Material.ANDESITE,
+            Material.DEEPSLATE, Material.TUFF, Material.CALCITE,
+            Material.GRASS_BLOCK, Material.DIRT, Material.COARSE_DIRT, Material.ROOTED_DIRT,
+            Material.PODZOL, Material.MYCELIUM, Material.DIRT_PATH, Material.FARMLAND, Material.MUD,
+            Material.SAND, Material.RED_SAND, Material.GRAVEL, Material.CLAY,
+            Material.SNOW_BLOCK, Material.ICE, Material.PACKED_ICE, Material.BLUE_ICE,
+            Material.NETHERRACK, Material.SOUL_SAND, Material.SOUL_SOIL, Material.BASALT,
+            Material.BLACKSTONE, Material.END_STONE, Material.OBSIDIAN,
+            Material.CRIMSON_NYLIUM, Material.WARPED_NYLIUM);
+
+    @Override
+    public boolean isNaturalGround(Spot spot) {
+        if (!isLoaded(spot) || spot.y() < world.getMinHeight() || spot.y() >= world.getMaxHeight()) {
+            return false;
+        }
+        return NATURAL_GROUND.contains(world.getBlockAt(spot.x(), spot.y(), spot.z()).getType());
     }
 
     /**

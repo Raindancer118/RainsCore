@@ -1,13 +1,16 @@
 package de.raindancer.core.world.safety;
 
+import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.world.chunk.ChunkAt;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Is it safe to put a player there — asked the way a plugin actually needs to ask it.
@@ -44,13 +47,15 @@ import java.util.function.Function;
  */
 public final class Safety {
 
+    private final Plugin plugin;
     private final ChunkHolds chunks;
     private final Function<String, Blocks> blocksIn;
 
     /**
      * @param blocksIn how to read a world by name; null for a world that is not loaded
      */
-    public Safety(ChunkHolds chunks, Function<String, Blocks> blocksIn) {
+    public Safety(Plugin plugin, ChunkHolds chunks, Function<String, Blocks> blocksIn) {
+        this.plugin = plugin;
         this.chunks = chunks;
         this.blocksIn = blocksIn;
     }
@@ -87,8 +92,39 @@ public final class Safety {
         }
         warnIfOnTheServerThread();
         return chunks.forAMoment(chunksAround(around, radius))
-                .thenApply(ignored -> in(around.world())
-                        .flatMap(spots -> spots.nearestSafe(around, radius)));
+                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world())
+                        .flatMap(spots -> spots.nearestSafe(around, radius))));
+    }
+
+    /**
+     * The same, but refusing the bottom of a ravine or a cave mouth even when it is technically safe —
+     * see {@link SafeSpots#nearestConsistentHeight} for why a scattered arrival wants this and a warp
+     * somebody placed deliberately does not.
+     *
+     * @param heightTolerance how many blocks a spot may differ from its immediate neighbours and
+     *                        still count as the same place. Zero means an exact match; a couple of
+     *                        blocks is generally enough to allow for ordinary uneven terrain
+     */
+    public CompletableFuture<Optional<Spot>> findSafeAtConsistentHeight(Spot around, int radius,
+                                                                        int heightTolerance) {
+        return findSafeAtConsistentHeight(around, radius, heightTolerance, null);
+    }
+
+    /** The same, with the checker configured first — for a search that wants natural ground only. */
+    public CompletableFuture<Optional<Spot>> findSafeAtConsistentHeight(
+            Spot around, int radius, int heightTolerance,
+            java.util.function.Consumer<SafeSpots> setUp) {
+        if (around == null) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        warnIfOnTheServerThread();
+        return chunks.forAMoment(chunksAround(around, radius))
+                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world()).flatMap(spots -> {
+                    if (setUp != null) {
+                        setUp.accept(spots);
+                    }
+                    return spots.nearestConsistentHeight(around, radius, heightTolerance);
+                })));
     }
 
     /** The same, with the checker configured first — for water, or for looking at the surroundings. */
@@ -99,12 +135,38 @@ public final class Safety {
         }
         warnIfOnTheServerThread();
         return chunks.forAMoment(chunksAround(around, radius))
-                .thenApply(ignored -> in(around.world()).flatMap(spots -> {
+                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world()).flatMap(spots -> {
                     if (setUp != null) {
                         setUp.accept(spots);
                     }
                     return spots.nearestSafe(around, radius);
-                }));
+                })));
+    }
+
+    /**
+     * Runs the given lookup on the thread allowed to read blocks, and answers with a future either
+     * way.
+     *
+     * <p>{@link ChunkHolds#forAMoment} answers immediately, on the calling thread, when every chunk
+     * asked for was already loaded — which for a search near a player almost always is. The rest of
+     * the time, {@code World.getChunkAtAsync} finishes the load on whichever thread the server's chunk
+     * system happens to hand it back on, and that is not guaranteed to be this one. Either way, what
+     * runs next reads blocks, and blocks may only be read on the thread that owns them — so this hops
+     * there first rather than trusting whichever thread the future happened to continue on.
+     */
+    private <T> CompletableFuture<T> onTheOwningThread(Supplier<T> lookup) {
+        if (org.bukkit.Bukkit.isPrimaryThread()) {
+            return CompletableFuture.completedFuture(lookup.get());
+        }
+        CompletableFuture<T> future = new CompletableFuture<>();
+        Scheduling.global(plugin, () -> {
+            try {
+                future.complete(lookup.get());
+            } catch (RuntimeException failure) {
+                future.completeExceptionally(failure);
+            }
+        });
+        return future;
     }
 
     /**

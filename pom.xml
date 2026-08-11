@@ -6,7 +6,7 @@
 
     <groupId>de.raindancer</groupId>
     <artifactId>RainsCore</artifactId>
-    <version>1.5.1</version>
+    <version>1.9.0</version>
     <packaging>jar</packaging>
 
     <name>RainsCore</name>
@@ -19,7 +19,7 @@
           only pretends to be portable.
         -->
         <java.version>25</java.version>
-        <paper.api.version>26.2.build.68-beta</paper.api.version>
+        <paper.api.version>26.2.build.111-stable</paper.api.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Kept in step with Rain's Flexible Modules, so a class mocked in both behaves the same way. -->

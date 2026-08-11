@@ -32,8 +32,15 @@ class SafeSpotsTest {
 
         private final Map<Spot, BlockKind> blocks = new HashMap<>();
         private final Set<Spot> unloaded = new HashSet<>();
+        private final Set<Spot> notGround = new HashSet<>();
         private int lowest = -64;
         private int highest = 320;
+
+        /** Solid, but a tree or a roof rather than the terrain itself — see {@link #isNaturalGround}. */
+        Grid notNaturalGround(int x, int y, int z) {
+            notGround.add(new Spot("world", x, y, z));
+            return this;
+        }
 
         Grid put(int x, int y, int z, BlockKind kind) {
             blocks.put(new Spot("world", x, y, z), kind);
@@ -85,6 +92,26 @@ class SafeSpotsTest {
         @Override
         public int highestY() {
             return highest;
+        }
+
+        /**
+         * The real heightmap, computed from what was actually placed — not the default fallback —
+         * so a test can tell the fast path from the walking one apart, and so a search seeded from
+         * high above finds the same answer whichever path it takes.
+         */
+        @Override
+        public int highestSolidY(int x, int z) {
+            for (int y = highest - 1; y >= lowest; y--) {
+                if (blocks.getOrDefault(new Spot("world", x, y, z), BlockKind.PASSABLE) == BlockKind.SOLID) {
+                    return y;
+                }
+            }
+            return lowest;
+        }
+
+        @Override
+        public boolean isNaturalGround(Spot spot) {
+            return !notGround.contains(spot);
         }
     }
 
@@ -211,6 +238,21 @@ class SafeSpotsTest {
                     .as("a spot that could not be checked is not a spot that is safe, and saying "
                             + "which of the two it is beats guessing")
                     .isEqualTo(Danger.NOT_LOADED);
+        }
+
+        @Test
+        @DisplayName("standing exactly on the floor of the world is not held up by nothing")
+        void theVoidBelowTheWorldIsNotStandable() {
+            // A world whose lowest layer is open air rather than bedrock — a void world, or an
+            // ordinary one somebody has mined right down to the floor. There is nothing at all one
+            // block below the world's own lowest coordinate; that is not "cannot be checked, so
+            // assume solid", it is the one place that assumption is actually wrong.
+            Grid world = new Grid();
+            Spot floor = at(0, world.lowestY(), 0);
+            assertThat(new SafeSpots(world).check(floor))
+                    .as("nothing below the bottom of the world is exactly as unsafe as nothing "
+                            + "below anywhere else")
+                    .isEqualTo(Danger.NOTHING_BELOW);
         }
     }
 
@@ -452,6 +494,280 @@ class SafeSpotsTest {
                     .as("refusing every spot next to an unloaded chunk would refuse most of the "
                             + "edge of the loaded world")
                     .isEqualTo(Danger.NONE);
+        }
+    }
+
+    @Nested
+    @DisplayName("landing on the terrain itself, not on whatever is stacked on top of it")
+    class NaturalGroundOnly {
+
+        @Test
+        @DisplayName("off by default: a solid platform is exactly as good as the ground under it")
+        void offByDefault() {
+            // A wooden platform floating above ordinary ground.
+            Grid world = new Grid().floorAt(63)
+                    .put(0, 70, 0, BlockKind.SOLID).notNaturalGround(0, 70, 0);
+            SafeSpots safety = new SafeSpots(world);
+
+            assertThat(safety.isNaturalGroundOnly()).isFalse();
+            assertThat(safety.nearestSafe(at(0, 80, 0), 1)).contains(at(0, 71, 0));
+        }
+
+        @Test
+        @DisplayName("a platform that is not the terrain is refused once this is turned on")
+        void refusesWhatIsNotTheTerrain() {
+            // A wooden platform floating above ordinary ground — a tree canopy, a roof, a bridge.
+            Grid world = new Grid().floorAt(63)
+                    .put(0, 70, 0, BlockKind.SOLID).notNaturalGround(0, 70, 0);
+            SafeSpots safety = new SafeSpots(world);
+            safety.naturalGroundOnly(true);
+
+            assertThat(safety.nearestSafe(at(0, 80, 0), 1))
+                    .as("the platform is a perfectly good standing spot by every other rule, and is "
+                            + "refused — and the search does not stop there, it keeps going down "
+                            + "to the real ground instead")
+                    .contains(at(0, 64, 0));
+            assertThat(safety.nearestConsistentHeight(at(0, 100, 0), 0, 8))
+                    .as("passed straight over, all the way down to the real ground")
+                    .contains(at(0, 64, 0));
+        }
+
+        @Test
+        @DisplayName("ordinary terrain is unaffected either way")
+        void ordinaryGroundIsUnaffected() {
+            Grid world = new Grid().floorAt(63);
+            SafeSpots safety = new SafeSpots(world);
+            safety.naturalGroundOnly(true);
+
+            assertThat(safety.nearestSafe(at(0, 80, 0), 1)).contains(at(0, 64, 0));
+        }
+
+        @Test
+        @DisplayName("standing in water is judged as water, never as ground")
+        void waterIsNeverJudgedAsGround() {
+            Grid world = new Grid().floorAt(63).put(0, 64, 0, BlockKind.WATER);
+            SafeSpots safety = new SafeSpots(world);
+            safety.allowWater(true);
+            safety.naturalGroundOnly(true);
+
+            assertThat(safety.isSafe(at(0, 64, 0)))
+                    .as("naturalGroundOnly asks a question about solid ground; water was never "
+                            + "solid to begin with and answers to allowWater alone")
+                    .isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("a spot whose surroundings agree with it")
+    class ConsistentHeight {
+
+        @Test
+        @DisplayName("plain nearestSafe lands at the bottom of a ravine directly below the search")
+        void theBugThisFixes() {
+            // Ordinary ground at 64 everywhere, except one column carved out down to a floor at 31.
+            Grid world = new Grid().floorAt(63)
+                    .column(5, 5, 30, 63, BlockKind.PASSABLE)
+                    .put(5, 30, 5, BlockKind.SOLID);
+
+            Spot found = new SafeSpots(world).nearestSafe(at(5, 100, 5), 8).orElseThrow();
+
+            assertThat(found)
+                    .as("the exact column is checked first and the ravine floor is a valid standing "
+                            + "spot, so the plain search stops right there")
+                    .isEqualTo(at(5, 31, 5));
+        }
+
+        @Test
+        @DisplayName("the consistent search refuses that same ravine and finds the surface instead")
+        void findsTheSurfaceInstead() {
+            Grid world = new Grid().floorAt(63)
+                    .column(5, 5, 30, 63, BlockKind.PASSABLE)
+                    .put(5, 30, 5, BlockKind.SOLID);
+
+            Spot found = new SafeSpots(world).nearestConsistentHeight(at(5, 100, 5), 8, 1)
+                    .orElseThrow();
+
+            assertThat(found.y())
+                    .as("the ravine floor's neighbours are all thirty-odd blocks higher, so it fails "
+                            + "the agreement check and the search moves on to ordinary ground")
+                    .isEqualTo(64);
+        }
+
+        @Test
+        @DisplayName("ordinary gentle unevenness within the tolerance is still accepted")
+        void gentleUnevennessIsFine() {
+            // A one-block step, not a hole: (5,5) sits a block lower than its neighbours.
+            Grid world = new Grid().floorAt(63).put(5, 63, 5, BlockKind.PASSABLE)
+                    .put(5, 62, 5, BlockKind.SOLID);
+
+            Spot found = new SafeSpots(world).nearestConsistentHeight(at(5, 100, 5), 8, 1)
+                    .orElseThrow();
+
+            assertThat(found).isEqualTo(at(5, 63, 5));
+        }
+
+        @Test
+        @DisplayName("a step bigger than the tolerance is refused, just like the deep ravine")
+        void aStepBiggerThanToleranceIsRefused() {
+            Grid world = new Grid().floorAt(63).put(5, 63, 5, BlockKind.PASSABLE)
+                    .put(5, 62, 5, BlockKind.PASSABLE)
+                    .put(5, 61, 5, BlockKind.SOLID);
+
+            Spot found = new SafeSpots(world).nearestConsistentHeight(at(5, 100, 5), 8, 1)
+                    .orElseThrow();
+
+            assertThat(found.y())
+                    .as("two blocks lower than every neighbour is outside a tolerance of one")
+                    .isEqualTo(64);
+        }
+
+        @Test
+        @DisplayName("uniformly rugged terrain falls back to the plain search rather than refusing")
+        void fallsBackWhenNothingAgrees() {
+            // Every column at a different height from its neighbours — nothing will ever agree.
+            Grid world = new Grid();
+            for (int x = -5; x <= 5; x++) {
+                for (int z = -5; z <= 5; z++) {
+                    world.put(x, 60 + ((x + z) % 3 == 0 ? 4 : 0), z, BlockKind.SOLID);
+                }
+            }
+
+            Optional<Spot> found = new SafeSpots(world).nearestConsistentHeight(at(0, 100, 0), 4, 0);
+
+            assertThat(found)
+                    .as("better to land somewhere than to refuse a request just because the terrain "
+                            + "is rugged everywhere")
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("a null spot is refused outright, same as every other search here")
+        void nullIsRefused() {
+            assertThat(new SafeSpots(new Grid()).nearestConsistentHeight(null, 8, 1)).isEmpty();
+        }
+
+        /** Counts every block read, so a search's cost can be asserted rather than timed. */
+        private static final class CountingBlocks implements Blocks {
+            private final Blocks delegate;
+            private int reads;
+
+            CountingBlocks(Blocks delegate) {
+                this.delegate = delegate;
+            }
+
+            @Override
+            public BlockKind at(Spot spot) {
+                reads++;
+                return delegate.at(spot);
+            }
+
+            @Override
+            public boolean isLoaded(Spot spot) {
+                return delegate.isLoaded(spot);
+            }
+
+            @Override
+            public int lowestY() {
+                return delegate.lowestY();
+            }
+
+            @Override
+            public int highestY() {
+                return delegate.highestY();
+            }
+
+            @Override
+            public int highestSolidY(int x, int z) {
+                return delegate.highestSolidY(x, z);
+            }
+
+            @Override
+            public boolean isNaturalGround(Spot spot) {
+                return delegate.isNaturalGround(spot);
+            }
+        }
+
+        @Test
+        @DisplayName("checking a neighbour's height never rescans the whole world height for it")
+        void neighbourChecksAreBounded() {
+            // A deep world (the default -64..320 the Grid fixture already uses) with an isolated
+            // ravine at the exact search origin, dropped from high above — precisely the shape a
+            // scattered random-teleport arrival produces, and precisely the shape that made the
+            // first version of this search take the better part of a minute in practice. Radius 2
+            // is enough rings to exercise several agreement checks — including ones next to the
+            // ravine that correctly disagree — without the *unrelated* per-ring base search (the
+            // part this fix does not touch) dominating the count and hiding a regression in it.
+            Grid world = new Grid().floorAt(63)
+                    .column(0, 0, 30, 63, BlockKind.PASSABLE)
+                    .put(0, 30, 0, BlockKind.SOLID);
+            CountingBlocks counted = new CountingBlocks(world);
+            SafeSpots safety = new SafeSpots(counted);
+
+            Spot found = safety.nearestConsistentHeight(at(0, 300, 0), 2, 1).orElseThrow();
+
+            assertThat(found.y())
+                    .as("still finds the real surface, not the ravine floor")
+                    .isEqualTo(64);
+            // Measured at 862 for this exact scenario once both the neighbour window and the
+            // heightmap-seeded primary search were in place — down from just over 190,000 with
+            // either one missing. This bound sits comfortably above that and nowhere near either
+            // of the ways it used to regress: a neighbour check that rescans the whole world height,
+            // or a primary search that never uses the heightmap at all.
+            assertThat(counted.reads)
+                    .as("a neighbour check that rescans the whole world height per candidate, a "
+                            + "primary search that ignores the heightmap, or a fallback that "
+                            + "repeats the whole search, is the bug this test exists to catch")
+                    .isLessThan(5_000);
+        }
+
+        @Test
+        @DisplayName("a missed heightmap window falls back to the walk near the surface, not the sky")
+        void fallbackStartsNearTheSurfaceNotTheSky() {
+            // A heightmap that lies: it claims the surface is at 90 — a leaf canopy, say — but
+            // nothing is actually standable anywhere near there, so the window this class checks
+            // first comes back empty every time. Real ground is a floor at 63, dozens of blocks
+            // below. Before this fix, the fallback walk that follows a missed window started
+            // wherever the column was originally pointed — here, the sky at 300 — and re-introduced
+            // the exact quadratic cost the heightmap seeding exists to avoid. Fixed, it starts from
+            // the heightmap's own answer instead, wrong as that answer turned out to be, which is
+            // still dramatically closer to the real ground than the sky was.
+            Grid world = new Grid().floorAt(63);
+            Blocks lyingAboutTheSurface = new Blocks() {
+                @Override
+                public BlockKind at(Spot spot) {
+                    return world.at(spot);
+                }
+
+                @Override
+                public boolean isLoaded(Spot spot) {
+                    return world.isLoaded(spot);
+                }
+
+                @Override
+                public int lowestY() {
+                    return world.lowestY();
+                }
+
+                @Override
+                public int highestY() {
+                    return world.highestY();
+                }
+
+                @Override
+                public int highestSolidY(int x, int z) {
+                    return 90;
+                }
+            };
+            CountingBlocks counted = new CountingBlocks(lyingAboutTheSurface);
+
+            Spot found = new SafeSpots(counted).nearestConsistentHeight(at(0, 300, 0), 0, 1)
+                    .orElseThrow();
+
+            assertThat(found).as("still finds the real floor").isEqualTo(at(0, 64, 0));
+            assertThat(counted.reads)
+                    .as("starting the fallback from the sky at 300 rather than the heightmap's own "
+                            + "(wrong) answer of 90 costs many times this for the identical scenario")
+                    .isLessThan(3_000);
         }
     }
 }

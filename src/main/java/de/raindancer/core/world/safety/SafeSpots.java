@@ -43,10 +43,25 @@ public final class SafeSpots {
     /** How far down a search looks for ground before deciding there is none. */
     private static final int LOOK_DOWN = 96;
 
+    /**
+     * The longest {@link #nearestConsistentHeight} is allowed to spend looking, however bad the
+     * terrain turns out to be.
+     *
+     * <p>The heightmap seeding makes ordinary terrain fast, but "ordinary" is not a guarantee: a
+     * search radius of thirty-two over honeycombed, freshly-generated, or deliberately adversarial
+     * terrain can still visit a great many columns, and each one that falls back to the unbounded
+     * walk costs what it always cost. A player waiting on a teleport should get an answer in a
+     * couple of seconds even when this class has done its best and the terrain has not cooperated —
+     * the best spot found so far beats a search that quietly keeps going, and it beats a refusal
+     * even more.
+     */
+    private static final long SEARCH_TIME_BUDGET_NANOS = java.time.Duration.ofSeconds(2).toNanos();
+
     private final Blocks blocks;
 
     private volatile boolean allowWater;
     private volatile int surroundingRadius;
+    private volatile boolean naturalGroundOnly;
 
     public SafeSpots(Blocks blocks) {
         this.blocks = blocks;
@@ -86,6 +101,27 @@ public final class SafeSpots {
         return surroundingRadius;
     }
 
+    /**
+     * Whether a spot to actually <em>land</em> on must be the terrain itself — stone, dirt, sand and
+     * the like — rather than a tree, a roof, or anything else merely solid.
+     *
+     * <p>Off by default, for the same reason {@link #allowWater} is: a warp somebody placed on a
+     * wooden platform is exactly as much "somewhere to arrive" as one on grass, and a class that
+     * refused it would be overruling the person who set it. A <em>scattered</em> arrival is different
+     * — nobody chose that log at the top of a tree, it is just the first solid thing the search fell
+     * onto, and a player who wanted a random spot in the world did not mean the inside of its
+     * canopy. Checked only where {@link #isStandingSpot} looks, not by {@link #isSafe}: whether a
+     * spot judged dangerous is safe is a fact about the block, and asking that question a stricter
+     * way would answer a different question than the one it was asked.
+     */
+    public void naturalGroundOnly(boolean naturalGroundOnly) {
+        this.naturalGroundOnly = naturalGroundOnly;
+    }
+
+    public boolean isNaturalGroundOnly() {
+        return naturalGroundOnly;
+    }
+
     // ---------------------------------------------------------------------------- judging
 
     /** Whether a player can be put here. */
@@ -113,7 +149,12 @@ public final class SafeSpots {
 
         BlockKind feet = blocks.at(spot);
         BlockKind above = blocks.at(head);
-        BlockKind below = blocks.at(spot.offset(0, -1, 0));
+        Spot underfoot = spot.offset(0, -1, 0);
+        // Below the bottom of the world is not "unknown, so probably solid" — it is the one place
+        // that answer is actually wrong, because there is nothing there to be wrong about. See
+        // BlockKind#UNKNOWN: everywhere else, "cannot be checked" earns the benefit of the doubt;
+        // one block past the floor, it is the void asking for it.
+        BlockKind below = underfoot.y() < blocks.lowestY() ? BlockKind.PASSABLE : blocks.at(underfoot);
 
         Danger inTheWay = whatIsWrongWith(feet);
         if (inTheWay != Danger.NONE) {
@@ -268,6 +309,185 @@ public final class SafeSpots {
     }
 
     /**
+     * The nearest spot whose height roughly agrees with its own surroundings — never the bottom of an
+     * isolated pit or the mouth of a cave that happens to be technically safe.
+     *
+     * <h2>The problem this solves</h2>
+     * {@link #nearestSafe} accepts the first standing spot it finds in the exact column asked for,
+     * and the bottom of a ravine is a perfectly good standing spot by that definition: solid ground
+     * underfoot, clear air above. Asked for from high above — which is how a scattered arrival finds
+     * its landing column in the first place — the search comes straight down and stops there, and a
+     * player who was meant to land on the surface ends up ten metres under it instead, in a hole
+     * nobody standing nearby would call "here".
+     *
+     * <p>This asks one more question before accepting a spot: does the ground immediately beside it
+     * sit at roughly the same height? A ravine's neighbours do not; ordinary ground's neighbours do.
+     * Checked at four points a block away, and only within a narrow window of the candidate's own
+     * height — see {@link #agreesWithNeighbours} for why that bound is not an optimisation so much
+     * as the difference between this being usable and this taking the better part of a minute.
+     *
+     * @param heightTolerance how many blocks a spot's height may differ from its immediate neighbours
+     *                        and still count as the same place rather than a hole. Zero or less means
+     *                        an exact match
+     * @return a spot whose surroundings agree with it, or — if nothing in the radius qualifies — the
+     *         nearest safe spot seen along the way regardless of agreement, which is better than
+     *         refusing a request outright over uniformly rugged terrain
+     */
+    public Optional<Spot> nearestConsistentHeight(Spot from, int radius, int heightTolerance) {
+        if (from == null) {
+            return Optional.empty();
+        }
+        int tolerance = Math.max(0, heightTolerance);
+        long deadline = System.nanoTime() + SEARCH_TIME_BUDGET_NANOS;
+        // The nearest safe spot seen so far that failed the agreement check — kept rather than
+        // discarded, so a radius that never agrees with itself does not have to be searched all
+        // over again from scratch to answer "well, is anywhere at least safe". Also what a search
+        // cut short by the time budget falls back to, for the same reason: the best answer found
+        // so far beats a refusal, and it is already in hand.
+        Spot bestDisagreeing = null;
+        long bestDisagreeingDistance = Long.MAX_VALUE;
+
+        for (int ring = 0; ring <= radius; ring++) {
+            List<Spot> agreeing = new ArrayList<>();
+            for (int dx = -ring; dx <= ring; dx++) {
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) {
+                        continue;
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        // Whatever this ring has found so far is the honest answer to "the best
+                        // this search could do in the time it was given" — better terrain further
+                        // out is not worth guessing about, and it is what the terrain checked so
+                        // far already ruled out as either better or unavailable.
+                        return agreeing.isEmpty()
+                                ? Optional.ofNullable(bestDisagreeing)
+                                : agreeing.stream().min(Comparator.comparingLong(from::distanceSquaredTo));
+                    }
+                    Optional<Spot> found = groundInColumn(from.offset(dx, 0, dz));
+                    if (found.isEmpty()) {
+                        continue;
+                    }
+                    Spot candidate = found.get();
+                    if (agreesWithNeighbours(candidate, tolerance)) {
+                        agreeing.add(candidate);
+                        continue;
+                    }
+                    long distance = from.distanceSquaredTo(candidate);
+                    if (distance < bestDisagreeingDistance) {
+                        bestDisagreeingDistance = distance;
+                        bestDisagreeing = candidate;
+                    }
+                }
+            }
+            if (!agreeing.isEmpty()) {
+                return agreeing.stream().min(Comparator.comparingLong(from::distanceSquaredTo));
+            }
+        }
+        // Nowhere in the whole radius had ground that agreed with itself — rugged terrain
+        // everywhere, most likely. Better an isolated pocket than a refusal, and it was already
+        // found on the way past, so there is nothing left to search for it.
+        return Optional.ofNullable(bestDisagreeing);
+    }
+
+    /**
+     * The standing spot in a column, found the fast way when the world's own heightmap can answer.
+     *
+     * <p>{@link #safeInColumn} finds this too, eventually — but only by walking down from wherever
+     * it was pointed, one {@code check()} at a time, and every one of those checks itself scans up
+     * to ninety-six blocks looking for a landing while there is still nothing solid below. Pointed
+     * from the sky at ordinary terrain a few hundred blocks down, that is quadratic in the distance
+     * fallen and is what made a search over open air take the better part of a minute. The heightmap
+     * answers "where is the ground" in one lookup with no per-block cost, so this tries that first
+     * and only falls back to the walk — unchanged, exactly as safe as it always was — for whatever
+     * the heightmap cannot be trusted for: overhangs, floating islands, a ceiling somebody built.
+     */
+    private Optional<Spot> groundInColumn(Spot column) {
+        if (blocks.isLoaded(column)) {
+            int surface = blocks.highestSolidY(column.x(), column.z());
+            // A handful of blocks either side of the reported surface: a snow layer, a carpet, a
+            // slab, or the heightmap counting a leaf or a flower rather than the ground underneath
+            // it, all land within this without falling back to the expensive walk.
+            Optional<Spot> viaHeightmap = standingSpotWithinWindow(column, surface + 1, 3);
+            if (viaHeightmap.isPresent()) {
+                return viaHeightmap;
+            }
+            // Missing the window is a thick canopy, an overhang or a cave mouth — the walk still has
+            // to happen, but it has no business starting from wherever the column was originally
+            // pointed. That is the sky for a scattered arrival, and a fallback that starts there
+            // re-introduces the exact quadratic walk this whole method exists to avoid: the heightmap
+            // already said where the ground roughly is, so the walk starts there instead.
+            return safeInColumn(column.atHeight(surface));
+        }
+        return safeInColumn(column);
+    }
+
+    /**
+     * Whether the ground a block either side, north and south, sits within {@code tolerance} of this
+     * spot's own height.
+     *
+     * <h2>Why this is a narrow window and not another full column search</h2>
+     * The first version of this called {@link #safeInColumn} on each neighbour — a search of the
+     * <em>entire</em> world height, exactly as expensive as finding the candidate itself. Run for
+     * four neighbours of every candidate in every ring, that turned a search meant to protect a
+     * three-second warm-up into one that could itself take the better part of a minute. All this
+     * needs to know is "is there ground within {@code tolerance} of this exact height" — so it only
+     * ever looks at the {@code 2 × tolerance + 1} blocks centred on the candidate's own height,
+     * which for the default tolerance of one is three blocks instead of several hundred.
+     *
+     * <p>An unloaded neighbour is not held against the candidate — refusing every spot beside a
+     * chunk nobody has loaded would refuse most of the loaded world's edge. A loaded neighbour with
+     * nothing standable in that narrow window <em>is</em> held against it: that is precisely a
+     * ravine wall or a cliff edge, which is what this exists to catch.
+     */
+    private boolean agreesWithNeighbours(Spot candidate, int tolerance) {
+        int[] dx = {1, -1, 0, 0};
+        int[] dz = {0, 0, 1, -1};
+        for (int i = 0; i < dx.length; i++) {
+            Spot column = candidate.offset(dx[i], 0, dz[i]);
+            if (!blocks.isLoaded(column)) {
+                continue;
+            }
+            if (standingSpotWithinWindow(column, candidate.y(), tolerance).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The standing spot in one column closest to {@code aroundY}, never looking further than
+     * {@code tolerance} blocks either way.
+     *
+     * <p>Zero centred first, then outward a step at a time — the same "closest wins" shape as
+     * {@link #safeInColumn}, just bounded to a handful of blocks instead of the whole world.
+     */
+    private Optional<Spot> standingSpotWithinWindow(Spot column, int aroundY, int tolerance) {
+        Spot centre = column.atHeight(aroundY);
+        if (isStandingSpot(centre)) {
+            return Optional.of(centre);
+        }
+        int ceiling = blocks.highestY() - 2;
+        int floor = blocks.lowestY();
+        for (int step = 1; step <= tolerance; step++) {
+            int up = aroundY + step;
+            if (up < ceiling) {
+                Spot above = column.atHeight(up);
+                if (isStandingSpot(above)) {
+                    return Optional.of(above);
+                }
+            }
+            int down = aroundY - step;
+            if (down > floor) {
+                Spot below = column.atHeight(down);
+                if (isStandingSpot(below)) {
+                    return Optional.of(below);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Whether a player put here would be standing on something rather than falling.
      *
      * <p>Stricter than {@link #isSafe}, and deliberately so. A spot three blocks above the floor is
@@ -279,8 +499,20 @@ public final class SafeSpots {
         if (!isSafe(spot)) {
             return false;
         }
-        BlockKind below = blocks.at(spot.offset(0, -1, 0));
-        return below.canStandOn() || (allowWater && below == BlockKind.WATER);
+        Spot underfoot = spot.offset(0, -1, 0);
+        if (underfoot.y() < blocks.lowestY()) {
+            // See the matching guard in check(): one block past the floor is the void, not ground
+            // this class simply could not identify.
+            return false;
+        }
+        BlockKind below = blocks.at(underfoot);
+        if (below == BlockKind.WATER) {
+            return allowWater;
+        }
+        if (!below.canStandOn()) {
+            return false;
+        }
+        return !naturalGroundOnly || blocks.isNaturalGround(underfoot);
     }
 
     /**

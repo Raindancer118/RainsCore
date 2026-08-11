@@ -10,8 +10,10 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The settings, as a window.
@@ -44,8 +46,12 @@ public final class SettingsMenu extends Menu {
         return de.raindancer.core.RainsCore.get().messages();
     }
 
+    /** How many category buttons fit in the band — the seven columns between the frame panes. */
+    private static final int TOPICS_PER_PAGE = 7;
+
     private final String path;
     private final SettingsPage page;
+    private int topicPage;
 
     public SettingsMenu(Player viewer, Brand brand, Chat chat, SettingsNavigation navigation,
                         String path, Menu parent) {
@@ -86,13 +92,15 @@ public final class SettingsMenu extends Menu {
 
     @Override
     protected void render() {
+        List<SettingsTopic> subtopics = page.subtopics();
+        int pages = MenuLayout.pageCount(subtopics.size(), TOPICS_PER_PAGE);
+        topicPage = MenuLayout.clampPage(topicPage, pages);
+        int from = MenuLayout.pageStart(topicPage, TOPICS_PER_PAGE);
+        int to = Math.min(subtopics.size(), from + TOPICS_PER_PAGE);
+
         int column = 1;
-        for (SettingsTopic topic : page.subtopics()) {
-            if (column > 7) {
-                // More than seven categories on one page is a wall, which is the thing this whole
-                // tree exists to avoid. Better a subtopic than a second row of doors.
-                break;
-            }
+        for (int i = from; i < to; i++) {
+            SettingsTopic topic = subtopics.get(i);
             band(MenuLayout.WHO, column++, categoryIcon(topic), event -> open(topic.path()));
         }
 
@@ -105,6 +113,36 @@ public final class SettingsMenu extends Menu {
             cell(row, index % 9, settingIcon(setting), event -> onClick(setting));
             index++;
         }
+    }
+
+    /**
+     * More than seven categories used to be a wall this class quietly built: everything past the
+     * seventh was dropped with no error and no warning, which is how random teleport went missing
+     * from the front page the day it became the eighth module registered. Paged instead, the same way
+     * {@link PaginatedMenu} pages a list too long for one screen.
+     */
+    @Override
+    protected void paintPagingChrome(int chromeRow) {
+        int pages = MenuLayout.pageCount(page.subtopics().size(), TOPICS_PER_PAGE);
+        if (pages <= 1) {
+            return;
+        }
+        if (topicPage > 0) {
+            set(chromeRow + MenuLayout.CHROME_PREVIOUS, Icons.previousPage(topicPage, pages),
+                    turnCategoriesTo(topicPage - 1));
+        }
+        if (topicPage < pages - 1) {
+            set(chromeRow + MenuLayout.CHROME_NEXT, Icons.nextPage(topicPage + 2, pages),
+                    turnCategoriesTo(topicPage + 1));
+        }
+        set(chromeRow + MenuLayout.CHROME_PAGE, Icons.pageCounter(topicPage + 1, pages));
+    }
+
+    private Consumer<InventoryClickEvent> turnCategoriesTo(int newPage) {
+        return event -> {
+            topicPage = newPage;
+            refresh();
+        };
     }
 
     private org.bukkit.inventory.ItemStack categoryIcon(SettingsTopic topic) {

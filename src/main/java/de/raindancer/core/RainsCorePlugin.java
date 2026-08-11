@@ -540,7 +540,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         chunks = new ChunkHolds(new BukkitChunkLoader(this));
         // A world by name, or null when it is not loaded — the seam that keeps every rule about
         // what is safe testable without a server.
-        safety = new Safety(chunks, BukkitBlocks::of);
+        safety = new Safety(this, chunks, BukkitBlocks::of);
 
         // The one pack every plugin's assets end up in. Built off the main thread, because it is a
         // zip of everything every plugin contributed and a server that stalls on startup for it is
