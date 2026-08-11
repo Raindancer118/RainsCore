@@ -402,6 +402,47 @@ class DatabaseTest {
                 Thread.currentThread().interrupt();
             }
         }
+
+        @Test
+        @DisplayName("closing waits for a read genuinely in progress, so the checkpoint still folds in")
+        void readRacingClose() throws InterruptedException {
+            // The bug this proves fixed: a read caught mid-flight used to leave its snapshot open
+            // while close() checkpointed straight past it, which is exactly what a -wal file left
+            // beside the real database on a live server looked like — reported as "could not fold the
+            // write-ahead log back in" on every restart that happened to race one.
+            Database database = open(ONE_TABLE);
+            insert(database, "already here");
+            CountDownLatch go = new CountDownLatch(1);
+            CountDownLatch readerHasAConnection = new CountDownLatch(1);
+
+            Thread reading = new Thread(() -> database.read(connection -> {
+                readerHasAConnection.countDown();
+                await(go);
+                try (var statement = connection.prepareStatement("SELECT COUNT(*) FROM thing");
+                     var rows = statement.executeQuery()) {
+                    rows.next();
+                    return rows.getInt(1);
+                }
+            }));
+            reading.start();
+            readerHasAConnection.await();
+
+            Thread closing = new Thread(database::close);
+            closing.start();
+            // Long enough that close(), started concurrently, is genuinely somewhere inside
+            // awaitReadsFinished by the time the read is let through rather than having already
+            // given up and moved on to the checkpoint.
+            Thread.sleep(20);
+            go.countDown();
+
+            reading.join();
+            closing.join();
+
+            assertThat(Files.exists(folder.resolve("test.db-wal")))
+                    .as("a read let through mid-close must still be checkpointed away, not left "
+                            + "as evidence the wait did nothing")
+                    .isFalse();
+        }
     }
 
     @Nested

@@ -102,6 +102,12 @@ public final class Database implements AutoCloseable {
     /** Places already complained about, so one mistake in a loop is one log line. */
     private final Set<String> complainedAbout = ConcurrentHashMap.newKeySet();
 
+    /** How many reads are between taking a connection out of the pool and putting it back. */
+    private final AtomicInteger readsInFlight = new AtomicInteger();
+
+    /** How long {@link #close()} waits for an in-flight read to finish before checkpointing anyway. */
+    private static final long CLOSING_WAIT_MILLIS = 2_000;
+
     private Database(Path file, BooleanSupplier onServerThread) {
         this.file = file;
         this.onServerThread = onServerThread == null ? () -> false : onServerThread;
@@ -313,6 +319,10 @@ public final class Database implements AutoCloseable {
             return Optional.empty();
         }
         Connection reader = null;
+        // Counted for the whole call, not just the moment a connection is checked out: what close()
+        // needs to know is whether a snapshot is still open somewhere, and that is true from here
+        // until giveBack rolls it back, not only while poll() itself is running.
+        readsInFlight.incrementAndGet();
         try {
             reader = readers.poll(READER_WAIT_SECONDS, TimeUnit.SECONDS);
             if (reader == null) {
@@ -332,6 +342,7 @@ public final class Database implements AutoCloseable {
             if (reader != null) {
                 giveBack(reader);
             }
+            readsInFlight.decrementAndGet();
         }
     }
 
@@ -433,6 +444,12 @@ public final class Database implements AutoCloseable {
         // left beside the database, and somebody who copies "the database" for a backup takes only
         // half of it.
         closeReaders();
+        // Idle ones are gone, but a read genuinely in flight right now — a task that started a moment
+        // before disable ran — still holds its connection and its snapshot with it. Closing the
+        // server thread down does not stop it; it finishes on its own thread as soon as SQLite hands
+        // back the rows, which is normally milliseconds. Worth a short, bounded wait rather than the
+        // warning this class exists to explain but not to avoid.
+        awaitReadsFinished();
         writing.lock();
         try {
             if (writer != null) {
@@ -471,6 +488,26 @@ public final class Database implements AutoCloseable {
         } catch (SQLException failed) {
             log.warn(failed, "Could not fold the write-ahead log of {} back in.",
                     file.getFileName());
+        }
+    }
+
+    /**
+     * Waits, briefly, for every read already in progress to give its connection back.
+     *
+     * <p>Bounded rather than open-ended: a read that never finishes is a bug somewhere else, and this
+     * class's job on the way out is to checkpoint what it reasonably can, not to hang a shutdown over
+     * it. Reads here are small and quick, so the ordinary case is this returns within a millisecond
+     * or two of being called at all.
+     */
+    private void awaitReadsFinished() {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CLOSING_WAIT_MILLIS);
+        while (readsInFlight.get() > 0 && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 

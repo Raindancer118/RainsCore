@@ -5,6 +5,7 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Waterlogged;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -101,14 +102,17 @@ public final class BukkitBlocks implements Blocks {
      *
      * <p>The order matters: lava before liquids in general, harmful before passable, and the
      * catch-all last. A block that is both passable and harmful — fire, sweet berries, powder snow —
-     * has to come out harmful or a player is teleported into it.
+     * has to come out harmful or a player is teleported into it. Submerged before passable too, for
+     * the same reason: kelp, seagrass and anything else growing underwater is a block Bukkit reports
+     * as walkable — {@link Block#isPassable()} answers "does this stop you", not "is this dry" — so a
+     * check that stopped at that answer put players in the sea believing the search had done its job.
      */
     static BlockKind kindOf(Block block) {
         Material material = block.getType();
         if (material == Material.LAVA) {
             return BlockKind.LAVA;
         }
-        if (material == Material.WATER || material == Material.BUBBLE_COLUMN) {
+        if (material == Material.WATER || material == Material.BUBBLE_COLUMN || isSubmerged(block)) {
             return BlockKind.WATER;
         }
         if (isHarmful(material)) {
@@ -122,6 +126,24 @@ public final class BukkitBlocks implements Blocks {
             return BlockKind.PASSABLE;
         }
         return BlockKind.SOLID;
+    }
+
+    /**
+     * Whether this block, whatever it is called, is actually full of water.
+     *
+     * <p>Two different reasons a block can be this and not simply {@code Material.WATER}: kelp and
+     * seagrass cannot exist anywhere else, so they count on their material alone; a waterlogged stair,
+     * fence or slab carries the water as a separate flag on its block data instead, which is what
+     * {@link Waterlogged#isWaterlogged()} answers.
+     */
+    private static boolean isSubmerged(Block block) {
+        if (block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
+            return true;
+        }
+        return switch (block.getType()) {
+            case KELP, KELP_PLANT, SEAGRASS, TALL_SEAGRASS -> true;
+            default -> false;
+        };
     }
 
     /** The blocks that cost health to stand in or on. */
