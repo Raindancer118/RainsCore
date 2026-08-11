@@ -160,16 +160,38 @@ public final class Tablists {
         // Hiding a player's entity is not hiding them from a *custom* tablist: this builds its own
         // list from getOnlinePlayers(), so a vanished moderator was still on it, name, world and ping.
         // The one place anybody looks to see who is about.
+        //
+        // Two lists, not one, and this is the part that used to be wrong: everybody in `allOnline`
+        // gets sent a packet — the vanished included — so being hidden never also means being
+        // forgotten. What that packet *says* comes from `visible` instead: the header's count, the
+        // footer's per-world tallies, nobody hidden is ever in either, not even for themselves. A
+        // version that skipped a vanished player when deciding who to send to left exactly that one
+        // player's own tablist without a single further update for as long as they stayed hidden —
+        // frozen on whatever was true the moment before, and un-vanishing simply resumed updates from
+        // there, which reads as nothing having changed at all.
         java.util.Set<UUID> hidden = this.hidden.get();
-        List<Player> online = new ArrayList<>();
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        List<Player> allOnline = new ArrayList<>(Bukkit.getOnlinePlayers());
+        List<Player> visible = new ArrayList<>();
+        for (Player player : allOnline) {
             if (!hidden.contains(player.getUniqueId())) {
-                online.add(player);
+                visible.add(player);
             }
         }
-        List<TablistEntry> entries = new ArrayList<>(online.size());
-        for (Player player : online) {
-            entries.add(new TablistEntry(player.getUniqueId(), player.getName(),
+        List<TablistEntry> visibleEntries = new ArrayList<>(visible.size());
+        for (Player player : visible) {
+            visibleEntries.add(new TablistEntry(player.getUniqueId(), player.getName(),
+                    player.getWorld().getName(), player.getPing()));
+        }
+
+        // Everybody, hidden included — their own line in their own tablist, and the scoreboard team
+        // sorting below, are unaffected by vanish: what makes them invisible to everybody else is
+        // BukkitVanishSink's own hidePlayer(), which strips a hidden player's whole entry from
+        // every other viewer's client before either of these ever runs. This list only ever governs
+        // what a player is called and where they sort in a list they are already an entry on — their
+        // own, always, and anybody else's only once BukkitVanishSink has let them stay.
+        List<TablistEntry> allEntries = new ArrayList<>(allOnline.size());
+        for (Player player : allOnline) {
+            allEntries.add(new TablistEntry(player.getUniqueId(), player.getName(),
                     player.getWorld().getName(), player.getPing()));
         }
 
@@ -181,17 +203,17 @@ public final class Tablists {
                 ? headerFrames.frameAt(now) : customHeader;
         String footerNow = footerFrames.isAnimated() || !footerFrames.frameAt(now).isEmpty()
                 ? footerFrames.frameAt(now) : customFooter;
-        String customHeader = headerNow;
-        String customFooter = footerNow;
+        String resolvedCustomHeader = headerNow;
+        String resolvedCustomFooter = footerNow;
 
-        Component header = customHeader.isBlank()
-                ? model.header(entries, serverName)
-                : model.custom(customHeader, entries, serverName);
-        Component footer = customFooter.isBlank()
-                ? model.footer(entries)
-                : model.custom(customFooter, entries, serverName);
+        Component header = resolvedCustomHeader.isBlank()
+                ? model.header(visibleEntries, serverName)
+                : model.custom(resolvedCustomHeader, visibleEntries, serverName);
+        Component footer = resolvedCustomFooter.isBlank()
+                ? model.footer(visibleEntries)
+                : model.custom(resolvedCustomFooter, visibleEntries, serverName);
 
-        for (Player player : online) {
+        for (Player player : allOnline) {
             try {
                 player.sendPlayerListHeaderAndFooter(header, footer);
             } catch (RuntimeException gone) {
@@ -201,12 +223,12 @@ public final class Tablists {
         }
 
         if (groupByWorld) {
-            applyOrder(entries);
+            applyOrder(allEntries);
         }
 
-        for (int index = 0; index < online.size(); index++) {
-            Player player = online.get(index);
-            TablistEntry entry = entries.get(index);
+        for (int index = 0; index < allOnline.size(); index++) {
+            Player player = allOnline.get(index);
+            TablistEntry entry = allEntries.get(index);
             try {
                 player.playerListName(showWorldOnEachLine
                         ? model.lineWithWorld(entry)

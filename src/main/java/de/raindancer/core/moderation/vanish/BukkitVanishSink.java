@@ -61,6 +61,26 @@ public final class BukkitVanishSink implements VanishSink {
         if (target == null) {
             return;
         }
+        if (target.getGameMode().isInvulnerable()) {
+            // Creative and Spectator (see GameMode#isInvulnerable) each own flight for reasons of
+            // their own that have nothing to do with whatever this class granted or is taking back.
+            //
+            // Spectator's client hard-codes free-fly no-clip regardless of the ability flag the
+            // server sends — so setAllowFlight(false) here does not stop them flying, it only makes
+            // the server *think* they are not flying while the client still renders as if they are.
+            // The next tick applies gravity to a player the client is still moving through walls,
+            // which is what dropped a revealed moderator straight through the world.
+            //
+            // Creative is the opposite problem: setAllowFlight(false) here works completely, and that
+            // is exactly the danger. Entering creative mid-vanish — to check on a build without being
+            // seen, say — grants flight as a fact about the *gamemode*, independent of whatever this
+            // class remembered from before they vanished. A reveal call that came from vanish alone
+            // has no business taking that back; it was never vanish's to give.
+            //
+            // Either way, this method's whole job — reconciling flight against what vanish itself
+            // granted — is not a question either of these gamemodes is asking it to answer.
+            return;
+        }
         target.setAllowFlight(allowed);
         if (!allowed && target.isFlying()) {
             // Set to not flying first, or the client and server disagree about where they are and
