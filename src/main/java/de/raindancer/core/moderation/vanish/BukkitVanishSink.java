@@ -97,6 +97,19 @@ public final class BukkitVanishSink implements VanishSink {
         }
     }
 
+    @Override
+    public void silent(UUID who, boolean silent) {
+        Player target = Bukkit.getPlayer(who);
+        if (target != null) {
+            // Vanilla's own Silent flag — the same one that keeps a summoned, invisible mob from
+            // giving itself away by sound. Everything the entity itself would generate (footsteps,
+            // splashing, a hurt noise, drinking) stops; a block a vanished player mines still sounds
+            // exactly as loud as ever, because that sound belongs to the block, not the player, and
+            // hiding a griefer's own noise was never meant to also hide the grief.
+            target.setSilent(silent);
+        }
+    }
+
     /**
      * The vanilla leave line, to everybody who cannot see them.
      *

@@ -63,8 +63,12 @@ public final class Vanish {
     /**
      * Whether vanishing also grants flight.
      *
-     * <p>On by default, because somebody who is invisible and walking is somebody whose footsteps
-     * and door-opening give them away. Off for a server that would rather keep the two apart.
+     * <p>On by default, because somebody who is invisible and walking on the ground is somebody who
+     * still opens doors, still triggers pressure plates and trapdoors, and still leaves the block
+     * they are standing on lit up by whatever redstone it wires to — none of which {@link #vanish}'s
+     * own silencing touches, because none of it is a sound the <em>player</em> makes. Flying over all
+     * of it is the simplest way to stop triggering it in the first place. Off for a server that would
+     * rather keep the two apart.
      */
     public void flightWhileVanished(boolean granted) {
         this.flightWhileVanished = granted;
@@ -112,6 +116,7 @@ public final class Vanish {
         }
         sink.hide(who, Set.copyOf(maySee));
         sink.collidable(who, false);
+        sink.silent(who, true);
         sink.silentJoinLeave(who, true);
         if (flightWhileVanished && !couldFlyAlready) {
             sink.allowFlight(who, true);
@@ -133,6 +138,7 @@ public final class Vanish {
         }
         sink.show(who);
         sink.collidable(who, true);
+        sink.silent(who, false);
         sink.silentJoinLeave(who, false);
         if (flightWhileVanished && !couldAlreadyFly.remove(who)) {
             // Only what was granted is taken back. A creative-mode builder who vanished must not

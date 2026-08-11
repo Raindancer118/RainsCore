@@ -30,6 +30,17 @@ public interface VanishSink {
     /** Whether other players bump into them. */
     void collidable(UUID who, boolean collides);
 
+    /**
+     * Whether they make a sound.
+     *
+     * <p>Footsteps, splashing, taking damage, drinking a potion — all of it a fact about the
+     * player's own entity, playing whether or not anybody nearby can see who it is coming from. A
+     * player who is invisible but still audible is not hidden, only unseen; somebody who hears
+     * footsteps stop right beside them and nobody is standing there has learned exactly as much as
+     * somebody who saw the moderator outright.
+     */
+    void silent(UUID who, boolean silent);
+
     /** Whether their joining and leaving is announced. */
     void silentJoinLeave(UUID who, boolean silent);
 

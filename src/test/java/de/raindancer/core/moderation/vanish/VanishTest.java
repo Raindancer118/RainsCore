@@ -64,6 +64,11 @@ class VanishTest {
             }
 
             @Override
+            public void silent(UUID who, boolean silent) {
+                did.add(new Did("silent:" + silent, who));
+            }
+
+            @Override
             public void silentJoinLeave(UUID who, boolean silent) {
                 announced.add((silent ? "quiet:" : "loud:") + who);
             }
@@ -311,6 +316,23 @@ class VanishTest {
             assertThat(did).extracting(Did::what)
                     .as("an invisible wall that shoves players around is worse than being seen")
                     .contains("collide:false");
+        }
+
+        @Test
+        @DisplayName("they make no sound, and coming back gives it back")
+        void noSound() {
+            // Footsteps stopping right beside somebody, with nobody visibly there, say exactly as
+            // much as seeing the moderator outright — being invisible but audible is not hidden.
+            Vanish vanish = vanish();
+
+            vanish.vanish(MOD);
+            assertThat(did).extracting(Did::what).contains("silent:true");
+
+            did.clear();
+            vanish.reveal(MOD);
+            assertThat(did).extracting(Did::what)
+                    .as("a moderator who stays silent forever is the next bug report")
+                    .contains("silent:false");
         }
     }
 
