@@ -271,7 +271,23 @@ public enum LandFlag {
      * watcher's client rather than by suppressing anything: somebody hidden this way is genuinely not sent, not
      * merely absent from a list somewhere.
      */
-    VISIBLE_FROM_OUTSIDE(Material.SPYGLASS, true, true);
+    VISIBLE_FROM_OUTSIDE(Material.SPYGLASS, true, true),
+
+    /**
+     * Whether equipment loses durability here — worn or held, all of it.
+     *
+     * <p>Not only armour despite the name a server owner will actually use for it. An elytra worn in
+     * the same slot wears down the same way; a sword swung in a fight, a pickaxe swung at a block and
+     * a bow drawn in the hand all wear down for exactly the reason this flag exists to switch off — an
+     * arena handing out a reusable kit does not want the sword blunted by the fight it was handed out
+     * for. Splitting "worn" from "held" would be two flags an owner has to remember are the same
+     * request, so this covers every durability loss a player's own equipment takes.
+     *
+     * <p>Audience aware: an arena handing out a reusable kit wants it off for everybody, and an owner
+     * who only wants their own gear spared while a visitor's still wears out sets the two tiers apart —
+     * both are real requests and neither is more common than the other.
+     */
+    ARMOR_DURABILITY(Material.IRON_CHESTPLATE, true, true);
 
     private final Material icon;
     private final boolean builtInDefault;

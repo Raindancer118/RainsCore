@@ -271,6 +271,7 @@ land:
     breeding: {name: "Breeding", description: "Animals may be bred here"}
     leads: {name: "Leads", description: "Animals may be led about — off stops anybody walking one off the property"}
     boats: {name: "Boats & minecarts", description: "They may be put down here at all"}
+    armor-durability: {name: "Equipment wear", description: "Worn armour and elytra lose durability"}
 
   action:
     enter: {name: "Enter", description: "Walk or teleport in"}

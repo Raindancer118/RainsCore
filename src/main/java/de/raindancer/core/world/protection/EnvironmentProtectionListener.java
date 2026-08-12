@@ -26,12 +26,13 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 
 import java.util.Optional;
 
 /**
  * Enforces the environmental flags: explosions, fire, decay, grief, pistons, fluids, weather and the
- * player comfort flags (fall damage, hunger, keep inventory).
+ * player comfort flags (fall damage, hunger, keep inventory, equipment wear).
  * <p>
  * Every handler exits early when the flag's policy is {@code DISABLED}, so an admin who removed a flag
  * really does get vanilla behaviour with no overhead.
@@ -438,6 +439,16 @@ public final class EnvironmentProtectionListener implements Listener {
             return;
         }
         if (deniedFor(player, LandFlag.HUNGER)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Worn or held, whatever it is — see the flag's own note on why this does not split the two.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEquipmentWear(PlayerItemDamageEvent event) {
+        if (deniedFor(event.getPlayer(), LandFlag.ARMOR_DURABILITY)) {
             event.setCancelled(true);
         }
     }

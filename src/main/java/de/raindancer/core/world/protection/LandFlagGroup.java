@@ -31,7 +31,7 @@ public enum LandFlagGroup {
     PLAYER(Material.PLAYER_HEAD,
             LandFlag.PVP, LandFlag.MOB_DAMAGE, LandFlag.MONSTER_TARGETING, LandFlag.EXPLOSION_DAMAGE,
             LandFlag.FALL_DAMAGE, LandFlag.HUNGER, LandFlag.POTIONS,
-            LandFlag.VISIBLE_FROM_OUTSIDE),
+            LandFlag.VISIBLE_FROM_OUTSIDE, LandFlag.ARMOR_DURABILITY),
 
     /** What the ground and the weather do on their own. */
     NATURE(Material.OAK_SAPLING,
