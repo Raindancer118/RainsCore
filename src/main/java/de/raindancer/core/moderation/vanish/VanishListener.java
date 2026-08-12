@@ -5,16 +5,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Keeping the promise across joins and leaves.
+ * Keeping the promise across joins, leaves and advancements.
  *
- * <p>The two moments vanish usually breaks. Somebody who joins has to be hidden from the person who
+ * <p>Three moments vanish usually breaks. Somebody who joins has to be hidden from the person who
  * just arrived — the new player has never been told to hide them — and somebody hidden must not have
- * their arrival announced. Both are one line and both are always forgotten.
+ * their arrival announced. All of it is one line each and all of it is always forgotten — including
+ * the third: an advancement is broadcast to the whole server the moment it completes, "reached the
+ * goal" and the rest, and a vanished player finishing one told everybody exactly what a fake
+ * departure was trying to hide. Nobody thinks of that as a chat message vanish owns until a player
+ * still "here" announces themselves by winning something.
  */
 public final class VanishListener implements Listener {
 
@@ -53,6 +58,21 @@ public final class VanishListener implements Listener {
                     viewer.hidePlayer(plugin, joining);
                 }
             }
+        }
+    }
+
+    /**
+     * Silences the server-wide "so-and-so has reached the goal" line for a vanished player.
+     *
+     * <p>Nulling the message rather than cancelling the event: there is nothing to cancel — the
+     * advancement is already granted by the time this fires, and only the broadcast is still
+     * pending. A vanished player keeps the advancement itself, exactly as they should; the server
+     * simply never finds out.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onAdvancement(PlayerAdvancementDoneEvent event) {
+        if (vanish.isVanished(event.getPlayer().getUniqueId())) {
+            event.message(null);
         }
     }
 
