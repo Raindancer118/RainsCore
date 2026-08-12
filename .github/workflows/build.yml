@@ -32,6 +32,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+          server-id: packages-releases
+          server-username: REPOSILITE_USERNAME
+          server-password: REPOSILITE_PASSWORD
 
       - name: Build and run tests
         run: mvn --batch-mode --no-transfer-progress verify
@@ -165,6 +168,22 @@ jobs:
             --repo "${{ github.repository }}" \
             --title "RainsCore $VERSION" \
             --notes-file release-notes.md --generate-notes
+
+      # Runs after the tag/pom version check above, so this only ever deploys a version that matches
+      # the tag. Reposilite repos are private and reject redeploying an existing version, so a tag
+      # pushed twice fails loudly here instead of silently overwriting a published artifact.
+      - name: Publish to packages.tstieh.de
+        if: startsWith(github.ref, 'refs/tags/v')
+        # Releases on packages.tstieh.de are immutable: redeploying an already-published version
+        # returns 409, which only happens if a tag is pushed twice for the same version — the check
+        # above already catches a tag/pom mismatch, so this is the deliberate remaining failure mode.
+        env:
+          REPOSILITE_USERNAME: ci-deploy
+          REPOSILITE_PASSWORD: ${{ secrets.REPOSILITE_PASSWORD }}
+          # Reposilite's TLS termination trips a TLSv1.3/SNI handshake bug in Maven's HTTP transport
+          # (works fine with plain java.net.http.HttpClient or curl) — pin TLSv1.2.
+          MAVEN_OPTS: -Djdk.tls.client.protocols=TLSv1.2
+        run: mvn --batch-mode --no-transfer-progress -DskipTests deploy
 
       # Uploaded on failure as well, which is the case they are actually needed for: a red build with no
       # report is a red build somebody has to reproduce locally before they can start reading it.

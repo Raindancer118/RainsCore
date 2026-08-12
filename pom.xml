@@ -165,4 +165,11 @@
             </plugin>
         </plugins>
     </build>
+
+    <distributionManagement>
+        <repository>
+            <id>packages-releases</id>
+            <url>https://packages.tstieh.de/releases</url>
+        </repository>
+    </distributionManagement>
 </project>
