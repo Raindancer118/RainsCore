@@ -5,11 +5,11 @@ import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.world.safety.Spot;
+import io.papermc.paper.entity.Leashable;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Tameable;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -602,14 +602,19 @@ public final class Travel {
     /**
      * Who is holding this entity's lead, as far as travelling is concerned.
      *
+     * <p>Checked through {@link Leashable} rather than {@code LivingEntity}: since 1.20.5 a boat or a
+     * minecart can carry a lead too, and a mob is not the only thing somebody tows home. A check
+     * against {@code LivingEntity} alone is the one a towed boat full of villagers silently fails —
+     * the boat is never recognised as led, so it and everyone riding it stays behind.
+     *
      * @param riding whether it came from the vehicle or passenger list, which counts as led
      */
     private UUID leadHolderOf(Entity entity, UUID traveller, boolean riding) {
         if (riding) {
             return traveller;
         }
-        if (entity instanceof LivingEntity living && living.isLeashed()) {
-            Entity holder = living.getLeashHolder();
+        if (entity instanceof Leashable leashable && leashable.isLeashed()) {
+            Entity holder = leashable.getLeashHolder();
             return holder == null ? null : holder.getUniqueId();
         }
         return null;
