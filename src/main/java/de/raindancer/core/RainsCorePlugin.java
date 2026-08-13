@@ -69,6 +69,8 @@ import de.raindancer.core.content.pack.PackServer;
 import de.raindancer.core.content.pack.ResourcePacks;
 import de.raindancer.core.world.safety.BukkitBlocks;
 import de.raindancer.core.world.safety.Safety;
+import de.raindancer.core.platform.backup.BackupSettings;
+import de.raindancer.core.platform.backup.Backups;
 import de.raindancer.core.world.speedrun.SpeedrunLobby;
 import de.raindancer.core.world.speedrun.SpeedrunLobbyItems;
 import de.raindancer.core.world.speedrun.SpeedrunLobbyListener;
@@ -89,6 +91,7 @@ import de.raindancer.core.world.protection.MobControlListener;
 import de.raindancer.core.world.protection.MovementProtectionListener;
 import de.raindancer.core.world.protection.Seclusion;
 import de.raindancer.core.platform.util.Scheduling;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -98,6 +101,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -191,6 +195,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private static volatile RainsCorePlugin instance;
 
     private SettingsStore<CoreConfig> settings;
+    private SettingsStore<BackupSettings> backupSettings;
+    private Backups backups;
     private Chat chat;
     private ActionBars actionBars;
     private ClickActions clickActions;
@@ -278,6 +284,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Settings first: everything after this reads them.
         settings = settingsFor(SettingsSchema.of(CoreConfig.class, CoreConfig.DEFAULTS),
                 getDataFolder().toPath().resolve("config.yml"));
+
+        // Outside plugins/RainsCore/ entirely, deliberately: a reinstall that moves or deletes this
+        // plugin's whole data folder — exactly what a "wipe and reinstall the plugin" deploy does —
+        // must not take the backup history down with it. Sibling to plugins/, at the server root.
+        backupSettings = settingsFor(SettingsSchema.of(BackupSettings.class, BackupSettings.DEFAULTS),
+                getDataFolder().toPath().resolve("backup.yml"));
+        backups = new Backups(getDataFolder().toPath().getParent().getParent()
+                .resolve("backups").resolve("rainscore"));
 
         startLogging();
         settings.onChange(config -> startLogging());
@@ -635,6 +649,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .fact("Homes", places.ofKind("home").size() + " kept")
                 .fact("Warps", warps.all().size() + " set")
                 .fact("Speedrun", speedrunLobby.state().name().toLowerCase(Locale.ROOT) + " lobby")
+                .fact("Backups", "on shutdown, keeping " + backupSettings.current().maxBackups())
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
                 .fact("Achievements", achievements.all().size() + " defined")
@@ -826,6 +841,19 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             // write-ahead log back into the file, and a database left open keeps a .db-wal beside
             // it that somebody taking a backup will not copy.
             databases.close();
+        }
+        // Last of all the real work, and deliberately not gated on how the server got here — a normal
+        // restart and a crash both call this. Whatever a plugin has flushed by the time its own
+        // onDisable ran is what gets backed up; a world save is the server's own business, not this
+        // method's, so this is best-effort against whatever is actually on disk right now rather than
+        // a guarantee everything is perfectly quiesced. Best-effort beats the alternative that shipped
+        // for a day: nothing at all.
+        if (backups != null && backupSettings != null) {
+            List<Path> worldFolders = Bukkit.getWorlds().stream()
+                    .map(world -> world.getWorldFolder().toPath())
+                    .toList();
+            backups.run(worldFolders, getDataFolder().toPath().getParent(),
+                    backupSettings.current().maxBackups());
         }
         log.info("Rain's Core is going down.");
         Log.shutdown();
