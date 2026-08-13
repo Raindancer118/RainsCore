@@ -63,7 +63,7 @@ public final class DemoPlugin extends JavaPlugin {
                 left -> Component.text("Starting in " + left / 1000));
 
         Banner.of(getName(), "a demo that builds on RainsCore")
-                .version("1.0.0").by("Raindancer118")
+                .version("1.18.0").by("Raindancer118")
                 .fact("Enabled", String.valueOf(on))
                 .print(getComponentLogger());
     }
