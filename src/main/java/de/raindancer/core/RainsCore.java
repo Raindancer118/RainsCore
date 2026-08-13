@@ -451,4 +451,18 @@ public interface RainsCore {
 
     /** The same, for a plugin that wants the file somewhere other than its data folder. */
     <T> SettingsStore<T> settingsFor(SettingsSchema<T> schema, Path file);
+
+    /**
+     * Undoes {@link #settingsFor}: takes a store back out of the combined settings GUI and command.
+     *
+     * <p>For a module whose host can start and stop it independently of the plugin's own lifecycle —
+     * see {@code ModuleContext.settings}, whose caller unregisters this the same way it unregisters a
+     * listener when the module that registered it fails partway through starting, or is later disabled.
+     * Without it, a module that got as far as binding its settings and then never finished — or one
+     * that finished and was later switched off — leaves its page in {@code /settings} forever, "N
+     * settings, click to open" and all, which looks exactly like a module that is actually running.
+     *
+     * <p>Harmless to call with a store that was never registered, or twice.
+     */
+    void forgetSettings(SettingsStore<?> store);
 }

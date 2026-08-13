@@ -52,6 +52,24 @@ public final class SettingsRegistry {
         return List.copyOf(stores);
     }
 
+    /**
+     * Takes a plugin's settings back out of the combined tree.
+     *
+     * <p>The counterpart {@link #add} never had to have: nothing used to unregister a plugin's settings
+     * short of the whole server stopping. A module hosted inside another plugin changed that — its
+     * settings can be bound while it is starting and then have to disappear again, either because the
+     * rest of {@code enable()} throws or because it is later disabled — and without a way to take them
+     * back out, a module that never finished starting, or one that has since stopped, keeps its page in
+     * {@code /settings} for as long as the server runs. Harmless to call with a store this registry
+     * never held, or twice.
+     */
+    public void remove(SettingsStore<?> store) {
+        if (store == null) {
+            return;
+        }
+        stores.remove(store);
+    }
+
     // ---------------------------------------------------------------------------- the tree
 
     /**

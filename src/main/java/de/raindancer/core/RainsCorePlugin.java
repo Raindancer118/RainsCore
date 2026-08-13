@@ -1227,6 +1227,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         return store;
     }
 
+    @Override
+    public void forgetSettings(SettingsStore<?> store) {
+        if (store == null) {
+            return;
+        }
+        // The conditional remove, not a plain one: a module that registers twice under one id — two
+        // copies shaded into one host, or a second attempt after a first failure — must not have the
+        // second's own unwind delete the first's still-live store from under it.
+        stores.remove(store.schema().id(), store);
+        registry.remove(store);
+    }
+
     /** Every plugin's settings, for the combined GUI. */
     public Map<String, SettingsStore<?>> stores() {
         return Map.copyOf(stores);

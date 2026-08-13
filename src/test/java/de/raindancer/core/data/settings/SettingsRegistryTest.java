@@ -242,4 +242,66 @@ class SettingsRegistryTest {
     void addingNull() {
         assertThatCode(() -> registry.add(null)).doesNotThrowAnyException();
     }
+
+    // ------------------------------------------------------------------ removing
+
+    /**
+     * What {@link SettingsRegistry#remove} exists for: a module whose settings were bound while it was
+     * starting must not keep a page in {@code /settings} after it fails to finish, or after it is later
+     * disabled — see {@code LiveModuleSession} in the modules-api project, which unregisters a store the
+     * same way it unregisters a listener when the module that registered it does not end up running.
+     */
+    @Nested
+    @DisplayName("taking a plugin's settings back out")
+    class Removing {
+
+        private SettingsStore<?> registeredClaims() {
+            return registry.stores().stream()
+                    .filter(store -> store.schema().id().equals("claims"))
+                    .findFirst().orElseThrow();
+        }
+
+        @Test
+        @DisplayName("it is gone from what the registry holds")
+        void leavesTheStores() {
+            SettingsStore<?> claims = registeredClaims();
+            registry.remove(claims);
+
+            assertThat(registry.stores()).doesNotContain(claims);
+        }
+
+        @Test
+        @DisplayName("a removed plugin's setting is no longer reachable through the registry")
+        void keyIsGone() {
+            registry.remove(registeredClaims());
+
+            assertThat(registry.storeOf("blocks-per-player")).isEmpty();
+            assertThat(registry.keys()).doesNotContain("blocks-per-player");
+            assertThat(registry.keys()).contains("cruise-speed");
+        }
+
+        @Test
+        @DisplayName("its topic disappears from the merged tree once nothing else uses it")
+        void topicLeavesTheTree() {
+            registry.remove(registeredClaims());
+
+            assertThat(registry.topics().roots()).extracting(SettingsTopic::path)
+                    .as("management/fences was claims' own topic and nothing else declared it")
+                    .doesNotContain("management");
+        }
+
+        @Test
+        @DisplayName("removing null is harmless")
+        void removingNull() {
+            assertThatCode(() -> registry.remove(null)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("removing something never added is harmless")
+        void removingSomethingNeverAdded() {
+            SettingsStore<ClaimConfig> neverAdded = store(ClaimConfig.class, ClaimConfig.DEFAULTS, "other");
+            assertThatCode(() -> registry.remove(neverAdded)).doesNotThrowAnyException();
+            assertThat(registry.stores()).hasSize(2);
+        }
+    }
 }
