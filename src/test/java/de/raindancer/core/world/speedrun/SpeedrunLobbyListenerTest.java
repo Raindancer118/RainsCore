@@ -52,15 +52,45 @@ class SpeedrunLobbyListenerTest {
     @DisplayName("join")
     class Join {
 
-        @Test
-        @DisplayName("gives the kit while the lobby is READY")
-        void givesKitWhenReady() {
-            when(lobby.state()).thenReturn(SpeedrunLobbyState.READY);
+        private Player playerInWorld(String worldName) {
             Player player = playerWithId(ALICE);
+            World world = mock(World.class);
+            when(world.getName()).thenReturn(worldName);
+            when(player.getWorld()).thenReturn(world);
+            return player;
+        }
+
+        @Test
+        @DisplayName("gives the kit while the lobby is READY and the player is in the lobby world")
+        void givesKitWhenReadyInLobbyWorld() {
+            when(lobby.state()).thenReturn(SpeedrunLobbyState.READY);
+            when(lobby.config()).thenReturn(
+                    new SpeedrunSettings("world", "minecraft:end/kill_dragon", SpeedrunDeathPolicy.OFF));
+            Player player = playerInWorld("world");
 
             listener.onJoin(new PlayerJoinEvent(player, "hi"));
 
             verify(items).give(player);
+        }
+
+        /**
+         * The actual incident this guards: with no world check at all, the lobby being READY — which
+         * is true almost all the time on a shared server — meant every join anywhere on the server was
+         * cleared and handed the two lobby items, regardless of which world the player actually spawned
+         * into. Real gear was lost this way before this check existed.
+         */
+        @Test
+        @DisplayName("does NOT touch a player joining into a different world, even while READY")
+        void leavesInventoryAloneOutsideTheLobbyWorld() {
+            when(lobby.state()).thenReturn(SpeedrunLobbyState.READY);
+            when(lobby.config()).thenReturn(
+                    new SpeedrunSettings("speedrun-lobby", "minecraft:end/kill_dragon",
+                            SpeedrunDeathPolicy.OFF));
+            Player player = playerInWorld("world");   // the server's real, shared world — not the lobby
+
+            listener.onJoin(new PlayerJoinEvent(player, "hi"));
+
+            verify(items, never()).give(any());
         }
 
         @Test

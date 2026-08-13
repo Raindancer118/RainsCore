@@ -20,10 +20,14 @@ import java.util.stream.Collectors;
  * Joins, clicks and quits, for the one speedrun lobby.
  *
  * <h2>What a join does, and when</h2>
- * Only while {@link SpeedrunLobby#state()} is {@link SpeedrunLobbyState#READY}: a player arriving
- * mid-run, mid-countdown, mid-pause, or into a finished round waiting to reset keeps whatever they
- * were carrying — clearing a spectator's inventory to hand them a compass and a block that does
- * nothing useful yet would be a worse surprise than leaving them alone.
+ * Only when both are true: {@link SpeedrunLobby#state()} is {@link SpeedrunLobbyState#READY}, <em>and</em>
+ * the player is joining into the configured lobby world. Checking only the first was a real incident, not
+ * a hypothetical one: on a shared server the lobby is READY almost all the time, and without the world
+ * check every single join — into whatever world the server actually spawns people in — was cleared and
+ * handed the two lobby items. Ordinary players lost their own gear simply by logging in. A player arriving
+ * mid-run, mid-countdown, mid-pause, or into a finished round waiting to reset keeps whatever they were
+ * carrying regardless, for the original reason: clearing a spectator's inventory to hand them a compass
+ * and a block that does nothing useful yet would be a worse surprise than leaving them alone.
  *
  * <h2>Why the start block does not fix its own participant list</h2>
  * "Everybody currently in the lobby world" is read at the moment of the click, not kept as a
@@ -59,7 +63,11 @@ public final class SpeedrunLobbyListener implements Listener {
         if (lobby.state() != SpeedrunLobbyState.READY) {
             return;
         }
-        items.give(event.getPlayer());
+        Player player = event.getPlayer();
+        if (!player.getWorld().getName().equals(lobby.config().worldName())) {
+            return;   // anywhere else on the server is not this feature's business
+        }
+        items.give(player);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
