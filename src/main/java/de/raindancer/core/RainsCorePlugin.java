@@ -285,8 +285,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // must not take the backup history down with it. Sibling to plugins/, at the server root.
         backupSettings = settingsFor(SettingsSchema.of(BackupSettings.class, BackupSettings.DEFAULTS),
                 getDataFolder().toPath().resolve("backup.yml"));
-        backups = new Backups(getDataFolder().toPath().getParent().getParent()
-                .resolve("backups").resolve("rainscore"));
+        backups = new Backups(backupsDirectoryFor(getDataFolder().toPath()));
 
         startLogging();
         settings.onChange(config -> startLogging());
@@ -837,7 +836,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             List<Path> worldFolders = Bukkit.getWorlds().stream()
                     .map(world -> world.getWorldFolder().toPath())
                     .toList();
-            backups.run(worldFolders, getDataFolder().toPath().getParent(),
+            backups.run(worldFolders, pluginsDirectoryFor(getDataFolder().toPath()),
                     backupSettings.current().maxBackups());
         }
         log.info("Rain's Core is going down.");
@@ -1289,6 +1288,29 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         if (task != null && !task.isCancelled()) {
             task.cancel();
         }
+    }
+
+    /**
+     * The server root's {@code backups/rainscore/} — a sibling of {@code plugins/}, not something
+     * under this plugin's own data folder, so a "wipe and reinstall the plugin" deploy (which
+     * deletes exactly that folder) never takes the backup history down with it.
+     *
+     * <p>{@code toAbsolutePath()} is load-bearing, not decoration: {@link #getDataFolder()} hands
+     * back a <em>relative</em> path — {@code plugins/RainsCore} — because that is relative to the
+     * server's own working directory. One {@link Path#getParent()} on that already lands on
+     * {@code plugins}, a single path segment with no parent of its own, so a second
+     * {@code getParent()} on a still-relative path returns {@code null} and this throws on every
+     * real server. Every existing unit test builds its {@code dataFolder} from an absolute
+     * {@code @TempDir}, which is exactly why none of them ever saw this — only a boot of an actual
+     * server, with an actual relative {@code getDataFolder()}, does.
+     */
+    static Path backupsDirectoryFor(Path dataFolder) {
+        return dataFolder.toAbsolutePath().getParent().getParent().resolve("backups").resolve("rainscore");
+    }
+
+    /** The server's {@code plugins/} folder itself — see {@link #backupsDirectoryFor} for why absolute. */
+    static Path pluginsDirectoryFor(Path dataFolder) {
+        return dataFolder.toAbsolutePath().getParent();
     }
 
 }
