@@ -175,28 +175,6 @@ farm-world:
   # Said to anybody standing in a farm world that is about to be made again.
   moved-out: "<yellow>The farm world is being made again — you have been moved to spawn."
 
-# ────────────────────────────────────────────────────────────── speedrun lobby
-speedrun:
-  start:
-    # The start block was pressed somewhere other than the lobby world it is bound to.
-    wrong-world: "<yellow>This only starts a run in <white><world></white>."
-    # A run is already counting down, running, paused or waiting to reset.
-    not-ready: "<yellow>A run is already under way."
-    # Nobody has set an advancement goal or a death policy — see the compass's menu.
-    no-end-condition: "<yellow>Nothing is set to end the run yet — open the menu and pick one."
-    # Should not really happen: whoever pressed it counts as a participant.
-    no-participants: "<yellow>Nobody is here to race."
-    # The world speedrun.yml points at is not currently loaded.
-    world-missing: "<red>The lobby world is not loaded. Somebody should look at speedrun.yml."
-  goal:
-    # Picking an advancement in the chooser.
-    set: "<green>Advancement goal set to <white><advancement></white>."
-    # Pressing "No advancement goal" in the chooser.
-    cleared: "<yellow>Advancement goal cleared — a death is now the only way a run can end."
-  # Sent to every participant still online the moment a run ends, so they hear what settled it and
-  # how long it took even if they were not looking at a boss bar or a scoreboard.
-  finished: "<gold>Run finished! <white><reason></white> — <white><time></white>."
-
 # ─────────────────────────────────────────────────────────────── the tablist
 tablist:
   nobody-on: "<dark_gray>nobody is on"

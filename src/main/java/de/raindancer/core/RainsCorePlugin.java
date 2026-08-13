@@ -71,10 +71,6 @@ import de.raindancer.core.world.safety.BukkitBlocks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.platform.backup.BackupSettings;
 import de.raindancer.core.platform.backup.Backups;
-import de.raindancer.core.world.speedrun.SpeedrunLobby;
-import de.raindancer.core.world.speedrun.SpeedrunLobbyItems;
-import de.raindancer.core.world.speedrun.SpeedrunLobbyListener;
-import de.raindancer.core.world.speedrun.SpeedrunSettings;
 import de.raindancer.core.world.warp.Warps;
 import de.raindancer.core.world.farm.FarmWorldPortalListener;
 import de.raindancer.core.world.combat.Combat;
@@ -236,7 +232,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatPrompts prompts;
     private Warps warps;
     private FarmWorlds farmWorlds;
-    private SpeedrunLobby speedrunLobby;
     private Land land;
     private LandPolicies landPolicies;
     private LandPolicyStore landPolicyStore;
@@ -502,15 +497,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         effects = new Effects(new BukkitEffectSink(), System::currentTimeMillis);
 
-        SettingsStore<SpeedrunSettings> speedrunSettings = settingsFor(
-                SettingsSchema.of(SpeedrunSettings.class, SpeedrunSettings.DEFAULTS),
-                getDataFolder().toPath().resolve("speedrun.yml"));
-        speedrunLobby = new SpeedrunLobby(this, speedrunSettings, bossBars, effects, messages);
-        getServer().getPluginManager().registerEvents(
-                new SpeedrunLobbyListener(speedrunLobby, new SpeedrunLobbyItems(this),
-                        new Brand("Speedrun"), messages),
-                this);
-
         votes = new Votes(System::currentTimeMillis);
         players = new PlayerAdmin(new BukkitPlayerAdminSink());
 
@@ -648,7 +634,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 // about as a single undifferentiated total.
                 .fact("Homes", places.ofKind("home").size() + " kept")
                 .fact("Warps", warps.all().size() + " set")
-                .fact("Speedrun", speedrunLobby.state().name().toLowerCase(Locale.ROOT) + " lobby")
                 .fact("Backups", "on shutdown, keeping " + backupSettings.current().maxBackups())
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
