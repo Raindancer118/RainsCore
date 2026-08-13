@@ -58,6 +58,23 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "RainsCore $version — $sha"
 
+      # Whether this pom version has already been tagged — the switch that used to require somebody to
+      # remember `git tag vX.Y.Z && git push --tags` by hand after every version bump. Bumping the pom
+      # and pushing to master used to build a jar nobody could install as a fixed version and nothing
+      # ever reached packages.tstieh.de: three versions in a row (1.17.0, 1.17.1, 1.17.2) went out this
+      # way before anybody noticed. Checked against the remote, not the local clone, because a shallow
+      # checkout does not necessarily have every tag.
+      - name: Check whether vVERSION is already tagged
+        id: tagcheck
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.jar.outputs.version }}" \
+              >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Named after the commit so a downloaded jar can always be traced back to the source it was built
       # from. A jar called "RainsCore.jar" in a downloads folder is a jar nobody can identify a week later.
       - name: Upload the library jar
@@ -136,13 +153,17 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag --repo "${{ github.repository }}" || true
           done
 
-      # A pushed vX.Y.Z tag cuts the permanent release. The tag has to agree with the pom: a release
-      # whose tag says 1.1.0 and whose jar says 1.0.0 is one nobody can reason about later.
+      # A pushed vX.Y.Z tag cuts the permanent release — either a real one pushed by hand, or the one
+      # the step above just cut because master moved to a version nobody had published yet. The tag has
+      # to agree with the pom: a release whose tag says 1.1.0 and whose jar says 1.0.0 is one nobody can
+      # reason about later. For the auto-tagged case TAG is built from the version directly rather than
+      # read back from the ref, so there is nothing left to disagree with — the check below only ever
+      # has something to catch on a hand-pushed tag.
       - name: Publish a versioned release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.tagcheck.outputs.new == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', steps.jar.outputs.version) }}
           VERSION: ${{ steps.jar.outputs.version }}
           SHA256: ${{ steps.jar.outputs.sha }}
         run: |
@@ -171,9 +192,12 @@ jobs:
 
       # Runs after the tag/pom version check above, so this only ever deploys a version that matches
       # the tag. Reposilite repos are private and reject redeploying an existing version, so a tag
-      # pushed twice fails loudly here instead of silently overwriting a published artifact.
+      # pushed twice fails loudly here instead of silently overwriting a published artifact — the same
+      # protection that makes it safe for this to now also run on every master push with a new pom
+      # version: tagcheck already means "nobody has published this version's tag yet", not "this exact
+      # deploy has never been attempted", but Reposilite's own 409 is the backstop either way.
       - name: Publish to packages.tstieh.de
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.tagcheck.outputs.new == 'true')
         # Releases on packages.tstieh.de are immutable: redeploying an already-published version
         # returns 409, which only happens if a tag is pushed twice for the same version — the check
         # above already catches a tag/pom mismatch, so this is the deliberate remaining failure mode.
@@ -184,6 +208,22 @@ jobs:
           # (works fine with plain java.net.http.HttpClient or curl) — pin TLSv1.2.
           MAVEN_OPTS: -Djdk.tls.client.protocols=TLSv1.2
         run: mvn --batch-mode --no-transfer-progress -DskipTests deploy
+
+      # Tagged only now that the release and the Reposilite deploy above have both actually succeeded —
+      # not before them. Tagging first and deploying second would mean a deploy that failed partway
+      # left a tag behind claiming the version was published, and the next push would see that tag and
+      # never retry it. A tag pushed here with the default GITHUB_TOKEN does not retrigger this
+      # workflow (GitHub's own recursion guard), which is why the release and the deploy run in *this*
+      # job rather than waiting for that retrigger. Guarded by tagcheck, so this never runs at all for
+      # a real `vX.Y.Z` push — the tag already exists in that case, there is nothing left to cut.
+      - name: Tag this version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.tagcheck.outputs.new == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.jar.outputs.version }}"
+          git push origin "v${{ steps.jar.outputs.version }}"
 
       # Uploaded on failure as well, which is the case they are actually needed for: a red build with no
       # report is a red build somebody has to reproduce locally before they can start reading it.
