@@ -71,7 +71,6 @@ import de.raindancer.core.world.safety.BukkitBlocks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.platform.backup.BackupSettings;
 import de.raindancer.core.platform.backup.Backups;
-import de.raindancer.core.world.warp.Warps;
 import de.raindancer.core.world.farm.FarmWorldPortalListener;
 import de.raindancer.core.world.combat.Combat;
 import de.raindancer.core.world.combat.CombatListener;
@@ -230,7 +229,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private SettingsNavigation navigation;
     private Tablists tablists;
     private ChatPrompts prompts;
-    private Warps warps;
     private FarmWorlds farmWorlds;
     private Land land;
     private LandPolicies landPolicies;
@@ -398,7 +396,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Applied again whenever they change, so switching the custom list off in a menu puts
         // every name back rather than freezing whatever was last drawn.
         settings.onChange(config -> applyTablistSettings());
-        warps = new Warps(places, System::currentTimeMillis);
 
         FarmWorldState farmState = new FarmWorldState(
                 getDataFolder().toPath().resolve("farmworlds.yml"), databases.core());
@@ -626,13 +623,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                         + registry.topics().visibleRoots().size() + " categories")
                 .fact("Logs", getDataFolder().toPath().resolve("logs").toString())
                 .fact("Places", places.all().size() + " remembered")
-                // A home is a Poi of kind "home", the same way a warp is one of kind "warp" — see
-                // homes-module's HomeCatalogue. RainsCore has no domain class of its own for homes the
-                // way it does for Warps, since nothing in Core needs to reach for one directly; the
-                // count is still worth its own line rather than being lost inside "Places" reasoned
-                // about as a single undifferentiated total.
+                // A home is a Poi of kind "home", a warp one of kind "warp" — see homes-module's
+                // HomeCatalogue and warp-module's WarpRegistry. RainsCore has no domain class of its
+                // own for either any more, since nothing in Core needs to reach for one directly; the
+                // counts are still worth their own line rather than being lost inside "Places"
+                // reasoned about as a single undifferentiated total.
                 .fact("Homes", places.ofKind("home").size() + " kept")
-                .fact("Warps", warps.all().size() + " set")
+                .fact("Warps", places.ofKind("warp").size() + " kept")
                 .fact("Backups", "on shutdown, keeping " + backupSettings.current().maxBackups())
                 .fact("In force", punishments.allActive().size() + " punishment(s)")
                 .fact("Items", items.all().size() + " defined")
@@ -1071,10 +1068,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         return bossBars;
     }
 
-    @Override
-    public Warps warps() {
-        return warps;
-    }
 
     @Override
     public FarmWorlds farmWorlds() {
@@ -1267,7 +1260,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         itemAbilities.forget(player.getUniqueId());
         bossBars.forget(player.getUniqueId());
         tablists.forget(player);
-        warps.forget(player.getUniqueId());
         effects.forget(player.getUniqueId());
         land.forget(player.getUniqueId());
         movementProtection.forget(player.getUniqueId());

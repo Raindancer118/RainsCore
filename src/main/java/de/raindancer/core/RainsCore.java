@@ -38,7 +38,6 @@ import de.raindancer.core.moderation.vanish.Vanish;
 import de.raindancer.core.content.vote.Votes;
 import de.raindancer.core.content.pack.ResourcePacks;
 import de.raindancer.core.world.safety.Safety;
-import de.raindancer.core.world.warp.Warps;
 import de.raindancer.core.world.farm.FarmWorlds;
 import de.raindancer.core.world.protection.Land;
 import org.bukkit.plugin.Plugin;
@@ -213,12 +212,6 @@ public interface RainsCore {
      * one answer.
      */
     ChatPrompts prompts();
-
-    /**
-     * Named places anybody can be sent to. Stored as {@link #places()} entries, so a ghast line can
-     * fly somebody to a warp and a menu can list warps beside homes.
-     */
-    Warps warps();
 
     /**
      * Farm worlds: a set of three linked worlds — overworld, its own nether, its own end — that can

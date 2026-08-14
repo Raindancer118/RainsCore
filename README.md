@@ -114,8 +114,7 @@ Everything below is reached through `RainsCore.get()`.
 
 | | |
 |---|---|
-| **`places()`** | Every saved place — homes, stops, warps, death points — in one store. Which is why a ghast line can fly somebody to their own home. |
-| **`warps()`** | Named places, built on `places()`: permissions, categories, one cooldown per player. |
+| **`places()`** | Every saved place — homes, stops, warps, death points — in one store. Which is why a ghast line can fly somebody to their own home. Warps themselves are warp-module's, built on this. |
 | **`punishments()`** | Bans, mutes, kicks, freezes. Nothing is ever deleted — lifting a ban records the lifting. |
 | **`achievements()`** | Custom achievements, earned exactly once, with progress towards a goal. |
 | **`items()` / `itemFactory()` / `itemAbilities()`** | Custom items with abilities, cooldowns, charges and recipes. Recognised by a key in the item's PDC, so an anvil cannot forge one. |
@@ -221,7 +220,7 @@ mvn install     # to the local Maven repository
 ```
 
 **Everything that can be tested without a server, is.** That is what the seams are for: `ActionBars`
-takes a sink and a clock, `Chat` takes an `Audiences`, `Warps` takes "is this world loaded". The
+takes a sink and a clock, `Chat` takes an `Audiences`, `ChunkHolds` takes a `ChunkLoader`. The
 arbitration, the arithmetic, the persistence and the failure paths are all tested below the server
 line.
 

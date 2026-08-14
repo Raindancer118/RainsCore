@@ -2,7 +2,6 @@ package de.raindancer.core.platform.command;
 
 import de.raindancer.core.ui.chat.ClickCommand;
 import de.raindancer.core.data.settings.SettingsCommand;
-import de.raindancer.core.world.warp.WarpCommand;
 import de.raindancer.core.world.farm.FarmWorldCommand;
 import de.raindancer.core.world.manage.WorldCommand;
 import io.papermc.paper.command.brigadier.Commands;
@@ -26,7 +25,6 @@ import java.util.List;
  *         context.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
  *             CoreCommands.clickCallback(event.registrar());   // see below — buttons need this
  *             CoreCommands.settings(event.registrar(), "settings");
- *             CoreCommands.warps(event.registrar(), "warp");
  *         });
  *     }
  * }
@@ -77,12 +75,6 @@ public final class CoreCommands {
     public static void settings(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Everything every plugin on this server can be told to do.",
                 List.of(aliases), new SettingsCommand());
-    }
-
-    /** Going to a warp, and managing the list of them. */
-    public static void warps(Commands registrar, String name, String... aliases) {
-        registrar.register(name, "Go to a named place, or manage the list of them.",
-                List.of(aliases), new WarpCommand());
     }
 
     /** Whether {@code /commands} has already been taken this run. See {@link #commandList}. */
