@@ -2,7 +2,6 @@ package de.raindancer.core.platform.command;
 
 import de.raindancer.core.ui.chat.ClickCommand;
 import de.raindancer.core.data.settings.SettingsCommand;
-import de.raindancer.core.world.farm.FarmWorldCommand;
 import de.raindancer.core.world.manage.WorldCommand;
 import io.papermc.paper.command.brigadier.Commands;
 
@@ -110,17 +109,12 @@ public final class CoreCommands {
         return commandList(registrar, "commands", "cmds");
     }
 
-    /** Going to a farm world, and regenerating one. */
-    public static void farmWorlds(Commands registrar, String name, String... aliases) {
-        registrar.register(name, "Go to a farm world, or run one.", List.of(aliases),
-                new FarmWorldCommand());
-    }
-
     /**
      * Switching to any loaded world, and wiping one and making it again — {@code rainscore.world.switch}
      * and {@code rainscore.world.regen}, each falling back to Bukkit's own operator-only default since
-     * Core declares no permissions of its own. See {@link WorldCommand} for why this is separate from
-     * {@link #farmWorlds}.
+     * Core declares no permissions of its own. See {@link WorldCommand} for a plain "wipe this one
+     * world" — a farm world's own {@code /farmworld} is farmworld-module's now, built on Core's
+     * {@link de.raindancer.core.world.manage.WorldRegenerator} the same way this command is.
      */
     public static void worlds(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Switch to a loaded world, or wipe one and make it again.",

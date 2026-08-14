@@ -125,7 +125,6 @@ Everything below is reached through `RainsCore.get()`.
 | | |
 |---|---|
 | **`settingsFor(...)`** | Your settings as an annotated record — see below. |
-| **`farmWorlds()`** | A farm world is three linked worlds with its own nether and end, regenerated on a schedule. Its portals stay inside it, which is the entire point. |
 | **`de.raindancer.core.ui.menu`** | The one menu framework. Six rows, three bands, chrome the framework owns. |
 | **`de.raindancer.core.platform.log`** | One logger, one logfile per day, rotated and pruned. Never blocks, never throws. |
 | **`de.raindancer.core.ui.banner`** | The startup splash, with a logo drawn from your plugin's name. |

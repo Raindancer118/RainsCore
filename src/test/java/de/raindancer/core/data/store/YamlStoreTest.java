@@ -23,10 +23,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  *
  * <h2>Why this exists</h2>
  * Because the same twenty lines were written seven times in this library alone — {@code PoiStore},
- * {@code CustomItems}, {@code Punishments}, {@code Identities}, {@code FarmWorldState},
- * {@code Achievements}, {@code LootTables} — and again in every plugin that keeps anything. A
- * library whose whole point is removing duplication was the worst offender in its own family, which
- * a review pointed out and which was entirely fair.
+ * {@code CustomItems}, {@code Punishments}, {@code Identities}, {@code Achievements},
+ * {@code LootTables} — and again in every plugin that keeps anything. A library whose whole point
+ * is removing duplication was the worst offender in its own family, which a review pointed out and
+ * which was entirely fair.
  *
  * <p>Worse than the repetition: each copy is a chance to get the write-and-move wrong, and getting
  * it wrong means a server killed at the wrong moment has half a file where everybody's homes used

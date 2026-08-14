@@ -21,10 +21,11 @@ import java.util.function.Consumer;
  *
  * <h2>Why this exists</h2>
  * Because the same twenty lines were written seven times in this library alone — {@code PoiStore},
- * {@code CustomItems}, {@code Punishments}, {@code Identities}, {@code FarmWorldState},
- * {@code Achievements} and {@code LootTables} each had their own copy of the write-to-a-temporary-
- * then-move dance — and again in every plugin that keeps anything. A library whose whole point is
- * removing duplication was the worst offender in its own family. A review said so and was right.
+ * {@code CustomItems}, {@code Punishments}, {@code Identities}, {@code Achievements} and
+ * {@code LootTables} each had their own copy of the write-to-a-temporary-then-move dance — and
+ * again in every plugin that keeps anything, warp-module's {@code WarpRegistry} and
+ * farmworld-module's {@code FarmWorldState} among them now. A library whose whole point is removing
+ * duplication was the worst offender in its own family. A review said so and was right.
  *
  * <p>The repetition is the smaller half. Each copy is a chance to get the write-and-move wrong, and
  * getting it wrong means a server killed at the wrong moment has half a file where everybody's

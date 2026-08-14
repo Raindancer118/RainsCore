@@ -71,11 +71,8 @@ import de.raindancer.core.world.safety.BukkitBlocks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.platform.backup.BackupSettings;
 import de.raindancer.core.platform.backup.Backups;
-import de.raindancer.core.world.farm.FarmWorldPortalListener;
 import de.raindancer.core.world.combat.Combat;
 import de.raindancer.core.world.combat.CombatListener;
-import de.raindancer.core.world.farm.FarmWorldState;
-import de.raindancer.core.world.farm.FarmWorlds;
 import de.raindancer.core.world.protection.BlockProtectionListener;
 import de.raindancer.core.world.protection.EnvironmentProtectionListener;
 import de.raindancer.core.world.protection.InteractionProtectionListener;
@@ -175,9 +172,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      */
     private static final long SECLUSION_PERIOD_TICKS = 10L;
 
-    /** How often farm worlds are asked whether any is due. Cheap; the regeneration is not. */
-    private static final long REGEN_CHECK_TICKS = 20L * 60L;
-
     /**
      * How long after startup the resource pack is built.
      *
@@ -229,7 +223,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private SettingsNavigation navigation;
     private Tablists tablists;
     private ChatPrompts prompts;
-    private FarmWorlds farmWorlds;
     private Land land;
     private LandPolicies landPolicies;
     private LandPolicyStore landPolicyStore;
@@ -397,15 +390,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // every name back rather than freezing whatever was last drawn.
         settings.onChange(config -> applyTablistSettings());
 
-        FarmWorldState farmState = new FarmWorldState(
-                getDataFolder().toPath().resolve("farmworlds.yml"), databases.core());
-        farmState.load();
-        farmWorlds = new FarmWorlds(this, farmState);
-        for (var set : farmState.all()) {
-            farmWorlds.ensure(set);
-        }
-        getServer().getPluginManager().registerEvents(
-                new FarmWorldPortalListener(farmWorlds), this);
         // World protection. Registered here with nothing to protect: the ground itself comes from whichever
         // plugin owns regions, and it registers a LandProvider once it is enabled. Until then every question
         // answers UNKNOWN rather than "nothing is protected" — see Land and LandVerdict.
@@ -609,12 +593,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             items.flush();
             achievements.flush();
             lootTables.flush();
-            farmWorlds.state().flush();
         });
-        // Its own, much slower timer: regenerating stops the server for as long as the disk takes,
-        // so it is checked once a minute rather than folded in with the saves.
-        Scheduling.globalTimer(this, REGEN_CHECK_TICKS, REGEN_CHECK_TICKS,
-                task -> farmWorlds.regenerateWhatIsDue());
 
         Banner banner = Banner.of(getName(), "core utils for Raindancer118's plugins")
                 .version(getPluginMeta().getVersion())
@@ -785,9 +764,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             // Before the plugin goes: an attachment outliving the plugin that owns it is a permission
             // nothing can take away again.
             grantListener.removeEverything();
-        }
-        if (farmWorlds != null) {
-            farmWorlds.state().flush();
         }
         if (punishments != null) {
             punishments.flush();
@@ -1066,12 +1042,6 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public BossBars bossBars() {
         return bossBars;
-    }
-
-
-    @Override
-    public FarmWorlds farmWorlds() {
-        return farmWorlds;
     }
 
     @Override

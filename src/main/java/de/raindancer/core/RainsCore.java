@@ -38,7 +38,6 @@ import de.raindancer.core.moderation.vanish.Vanish;
 import de.raindancer.core.content.vote.Votes;
 import de.raindancer.core.content.pack.ResourcePacks;
 import de.raindancer.core.world.safety.Safety;
-import de.raindancer.core.world.farm.FarmWorlds;
 import de.raindancer.core.world.protection.Land;
 import org.bukkit.plugin.Plugin;
 
@@ -212,12 +211,6 @@ public interface RainsCore {
      * one answer.
      */
     ChatPrompts prompts();
-
-    /**
-     * Farm worlds: a set of three linked worlds — overworld, its own nether, its own end — that can
-     * be regenerated on a schedule without touching the main ones.
-     */
-    FarmWorlds farmWorlds();
 
     /**
      * The one resource pack every plugin's assets go into.

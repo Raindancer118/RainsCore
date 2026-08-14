@@ -20,15 +20,16 @@ import java.util.Locale;
  * {@code /world} — jumping to a loaded world, and throwing one away and making it again.
  *
  * <h2>Why this exists next to {@code /farmworld}</h2>
- * {@code FarmWorldCommand} manages a set of worlds tied together by {@code WorldSet} bookkeeping — a
- * name, a regeneration schedule, a border. Most of the time an owner just wants "send me to that
- * world" or "wipe that one world and start it over", with no schedule and no set to define first. This
- * is that: two subcommands, no state of its own, {@link WorldRegenerator} doing the actual wipe.
+ * {@code /farmworld} (farmworld-module's, built on this package's {@link WorldRegenerator}
+ * underneath) manages a set of worlds tied together by its own bookkeeping — a name, a regeneration
+ * schedule, a border. Most of the time an owner just wants "send me to that world" or "wipe that one
+ * world and start it over", with no schedule and no set to define first. This is that: two
+ * subcommands, no state of its own, {@link WorldRegenerator} doing the actual wipe directly.
  *
  * <h2>Two permissions, not one</h2>
  * Switching worlds is harmless; regenerating one deletes it. A server that wants staff to be able to
  * jump around without trusting them to wipe a world grants one and not the other — the same reasoning
- * {@code FarmWorldCommand} splits {@code use} from {@code manage} for. Neither is declared in
+ * farmworld-module's own command splits {@code use} from {@code manage} for. Neither is declared in
  * {@code paper-plugin.yml} — see its own comment for why Core declares no permissions — so both fall
  * back to Bukkit's own default for an unregistered node: an operator has it, nobody else does, until a
  * server owner grants it explicitly.
