@@ -176,13 +176,28 @@ removed from the `RainsCore` interface. All of it now lives in `warp-module` (1.
 instead of behind `core.warps()`. Zero behavior drift; a real pre-existing bug was found and fixed
 along the way (a reloaded cooldown setting never reached the enforcing registry).
 
-**`FarmWorlds` is next, same playbook, bigger job.** Survey done, not started: Core still has
-`world.farm.FarmWorlds`/`WorldSet`/`FarmWorldState`/`FarmWorldCommand`/`FarmWorldPortalListener` +
-`farmWorlds()` on the interface; `farmworld-module` is a thin wrapper exactly like `warp-module` used
-to be. Bigger than Warps because of `WorldSet` (naming/linking/schedule), `FarmWorldState` (regen
-tracking + `mayDelete` safety + SQLite persistence), portal-target logic, and the regen scheduler —
-Warps was one ~360-line class, this is four classes plus a scheduler. Consumers already identified:
-`RainsCoreTestPlugin`'s `checkFarmWorlds`, `farmworld-module`'s `FarmWorldModule.java` + `ReuseTest.java`.
+**`FarmWorlds` — done too, same session.** RainsCore 1.22.0: deleted `FarmWorlds`/`WorldSet`/
+`FarmWorldState`/`FarmWorldCommand`/`FarmWorldPortalListener` entirely, removed `farmWorlds()` from
+the interface, removed the periodic regen-check timer, the periodic save-flush entry and the
+shutdown flush. All moved into `farmworld-module` (1.1.0) as `model/WorldSet`, `store/FarmWorldState`,
+`store/FarmWorlds` (verbatim, still built on Core's `WorldRegenerator`/`ChunkHolds`/`Safety`
+underneath) and `listener/FarmWorldPortalListener` (rewritten to route through
+`FarmWorldCatalogue`/`FarmWorldServices` like every other listener in the module, instead of taking
+the mechanism directly).
+
+The one genuinely hard part: `FarmWorldState` used to keep `made_at`/`tried_at` in a `farm_world`
+table inside RainsCore's *shared* `core.db`. Owning the concept fully meant the module needed its
+*own* database — but an existing server's regen-schedule history lived in Core's file. Solved with
+`FarmWorldState.migrateFrom(Database legacyCore)`: a one-time, idempotent (`INSERT OR IGNORE`) copy
+from the old shared table into the module's own new `farmworld.db`, called once at module startup
+before `load()`. Verified with dedicated tests (row copies, nulls preserved, a second run doesn't
+stamp over what the module has recorded itself since). The module also picked up its own regen-check
+timer and save-flush timer (both cancelled on disable) — there is now exactly one place that decides
+a farm world is due, where there used to be one here and one in Core; `ReuseTest` was rewritten to
+assert that instead of the old (now backwards) "the module never decides" rule.
+
+Both extractions (Warps, FarmWorlds) are the working template for anything else found later that
+still has a product concept sitting in Core.
 
 ### New recommendation from round 2
 
