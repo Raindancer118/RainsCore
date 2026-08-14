@@ -1121,6 +1121,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public de.raindancer.core.world.chunk.ChunkPregen pregeneration(
+            java.util.List<de.raindancer.core.world.chunk.ChunkAt> region) {
+        return new de.raindancer.core.world.chunk.ChunkPregen(new BukkitChunkLoader(this), region);
+    }
+
+    @Override
     public Effects effects() {
         return effects;
     }

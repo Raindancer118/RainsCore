@@ -8,6 +8,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import java.util.function.BooleanSupplier;
+
 /**
  * The three things that end a warm-up: walking off, being hurt, and logging out.
  *
@@ -38,8 +40,11 @@ public final class TravelListener implements Listener {
      */
     private final Returns returns;
 
-    /** Whether being hurt gives up on the trip. */
-    private final boolean hurtCancels;
+    /** Whether leaving the block gives up on the trip, read fresh on every move. */
+    private final BooleanSupplier moveCancels;
+
+    /** Whether being hurt gives up on the trip, read fresh on every hit. */
+    private final BooleanSupplier hurtCancels;
 
     public TravelListener(Travel travel) {
         this(travel, true);
@@ -51,8 +56,21 @@ public final class TravelListener implements Listener {
      *                    that nobody can complete, and the report reads "warping is broken"
      */
     public TravelListener(Travel travel, boolean hurtCancels) {
+        this(travel, () -> true, () -> hurtCancels);
+    }
+
+    /**
+     * Both switchable, and both read fresh every time rather than fixed when this is built — for a
+     * host whose {@code cancel-on-move} and {@code cancel-on-damage} are reloadable settings, not a
+     * choice made once at startup.
+     *
+     * @param moveCancels whether leaving the block gives up on the trip, asked again on every move
+     * @param hurtCancels whether being hurt gives up on the trip, asked again on every hit
+     */
+    public TravelListener(Travel travel, BooleanSupplier moveCancels, BooleanSupplier hurtCancels) {
         this.travel = travel;
         this.returns = travel.cameFrom();
+        this.moveCancels = moveCancels;
         this.hurtCancels = hurtCancels;
     }
 
@@ -78,15 +96,18 @@ public final class TravelListener implements Listener {
                 && event.getTo().getWorld() == event.getFrom().getWorld()) {
             return;   // turning on the spot, or breathing
         }
+        if (!moveCancels.getAsBoolean()) {
+            return;
+        }
         if (travel.pending().hasMoved(player.getUniqueId(), Travel.spotOf(event.getTo()))) {
             travel.cancel(player, TravelReason.MOVED);
         }
     }
 
-    /** Being hurt cancels, unless this one was built not to. */
+    /** Being hurt cancels, unless this one was built — or set — not to. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onHurt(EntityDamageEvent event) {
-        if (!hurtCancels || !(event.getEntity() instanceof Player player)) {
+        if (!hurtCancels.getAsBoolean() || !(event.getEntity() instanceof Player player)) {
             return;
         }
         travel.cancel(player, TravelReason.HURT);

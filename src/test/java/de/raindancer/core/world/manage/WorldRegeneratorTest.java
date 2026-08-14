@@ -89,8 +89,8 @@ class WorldRegeneratorTest {
     }
 
     @Test
-    @DisplayName("moves everybody standing in the world out before it is unloaded")
-    void evacuatesOccupants() {
+    @DisplayName("sends occupants out, but does not unload or delete while they are still mid-move")
+    void evacuatesOccupantsWithoutUnloadingYet() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
              MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
                      (mockCreator, context) -> when(mockCreator.createWorld())
@@ -101,8 +101,31 @@ class WorldRegeneratorTest {
 
             boolean ok = regenerator.regenerate(world);
 
-            assertThat(ok).isTrue();
+            // Started, not finished: the teleport is in flight, so unloading or deleting now would
+            // either strand the occupant or race Bukkit's own refusal to unload an occupied world.
+            // A caller sees false and is expected to try again once they have actually left — see
+            // FarmWorlds#regenerateOne, which this mirrors.
+            assertThat(ok).isFalse();
             verify(occupant).teleportAsync(org.mockito.ArgumentMatchers.any(Location.class));
+            bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
+            assertThat(worldFolder).exists();
+            assertThat(creators.constructed()).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("an empty world still regenerates as before")
+    void emptyWorldStillRegenerates() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
+                     (mockCreator, context) -> when(mockCreator.createWorld())
+                             .thenReturn(mock(World.class)))) {
+            stubServerBasics(bukkit);
+
+            boolean ok = regenerator.regenerate(world);
+
+            assertThat(ok).isTrue();
+            assertThat(worldFolder).doesNotExist();
         }
     }
 

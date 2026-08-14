@@ -6,18 +6,13 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 /**
  * Farm worlds, as the server has them: created, linked, and thrown away when their time is up.
@@ -217,7 +212,8 @@ public final class FarmWorlds {
                         mainWorldName(), name).orElse(null);
 
         if (world != null) {
-            if (evacuate(world, safety)) {
+            if (de.raindancer.core.world.manage.WorldRegenerator.evacuate(world, safety,
+                    player -> player.sendMessage(farmWorldMessage()))) {
                 // Somebody was in it. Their teleport is in flight and will complete on this thread
                 // once it is free, so there is nothing useful to do here but come back later —
                 // Bukkit refuses to unload a world that still has players, and forcing it would put
@@ -291,7 +287,8 @@ public final class FarmWorlds {
                             mainWorldName(), name).orElse(null);
 
             if (world != null) {
-                if (evacuate(world, safety)) {
+                if (de.raindancer.core.world.manage.WorldRegenerator.evacuate(world, safety,
+                        player -> player.sendMessage(farmWorldMessage()))) {
                     // Somebody is still in it and their teleport is in flight. Deliberately not
                     // waiting: Bukkit refuses to unload a world with players in it, and forcing it
                     // would put them in a world that no longer exists.
@@ -325,38 +322,6 @@ public final class FarmWorlds {
     private static String mainWorldName() {
         List<World> worlds = Bukkit.getWorlds();
         return worlds.isEmpty() ? "world" : worlds.getFirst().getName();
-    }
-
-    /**
-     * Moves everybody out of a world before it stops existing.
-     *
-     * <h2>Why this does not wait for the teleports</h2>
-     * It used to, and that was a deadlock rather than a safeguard. {@code regenerate} runs on the
-     * global region thread — from the due-check timer, or from the command — and a teleport completes
-     * <em>on that same thread</em>. Blocking it while waiting for the future meant the future could
-     * never be completed: on Paper it timed out every single time, so the wait achieved nothing
-     * except a five-second freeze, and then the world was unloaded with the players still in it —
-     * exactly what the wait was there to prevent.
-     *
-     * <p>So the teleports are started and this returns. Whether they landed is answered by asking the
-     * world, which is the only honest question — see {@link #whenEmpty}.
-     *
-     * @return whether anybody had to be moved at all
-     */
-    private boolean evacuate(World world, Location safety) {
-        List<Player> inside = List.copyOf(world.getPlayers());
-        for (Player player : inside) {
-            try {
-                // teleportAsync, not teleport: on Folia a synchronous teleport across regions
-                // throws, and the world would then be unloaded with somebody still in it.
-                player.teleportAsync(safety);
-                player.sendMessage(farmWorldMessage());
-            } catch (RuntimeException failure) {
-                log.warn(failure, "Could not move {} out of '{}'.", player.getName(),
-                        world.getName());
-            }
-        }
-        return !inside.isEmpty();
     }
 
     /**
@@ -394,19 +359,10 @@ public final class FarmWorlds {
             log.error("Refusing to delete '{}': it is not a farm world folder of ours.", folder);
             return false;
         }
-        try (Stream<Path> contents = Files.walk(folder)) {
-            // Deepest first, because a directory cannot be removed until it is empty.
-            List<Path> deepestFirst = contents
-                    .sorted(Comparator.reverseOrder())
-                    .toList();
-            for (Path each : deepestFirst) {
-                Files.deleteIfExists(each);
-            }
-            return true;
-        } catch (IOException failure) {
-            log.error(failure, "Could not delete '{}'.", folder);
-            return false;
-        }
+        // The walk itself is de.raindancer.core.world.manage.WorldRegenerator's — the ownership check
+        // above is what stays ours, since a generic regenerator has no notion of "one of our farm
+        // world folders" to gate on.
+        return de.raindancer.core.world.manage.WorldRegenerator.deleteFolder(folder, name);
     }
 
     // ---------------------------------------------------------------------------- the schedule

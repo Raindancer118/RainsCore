@@ -296,6 +296,19 @@ public interface RainsCore {
     ChunkHolds chunks();
 
     /**
+     * A throttled walk over a region, making sure every chunk in it has been generated at least
+     * once — for a module that wants somewhere already warmed up before anybody has to wait on it,
+     * a scatter radius or a freshly regenerated world's border being the two reasons this exists.
+     *
+     * <p>Knows nothing about why the region matters; a module builds the list of
+     * {@link de.raindancer.core.world.chunk.ChunkAt} itself. Never force-loads — see
+     * {@link de.raindancer.core.world.chunk.ChunkPregen}'s own note on that — so a caller that also
+     * wants the result to stay in memory still asks {@link #chunks()} for a hold, separately.
+     */
+    de.raindancer.core.world.chunk.ChunkPregen pregeneration(
+            java.util.List<de.raindancer.core.world.chunk.ChunkAt> region);
+
+    /**
      * Every sound and every particle any plugin makes.
      *
      * <p>Ask by meaning — {@code play(player, Cues.NO)} — rather than by sound. That is what lets a

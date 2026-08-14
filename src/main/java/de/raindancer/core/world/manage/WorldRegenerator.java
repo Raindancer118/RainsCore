@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -61,7 +62,15 @@ public final class WorldRegenerator {
             log.error("Cannot regenerate '{}': there is nowhere to move players to.", name);
             return false;
         }
-        evacuate(world, safety);
+        if (evacuate(world, safety)) {
+            // Their teleport is in flight and completes on this same thread once it is free — see
+            // FarmWorlds#evacuate, which this mirrors. Unloading now would either strand them mid-move
+            // or simply be refused by Bukkit; either way this is "try again once they've left", not a
+            // failure worth an error line.
+            log.info("'{}' still had players in it. They have been sent out; run this again once "
+                    + "they have left.", name);
+            return false;
+        }
         if (!Bukkit.unloadWorld(world, false)) {
             log.error("Could not unload '{}', so the regeneration was abandoned.", name);
             return false;
@@ -80,15 +89,34 @@ public final class WorldRegenerator {
         return true;
     }
 
-    /** Moves everybody currently in {@code world} out of it, before it is unloaded from under them. */
-    private void evacuate(World world, Location safety) {
-        for (Player player : List.copyOf(world.getPlayers())) {
+    /**
+     * Moves everybody currently in {@code world} out of it, before it is unloaded from under them.
+     *
+     * <p>Shared with {@code FarmWorlds}, which needs the identical move — evacuate, then leave
+     * unloading and deleting to the caller — for each world in a linked set, with its own message and
+     * its own retry bookkeeping on top. This is the one place the actual teleport loop lives.
+     *
+     * @return whether anybody had to be moved at all — a caller must not unload or delete while this
+     *         is true, since their teleport has only just started
+     */
+    public static boolean evacuate(World world, Location safety) {
+        return evacuate(world, safety, player -> { });
+    }
+
+    /** The same, and also given each player before their teleport starts — for a caller with its own message. */
+    public static boolean evacuate(World world, Location safety, Consumer<Player> notify) {
+        List<Player> inside = List.copyOf(world.getPlayers());
+        for (Player player : inside) {
             try {
+                // teleportAsync, not teleport: on Folia a synchronous teleport across regions throws,
+                // and the world would then be unloaded with somebody still in it.
                 player.teleportAsync(safety);
+                notify.accept(player);
             } catch (RuntimeException failure) {
                 log.warn(failure, "Could not move {} out of '{}'.", player.getName(), world.getName());
             }
         }
+        return !inside.isEmpty();
     }
 
     /** The first loaded world's spawn — the safe fallback when there is nowhere more specific to send somebody. */
@@ -97,8 +125,14 @@ public final class WorldRegenerator {
         return worlds.isEmpty() ? null : worlds.getFirst().getSpawnLocation();
     }
 
-    /** Deletes a folder deepest-first, because a directory cannot be removed until it is empty. */
-    private boolean deleteFolder(Path folder, String name) {
+    /**
+     * Deletes a folder deepest-first, because a directory cannot be removed until it is empty.
+     *
+     * <p>Shared with {@code FarmWorlds}, which gates every call behind its own
+     * {@code FarmWorldState#mayDelete} first — this does no ownership check of its own, and a caller
+     * that skipped one would delete whatever path it was handed.
+     */
+    public static boolean deleteFolder(Path folder, String name) {
         if (folder == null || !Files.exists(folder)) {
             return true;
         }
