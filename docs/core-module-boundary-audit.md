@@ -167,6 +167,23 @@ settings loading in `ApmConfig`) but received no source changes — it isn't a F
 at all (a package-manager tool, not a feature) and was never a good target for this effort. Don't
 pick either back up without the user asking again.
 
+### Round 3 (2026-08-14, later still): Warps fully extracted — the template for FarmWorlds
+
+Done, published as RainsCore 1.21.0 (breaking change, agy-verified, full reactor rebuilt against
+the published jar): `Warps`/`Warp`/`WarpUse`/`WarpCommand` deleted entirely from Core, `warps()`
+removed from the `RainsCore` interface. All of it now lives in `warp-module` (1.2.0) as
+`model/Warp`, `model/WarpUse`, `store/WarpRegistry` — built directly on `context.core().places()`
+instead of behind `core.warps()`. Zero behavior drift; a real pre-existing bug was found and fixed
+along the way (a reloaded cooldown setting never reached the enforcing registry).
+
+**`FarmWorlds` is next, same playbook, bigger job.** Survey done, not started: Core still has
+`world.farm.FarmWorlds`/`WorldSet`/`FarmWorldState`/`FarmWorldCommand`/`FarmWorldPortalListener` +
+`farmWorlds()` on the interface; `farmworld-module` is a thin wrapper exactly like `warp-module` used
+to be. Bigger than Warps because of `WorldSet` (naming/linking/schedule), `FarmWorldState` (regen
+tracking + `mayDelete` safety + SQLite persistence), portal-target logic, and the regen scheduler —
+Warps was one ~360-line class, this is four classes plus a scheduler. Consumers already identified:
+`RainsCoreTestPlugin`'s `checkFarmWorlds`, `farmworld-module`'s `FarmWorldModule.java` + `ReuseTest.java`.
+
 ### New recommendation from round 2
 
 `RainsSMPCore` is the most urgent item, more than any single Core-service boundary question: as
