@@ -79,9 +79,20 @@ public final class LogChannel {
         }
         String text = format(message, arguments);
         if (toConsole) {
-            // Prefixed with the channel, not the level: java.util.logging already prints the level,
-            // and printing it twice is how a console line becomes unreadable.
-            Log.console().log(level.consoleLevel(), "[" + name + "] " + text, cause);
+            // DEBUG maps to java.util.logging's FINE, which Paper's own console/log4j threshold
+            // drops by default whatever this class's own level check just decided — turning
+            // console-level to debug in config would silently do nothing. Every other level here
+            // maps at or above INFO, which that default threshold already lets through untouched,
+            // so only DEBUG needs the workaround: log it at INFO with its own label spelled out,
+            // rather than relying on java.util.logging to print a level it would otherwise swallow.
+            if (level == LogLevel.DEBUG) {
+                Log.console().log(java.util.logging.Level.INFO,
+                        "[" + name + "] [DEBUG] " + text, cause);
+            } else {
+                // Prefixed with the channel, not the level: java.util.logging already prints the
+                // level, and printing it twice is how a console line becomes unreadable.
+                Log.console().log(level.consoleLevel(), "[" + name + "] " + text, cause);
+            }
         }
         LogFile sink = Log.fileSink();
         if (toFile && sink != null) {

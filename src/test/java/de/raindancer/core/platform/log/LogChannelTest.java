@@ -122,6 +122,29 @@ class LogChannelTest {
     }
 
     @Test
+    @DisplayName("a debug line reaches the console once the threshold allows it")
+    void debugReachesTheConsole(@TempDir Path directory) throws IOException {
+        // A plain java.util.logging.Logger's own effective level is INFO unless something raises
+        // it — DEBUG maps to FINE, which that default silently drops before it ever reaches a
+        // handler, whatever this class's own threshold check decided. Left unset here on purpose,
+        // the same way Paper's own plugin logger is never told about RainsCore's own level: this
+        // is exactly the gap that let "console-level: debug" do nothing for a release's worth of
+        // "the debug log never shows anything" reports.
+        Recorder recorder = new Recorder();
+        Logger console = Logger.getAnonymousLogger();
+        console.setUseParentHandlers(false);
+        console.addHandler(recorder);
+
+        Log.configure(directory, console, LogLevel.DEBUG, LogLevel.DEBUG, 7);
+        Log.of("mannequin").debug("[redstone] pulse at {}: signal {} -> {} item(s)", "11,69,-8", 4, 371);
+        Log.shutdown();
+
+        assertThat(recorder.messages)
+                .singleElement().asString()
+                .contains("[mannequin]").contains("[DEBUG]").contains("pulse at 11,69,-8");
+    }
+
+    @Test
     @DisplayName("FATAL is written down even when the file threshold is above it")
     void alwaysWritesFatal(@TempDir Path directory) throws IOException {
         Log.configure(directory, Logger.getAnonymousLogger(), LogLevel.FATAL, LogLevel.FATAL, 7);
