@@ -1261,6 +1261,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         actionBars.forget(player.getUniqueId());
+        prompts.forget(player.getUniqueId());
         clickActions.forget(player.getUniqueId());
         scoreboards.forget(player.getUniqueId());
         itemAbilities.forget(player.getUniqueId());

@@ -157,6 +157,16 @@ recommendation and the "build a real Moderation state/policy split" recommendati
 already exist as `warp-module` and `moderation-module` in the reactor — verify their actual content
 before doing that work again from scratch.
 
+### Scope note (2026-08-14, later still): focus is RainsCore + Rain's Flexible Modules only
+
+User confirmed explicitly: `RainsRecords` and `RainsAwesomePluginManager` are out of scope going
+forward. `RainsRecords` keeps the fixes already made this session (Core dependency, actionbar
+routing, the `/recordseller` bootstrap bug fix — commit `8bf70d9`) but gets no further work.
+`RainsAwesomePluginManager` was investigated (duplicate `ChatPrompts`/`MenuManager` logic, duplicate
+settings loading in `ApmConfig`) but received no source changes — it isn't a Flexible Modules module
+at all (a package-manager tool, not a feature) and was never a good target for this effort. Don't
+pick either back up without the user asking again.
+
 ### New recommendation from round 2
 
 `RainsSMPCore` is the most urgent item, more than any single Core-service boundary question: as
