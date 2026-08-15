@@ -38,6 +38,7 @@ import de.raindancer.core.ui.scoreboard.FastBoardFactory;
 import de.raindancer.core.ui.scoreboard.Scoreboards;
 import de.raindancer.core.data.sql.Databases;
 import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.moderation.audit.AuditEntry;
 import de.raindancer.core.data.settings.SettingsChatInput;
 import de.raindancer.core.data.settings.SettingsCommand;
 import de.raindancer.core.data.settings.SettingsNavigation;
@@ -87,6 +88,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -401,7 +404,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         landPolicyStore.problem().ifPresent(trouble -> log.warn("land-flags.yml: {}", trouble));
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
-        getServer().getPluginManager().registerEvents(new InteractionProtectionListener(land, messages), this);
+        getServer().getPluginManager().registerEvents(
+                new InteractionProtectionListener(land, messages, audit), this);
         EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);
         getServer().getPluginManager().registerEvents(environmentProtection, this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
@@ -1220,9 +1224,47 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     // ------------------------------------------------------------------------ housekeeping
 
+    /**
+     * The one basic, cross-cutting fact worth an audit line before any moderator has done anything:
+     * that this account was seen at all. Feature {@code "player"} rather than a plugin's own tag,
+     * because every plugin here shares the one audit journal and joining is not any one of theirs.
+     */
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        if (!settings.current().auditEnabled()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        audit.record(AuditEntry.of("player", "joined")
+                .by(player.getUniqueId(), player.getName())
+                .in(player.getWorld().getName()));
+    }
+
+    /**
+     * Every gamemode change, wherever it came from — a vanilla {@code /gamemode}, another plugin, or
+     * Core's own {@link de.raindancer.core.moderation.players.PlayerAdmin#gamemode}. The event fires
+     * after the change, not before, so there is nothing here to refuse — only to write down.
+     */
+    @EventHandler
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        if (!settings.current().auditEnabled()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        audit.record(AuditEntry.of("player", "changed gamemode")
+                .by(player.getUniqueId(), player.getName())
+                .in(player.getWorld().getName())
+                .with("gamemode", event.getNewGameMode().name()));
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        if (settings.current().auditEnabled()) {
+            audit.record(AuditEntry.of("player", "quit")
+                    .by(player.getUniqueId(), player.getName())
+                    .in(player.getWorld().getName()));
+        }
         actionBars.forget(player.getUniqueId());
         prompts.forget(player.getUniqueId());
         clickActions.forget(player.getUniqueId());

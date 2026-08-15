@@ -1,5 +1,8 @@
 package de.raindancer.core.world.protection;
 
+import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.moderation.audit.AuditEntry;
+import org.bukkit.Location;
 import org.bukkit.entity.ThrownPotion;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
@@ -44,11 +47,23 @@ public final class InteractionProtectionListener implements Listener {
     private final java.util.Map<java.util.UUID, Long> lastPotionRefusal =
             new java.util.concurrent.ConcurrentHashMap<>();
     private final de.raindancer.core.ui.messages.Messages messages;
+    private final Audit audit;
 
     public InteractionProtectionListener(Land land,
                                          de.raindancer.core.ui.messages.Messages messages) {
+        this(land, messages, null);
+    }
+
+    /**
+     * @param audit where a refused attempt at somebody else's container is written down; null records
+     *              nothing
+     */
+    public InteractionProtectionListener(Land land,
+                                         de.raindancer.core.ui.messages.Messages messages,
+                                         Audit audit) {
         this.land = land;
         this.messages = messages;
+        this.audit = audit;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -69,6 +84,9 @@ public final class InteractionProtectionListener implements Listener {
         }
         if (!land.allow(event.getPlayer(), block.getLocation(), required)) {
             event.setCancelled(true);
+            if (required == LandAction.CONTAINERS) {
+                auditContainerAttempt(event.getPlayer(), block.getLocation());
+            }
             return;
         }
 
@@ -496,6 +514,24 @@ public final class InteractionProtectionListener implements Listener {
         return name.endsWith("_BOAT") || name.endsWith("_CHEST_BOAT")
                 || name.endsWith("_RAFT") || name.endsWith("_CHEST_RAFT")
                 || name.equals("MINECART") || name.endsWith("_MINECART");
+    }
+
+    /**
+     * Written down, not just refused. A door that quietly stays shut is not accountability; the point
+     * of the journal is answering "who has been trying my chests" later, when the asking matters.
+     */
+    private void auditContainerAttempt(Player player, Location where) {
+        if (audit == null) {
+            return;
+        }
+        land.areaAt(where).ifPresent(area -> {
+            java.util.UUID owner = area.owners().isEmpty() ? null : area.owners().get(0);
+            audit.record(AuditEntry.of("land", "opened protected container")
+                    .by(player.getUniqueId(), player.getName())
+                    .to(owner, area.name())
+                    .in(where.getWorld() == null ? null : where.getWorld().getName())
+                    .saying("refused in " + area.name()));
+        });
     }
 
     /** One throttled line on the action bar. Shared by the flag refusals, which are all the same shape. */

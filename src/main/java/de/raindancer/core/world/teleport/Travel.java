@@ -1,5 +1,7 @@
 package de.raindancer.core.world.teleport;
 
+import de.raindancer.core.moderation.audit.Audit;
+import de.raindancer.core.moderation.audit.AuditEntry;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Scheduling;
@@ -71,6 +73,7 @@ public final class Travel {
 
     private final Plugin plugin;
     private final Safety safety;
+    private final Audit audit;
     private final Departures departures = new Departures();
     private final Map<UUID, Journey> journeys = new ConcurrentHashMap<>();
     /**
@@ -103,8 +106,19 @@ public final class Travel {
      *               coordinates, which is what a server without Core's chunk holds gets
      */
     public Travel(Plugin plugin, Safety safety) {
+        this(plugin, safety, null);
+    }
+
+    /**
+     * @param safety where a safe arrival is worked out; null means every trip goes to its exact
+     *               coordinates, which is what a server without Core's chunk holds gets
+     * @param audit  where a completed trip is written down; null records nothing, which is what a
+     *               caller that has not been given {@code core.audit()} gets
+     */
+    public Travel(Plugin plugin, Safety safety, Audit audit) {
         this.plugin = plugin;
         this.safety = safety;
+        this.audit = audit;
     }
 
     /** Who is part-way through going somewhere — what a listener and a diagnostic ask. */
@@ -465,6 +479,16 @@ public final class Travel {
                     returns.remember(traveller.getUniqueId(),
                             Waypoint.of(cameFrom, Waypoint.Cause.TELEPORT,
                                     System.currentTimeMillis()));
+                    if (audit != null) {
+                        // One line per completed trip, not per attempt: a refused or cancelled
+                        // warm-up never reaches here, so the journal says what actually happened
+                        // rather than what somebody typed.
+                        audit.record(AuditEntry.of("travel", "teleported")
+                                .by(traveller.getUniqueId(), traveller.getName())
+                                .in(destination.getWorld() == null
+                                        ? null : destination.getWorld().getName())
+                                .saying("to " + trip.what()));
+                    }
                     watcher.arrived(traveller, destination, trip);
                 }));
     }
