@@ -3,10 +3,13 @@ package de.raindancer.core.ui.messages;
 import net.kyori.adventure.audience.Audience;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -513,14 +516,44 @@ public final class Messages {
      */
     public void send(Audience recipient, String key, Object... values) {
         if (recipient != null) {
-            recipient.sendMessage(prefixed(key, values));
+            String text = prefixFor(key) + fill(raw(key), values);
+            recipient.sendMessage(render(withPlaceholders(recipient, text)));
         }
     }
 
     /** The same without the prefix, for the rows of a list where a prefix per line is noise. */
     public void sendPlain(Audience recipient, String key, Object... values) {
         if (recipient != null) {
-            recipient.sendMessage(get(key, values));
+            String text = fill(raw(key), values);
+            recipient.sendMessage(render(withPlaceholders(recipient, text)));
+        }
+    }
+
+    /**
+     * Resolves PlaceholderAPI's own {@code %placeholder%} syntax for a player, if that plugin is
+     * installed.
+     *
+     * <p>Applied after this class's own {@code <name>} substitution and before the result is parsed
+     * as MiniMessage, so whatever a placeholder expands to is treated exactly like the text it sits
+     * beside — this class trusts none of it any more than it trusts the file it came from.
+     *
+     * <p>A no-op for anyone who is not a {@link Player} — the console and command blocks have nothing
+     * for PlaceholderAPI to resolve against — and for a server with no PlaceholderAPI installed at
+     * all, which is why this is guarded rather than called directly: the class is a compile-time-only
+     * dependency and must never be touched unless the plugin manager says it is actually there.
+     */
+    private String withPlaceholders(Audience recipient, String text) {
+        if (!(recipient instanceof Player player)
+                || !Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            return text;
+        }
+        try {
+            return PlaceholderAPI.setPlaceholders(player, text);
+        } catch (RuntimeException broken) {
+            // A badly written expansion costs its own placeholders, never the message it sits in.
+            log.debug("PlaceholderAPI failed to resolve a message's placeholders ({}); sending it "
+                    + "as it is.", broken.getMessage());
+            return text;
         }
     }
 

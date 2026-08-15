@@ -15,3 +15,14 @@ website: https://github.com/Raindancer118/RainsCore
 # The empty bootstrapper is required, not leftover: Paper's bootstrap phase has its own registry, and
 # a plugin that declares no bootstrapper is not in it — so a dependent could not declare
 # `dependencies.bootstrap: RainsCore` and would fail to load with "Unknown/missing dependency".
+
+dependencies:
+  server:
+    # Optional, and only for the server phase: nothing registered at bootstrap sends a message, so
+    # nothing there needs it on the classpath yet. required: false is the whole point — a server with
+    # no PlaceholderAPI installed loads exactly as it did before this existed. load: BEFORE only takes
+    # effect when the plugin is actually present, so it costs nothing when it is not.
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+      join-classpath: true
