@@ -149,6 +149,48 @@ class IdentitiesTest {
         }
     }
 
+    // ------------------------------------------------------------------ the tablist
+
+    @Nested
+    @DisplayName("in the tablist")
+    class TablistName {
+
+        @Test
+        @DisplayName("carries both the nametag prefix and the chat prefix, nametag first")
+        void carriesBoth() {
+            identities.setPrefix(ALICE, "<gold>[Admin] ");
+            identities.setNametagPrefix(ALICE, "<gray>[AFK] ");
+
+            assertThat(plain(identities.tablistName(ALICE, "Raindancer118")))
+                    .as("a rank must not disappear the moment somebody goes AFK, and an AFK badge "
+                            + "must not disappear the moment they open a menu that redraws a rank")
+                    .isEqualTo("[AFK] [Admin] Raindancer118");
+        }
+
+        @Test
+        @DisplayName("is their name alone when they have neither")
+        void plainName() {
+            assertThat(plain(identities.tablistName(ALICE, "Raindancer118")))
+                    .isEqualTo("Raindancer118");
+        }
+
+        @Test
+        @DisplayName("carries the suffix too")
+        void carriesTheSuffix() {
+            identities.setSuffix(ALICE, " <gray>*");
+            assertThat(plain(identities.tablistName(ALICE, "Raindancer118")))
+                    .isEqualTo("Raindancer118 *");
+        }
+
+        @Test
+        @DisplayName("is not clipped the way the over-the-head nametag is")
+        void isNotClippedLikeTheNametag() {
+            identities.setNametagPrefix(ALICE, "<gray>" + "x".repeat(100));
+            assertThat(plain(identities.tablistName(ALICE, "Raindancer118")).length())
+                    .isGreaterThan(Identities.MAX_NAMETAG_CHARS);
+        }
+    }
+
     // ------------------------------------------------------------------ safety
 
     @Nested

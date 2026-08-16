@@ -154,19 +154,20 @@ public final class TablistModel {
     // ------------------------------------------------------------------------ lines
 
     /**
-     * One player's line: their prefix, their name in their colour, their suffix.
+     * One player's line: their nametag prefix (an "away" badge, in practice), their chat prefix,
+     * their name in their colour, their suffix.
      *
-     * <p>Straight through {@link Identities}, so a rank set once shows in chat, above their head and
-     * here — which is the point of having identities at all.
+     * <p>Straight through {@link Identities#tablistName}, so a rank set once shows in chat, above
+     * their head and here — which is the point of having identities at all.
      */
     public Component line(TablistEntry entry) {
-        Component named = identities.chatName(entry.player(), entry.name());
+        Component named = identities.tablistName(entry.player(), entry.name());
         return showPing ? named.append(ping(entry)) : named;
     }
 
     /** The same, with the world after it — for a server that would rather not group. */
     public Component lineWithWorld(TablistEntry entry) {
-        Component named = identities.chatName(entry.player(), entry.name())
+        Component named = identities.tablistName(entry.player(), entry.name())
                 .append(MINI.deserialize("<dark_gray> · <gray>" + worldLabel(entry.world())));
         return showPing ? named.append(ping(entry)) : named;
     }

@@ -198,6 +198,17 @@ class TablistTest {
         }
 
         @Test
+        @DisplayName("carries the nametag prefix too, ahead of the chat prefix — an AFK badge "
+                + "surviving the periodic rebuild is the whole reason this exists")
+        void carriesTheNametagPrefix() {
+            identities.setPrefix(ALICE, "<gold>[Admin] ");
+            identities.setNametagPrefix(ALICE, "<gray>[AFK] ");
+
+            assertThat(plain(model.line(entry(ALICE, "Raindancer118", "world"))))
+                    .isEqualTo("[AFK] [Admin] Raindancer118");
+        }
+
+        @Test
         @DisplayName("can show the world beside the name, for a list that is not grouped")
         void canShowTheWorldInline() {
             assertThat(plain(model.lineWithWorld(entry(ALICE, "Raindancer118", "world_nether"))))

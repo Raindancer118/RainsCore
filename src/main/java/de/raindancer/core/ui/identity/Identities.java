@@ -110,6 +110,37 @@ public final class Identities {
         return clip(built);
     }
 
+    /**
+     * A player's line in the tablist: the nametag prefix in front of everything else — essentials
+     * module's own AFK tracker is the one caller {@link #setNametagPrefix} has, so in practice this
+     * is where "[AFK] " comes from — then the chat prefix, the name in their colour, and the chat
+     * suffix.
+     *
+     * <p>Not {@link #nametag}: that one clips to 32 characters for a client drawing it over a
+     * moving head, and falls back to the chat prefix instead of showing both — right for a floating
+     * label with room for one badge, wrong for a tablist column with room for both a rank and an
+     * "away" marker at once. Not {@link #chatName} either: that one never carries the nametag
+     * prefix at all, which is why a player who went AFK used to vanish from the tablist's own idea
+     * of who is away the moment {@code Tablists.refresh()} next ran — the periodic rebuild rebuilds
+     * every name from {@code chatName}, so a badge that only lived there was overwritten within
+     * seconds of being set.
+     */
+    public Component tablistName(UUID player, String name) {
+        Identity identity = identityOf(player);
+        Component built = Component.empty();
+        if (!identity.nametagPrefix().isEmpty()) {
+            built = built.append(parse(identity.nametagPrefix()));
+        }
+        if (!identity.prefix().isEmpty()) {
+            built = built.append(parse(identity.prefix()));
+        }
+        built = built.append(colouredName(name, identity.colour()));
+        if (!identity.suffix().isEmpty()) {
+            built = built.append(parse(identity.suffix()));
+        }
+        return built;
+    }
+
     /** The second line under a nametag, for whoever is drawing one. */
     public Optional<Component> subtitle(UUID player) {
         String subtitle = identityOf(player).subtitle();
