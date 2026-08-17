@@ -8,6 +8,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Turtle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -197,9 +198,14 @@ public final class EnvironmentProtectionListener implements Listener {
      * old spot and settling into the new one arrive as an {@link EntityChangeBlockEvent}. That is plain
      * gravity rather than a mob chewing on somebody's build, so no flag applies — treating it as grief
      * left falling blocks frozen in place inside every claim that had mob grief switched off.
+     * <p>
+     * A turtle laying its egg fires the same event on the same entity type this method otherwise treats as a
+     * predator, so it needs its own exemption: without one, a claim owner who leaves mob grief off (the
+     * sensible default, since it also covers zombies breaking doors) can never breed turtles on their own
+     * claim — the turtle digs the nest animation and then the egg placement is silently cancelled.
      */
     static LandFlag griefFlagFor(Entity entity) {
-        if (entity instanceof Player || entity instanceof FallingBlock) {
+        if (entity instanceof Player || entity instanceof FallingBlock || entity instanceof Turtle) {
             return null;
         }
         return entity instanceof Enderman ? LandFlag.ENDERMAN_GRIEF : LandFlag.MOB_GRIEF;
