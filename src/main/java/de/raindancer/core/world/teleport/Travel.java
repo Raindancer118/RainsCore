@@ -18,6 +18,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -453,7 +454,7 @@ public final class Travel {
                           TravelWatcher watcher) {
         // Gathered before the player is moved, because afterwards there is nothing standing near them
         // to gather: the dog is still where they were, and they are not there any more.
-        List<Entity> travellingWith = companionsOf(traveller, trip);
+        List<Companion> travellingWith = companionsOf(traveller, trip);
         // The same reason: where they came from has to be read while they are still standing in it.
         Location cameFrom = traveller.getLocation().clone();
 
@@ -473,7 +474,7 @@ public final class Travel {
                         watcher.refused(traveller, TravelReason.TELEPORT_REFUSED, trip);
                         return;
                     }
-                    bring(travellingWith, destination, trip);
+                    bring(travellingWith, destination, trip, traveller);
                     // Recorded only on a teleport that actually happened. Recording the intention
                     // would offer somebody the way back from a journey that was refused.
                     returns.remember(traveller.getUniqueId(),
@@ -496,6 +497,16 @@ public final class Travel {
     // ------------------------------------------------------------------------ what comes along
 
     /**
+     * One thing coming along, and whether it needs re-leashing once it arrives.
+     *
+     * @param wasOnALead whether this was a genuine lead to the traveller — as opposed to a vehicle or
+     *                   a shoulder-passenger, which Paper carries along and re-attaches on its own. See
+     *                   {@link #bring}.
+     */
+    private record Companion(Entity entity, boolean wasOnALead) {
+    }
+
+    /**
      * The entities that travel with this player.
      *
      * <p>Read off the running server and handed to {@link Entourage}, which owns the decision and is
@@ -507,13 +518,14 @@ public final class Travel {
      * are sitting in are the same "I am taking this with me", and treating them differently would mean
      * two villagers in a boat came along only when the boat was on a lead.
      */
-    private List<Entity> companionsOf(Player traveller, Trip trip) {
+    private List<Companion> companionsOf(Player traveller, Trip trip) {
         Entourage entourage = new Entourage(trip.companions());
         if (!entourage.isWorthLooking()) {
             return List.of();
         }
         UUID who = traveller.getUniqueId();
         Map<UUID, Entity> byId = new LinkedHashMap<>();
+        Set<UUID> onALead = new HashSet<>();
         List<Entourage.Candidate> around = new ArrayList<>();
 
         // The vehicle and its other passengers, however far the seat is from the eyes.
@@ -523,7 +535,7 @@ public final class Travel {
             // them with it, and teleporting a passenger in its own right is what throws it out of the
             // boat on arrival. Whether the vehicle may travel at all is then one decision — and a
             // vehicle carrying somebody else never may.
-            consider(vehicle, who, 0, true, byId, around);
+            consider(vehicle, who, 0, true, byId, onALead, around);
         }
         // Whatever is riding on the traveller themselves — a parrot, usually. They arrive with the
         // player for the same reason, so this is only here to keep them out of the nearby scan below.
@@ -543,14 +555,14 @@ public final class Travel {
                 continue;
             }
             consider(nearby, who, blocksBetween(standingAt, nearby.getLocation()), false, byId,
-                    around);
+                    onALead, around);
         }
 
-        List<Entity> coming = new ArrayList<>();
+        List<Companion> coming = new ArrayList<>();
         for (Entourage.Candidate chosen : entourage.from(around, who)) {
             Entity entity = byId.get(chosen.entity());
             if (entity != null) {
-                coming.add(entity);
+                coming.add(new Companion(entity, onALead.contains(chosen.entity())));
             }
         }
         return coming;
@@ -581,13 +593,15 @@ public final class Travel {
     private static final int A_LEADS_LENGTH = 10;
 
     private void consider(Entity entity, UUID traveller, int blocksAway, boolean riding,
-                          Map<UUID, Entity> byId, List<Entourage.Candidate> around) {
+                          Map<UUID, Entity> byId, Set<UUID> onALead,
+                          List<Entourage.Candidate> around) {
         if (entity == null || byId.containsKey(entity.getUniqueId())) {
             return;
         }
         try {
             boolean isPlayer = entity instanceof Player;
-            UUID leadHeldBy = leadHolderOf(entity, traveller, riding);
+            boolean genuinelyLeashed = !riding && isLeashedTo(entity, traveller);
+            UUID leadHeldBy = riding ? traveller : (genuinelyLeashed ? traveller : null);
             UUID tamedBy = entity instanceof Tameable tameable && tameable.isTamed()
                             && tameable.getOwner() != null
                     ? tameable.getOwner().getUniqueId()
@@ -596,6 +610,9 @@ public final class Travel {
             boolean carriesAPlayer = carriesAPlayer(entity);
 
             byId.put(entity.getUniqueId(), entity);
+            if (genuinelyLeashed) {
+                onALead.add(entity.getUniqueId());
+            }
             around.add(new Entourage.Candidate(entity.getUniqueId(), isPlayer, leadHeldBy, tamedBy,
                     blocksAway, isTame, carriesAPlayer));
         } catch (RuntimeException unreadable) {
@@ -624,24 +641,20 @@ public final class Travel {
     }
 
     /**
-     * Who is holding this entity's lead, as far as travelling is concerned.
+     * Whether this entity is genuinely on a lead held by the traveller, as opposed to riding with
+     * them.
      *
      * <p>Checked through {@link Leashable} rather than {@code LivingEntity}: since 1.20.5 a boat or a
      * minecart can carry a lead too, and a mob is not the only thing somebody tows home. A check
      * against {@code LivingEntity} alone is the one a towed boat full of villagers silently fails —
      * the boat is never recognised as led, so it and everyone riding it stays behind.
-     *
-     * @param riding whether it came from the vehicle or passenger list, which counts as led
      */
-    private UUID leadHolderOf(Entity entity, UUID traveller, boolean riding) {
-        if (riding) {
-            return traveller;
+    private boolean isLeashedTo(Entity entity, UUID traveller) {
+        if (!(entity instanceof Leashable leashable) || !leashable.isLeashed()) {
+            return false;
         }
-        if (entity instanceof Leashable leashable && leashable.isLeashed()) {
-            Entity holder = leashable.getLeashHolder();
-            return holder == null ? null : holder.getUniqueId();
-        }
-        return null;
+        Entity holder = leashable.getLeashHolder();
+        return holder != null && holder.getUniqueId().equals(traveller);
     }
 
     /**
@@ -651,32 +664,61 @@ public final class Travel {
      * these may belong to a different region, and one animal that cannot be moved must not stop the
      * rest — or, worse, leave the player standing at the destination with nothing and no explanation.
      *
-     * <p>Nothing is un-leashed or dismounted first. Paper carries a passenger with its vehicle and
-     * re-attaches a lead across a teleport; doing it by hand was tried and produced a dog standing
-     * still with a lead stretched across two worlds.
+     * <p>Nothing is un-leashed or dismounted first — a vehicle's passengers are carried with it and
+     * need no help. But a genuine lead is not: teleporting a leashed entity on its own, holder or not,
+     * snaps the lead the moment the entity's new position is more than a lead's length from where the
+     * holder is standing, which after a warp it always is. So a companion that was actually on a lead
+     * gets put back on one once it lands, rather than trusting Paper to have kept it attached.
      */
-    private void bring(List<Entity> travellingWith, Location destination, Trip trip) {
+    private void bring(List<Companion> travellingWith, Location destination, Trip trip,
+                       Player traveller) {
         int placed = 0;
-        for (Entity companion : travellingWith) {
+        for (Companion companion : travellingWith) {
+            Entity entity = companion.entity();
+            boolean reLeash = companion.wasOnALead();
             // Spread around the arrival rather than stacked in one block. Twenty animals in one
             // block is entity cramming, which suffocates them — a feature that brings the dog and
             // then kills it is worse than one that leaves it behind.
             Location spot = besideTheArrival(destination, placed++, travellingWith.size());
-            Scheduling.entity(plugin, companion, () -> {
+            Scheduling.entity(plugin, entity, () -> {
                 try {
                     if (spot.getWorld() == null || !spot.isWorldLoaded()) {
                         // The world went between the player's arrival and this task. Nothing to do
                         // but say so: the animal stays where it was, which is recoverable.
                         log.warn("Could not bring {} to {}: that world is gone.",
-                                companion.getType(), trip.what());
+                                entity.getType(), trip.what());
                         return;
                     }
-                    companion.teleportAsync(spot, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                    entity.teleportAsync(spot, PlayerTeleportEvent.TeleportCause.PLUGIN)
+                            .thenRun(() -> {
+                                if (!reLeash) {
+                                    return;
+                                }
+                                // A tick's delay: the leash-break the engine does for an entity now
+                                // far from its holder runs as part of settling the move, and re-tying
+                                // it in the same instant just has that undo it again.
+                                Scheduling.entityLater(plugin, entity, 1L, () ->
+                                        reLeash(entity, traveller, trip));
+                            });
                 } catch (RuntimeException thrown) {
-                    log.warn("Could not bring {} to {}: {}", companion.getType(), trip.what(),
+                    log.warn("Could not bring {} to {}: {}", entity.getType(), trip.what(),
                             thrown.toString());
                 }
             });
+        }
+    }
+
+    /** Puts a companion back on its lead after arrival, once, and only if it needs it. */
+    private void reLeash(Entity entity, Player traveller, Trip trip) {
+        if (!entity.isValid() || !traveller.isOnline()
+                || !(entity instanceof Leashable leashable) || leashable.isLeashed()) {
+            return;
+        }
+        try {
+            leashable.setLeashHolder(traveller);
+        } catch (RuntimeException thrown) {
+            log.warn("Could not put {} back on its lead after {}: {}", entity.getType(),
+                    trip.what(), thrown.toString());
         }
     }
 
