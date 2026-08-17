@@ -102,6 +102,11 @@ public final class Scheduling {
                 Math.max(1L, delaySeconds), Math.max(1L, periodSeconds), TimeUnit.SECONDS);
     }
 
+    /** Off-thread, once, after a delay finer than a second — a poll interval, not a wait. */
+    public static void asyncLater(Plugin plugin, long delay, TimeUnit unit, Runnable task) {
+        Bukkit.getAsyncScheduler().runDelayed(plugin, ignored -> task.run(), Math.max(1L, delay), unit);
+    }
+
     private static boolean classPresent(String name) {
         try {
             Class.forName(name);

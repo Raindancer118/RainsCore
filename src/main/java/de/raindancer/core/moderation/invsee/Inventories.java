@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -195,9 +196,50 @@ public final class Inventories {
             return;
         }
         if (!saved.has(owner)) {
-            answer.accept(Outcome.NEVER_SEEN);
+            // They may have just quit: the file this checks for is written when they leave, and on
+            // Folia that write happens on a save thread rather than finishing before the next packet
+            // from a moderator is even read. A name that got this far already came from the server's
+            // own cache of who it has seen, so "never seen" is not yet the honest answer — give the
+            // write a moment to land before it is.
+            Scheduling.async(plugin, () -> awaitSaveFile(watcher, owner, ownerName, level, answer,
+                    NEVER_SEEN_RETRIES));
             return;
         }
+        openSaved(watcher, owner, ownerName, level, answer);
+    }
+
+    /** How long to give a just-written playerdata file to appear before believing it never will. */
+    private static final int NEVER_SEEN_RETRIES = 5;
+    private static final long NEVER_SEEN_RETRY_DELAY_MS = 200L;
+
+    /**
+     * Off-thread: polls for the file a quit save writes, rather than trusting the first look.
+     *
+     * <p>Rescheduled rather than slept through — a thread pool sized for quick disk reads is not
+     * somewhere to hold one open doing nothing, and {@code Thread.sleep} on it is exactly that.
+     */
+    private void awaitSaveFile(Player watcher, UUID owner, String ownerName, Access level,
+                               Consumer<Outcome> answer, int attemptsLeft) {
+        if (saved.has(owner)) {
+            Scheduling.entity(plugin, watcher, () -> openSaved(watcher, owner, ownerName, level, answer));
+            return;
+        }
+        if (attemptsLeft <= 0) {
+            log.warn("{} tried to invsee {} ({}), but no save file ever appeared at {} after {} "
+                    + "attempts, {}ms apart. Either they were never saved under this id, or their "
+                    + "data lives somewhere this is not looking.", watcher.getName(),
+                    nameOf(owner, ownerName), owner, saved.fileFor(owner), NEVER_SEEN_RETRIES,
+                    NEVER_SEEN_RETRY_DELAY_MS);
+            Scheduling.entity(plugin, watcher, () -> answer.accept(Outcome.NEVER_SEEN));
+            return;
+        }
+        Scheduling.asyncLater(plugin, NEVER_SEEN_RETRY_DELAY_MS, TimeUnit.MILLISECONDS,
+                () -> awaitSaveFile(watcher, owner, ownerName, level, answer, attemptsLeft - 1));
+    }
+
+    /** The offline half of {@link #open}, once the save file is known to be there. */
+    private void openSaved(Player watcher, UUID owner, String ownerName, Access level,
+                           Consumer<Outcome> answer) {
         if (level.canEdit() && !offlineEdits.begin(owner, watcher.getUniqueId())) {
             answer.accept(Outcome.BEING_EDITED);
             return;

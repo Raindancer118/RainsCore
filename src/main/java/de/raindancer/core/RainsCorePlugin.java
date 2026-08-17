@@ -93,6 +93,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -501,7 +502,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // The playerdata folder of the main world, which is where the server writes everybody who
         // is not currently on it. Worked out once rather than per read: getWorlds() is a copy.
         inventories = new Inventories(this, inventoryViews, new OfflineEdits(System::currentTimeMillis),
-                getServer().getWorlds().get(0).getWorldFolder().toPath().resolve("playerdata"));
+                playerDataDirOf(getServer().getWorlds().get(0)));
         // Every look and every change written down. Handed over here rather than taken in the
         // constructor because the journal needs its database, which needs the data folder, which is
         // not there until the plugin is enabling.
@@ -802,6 +803,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * other plugin's hands to serve an implementation detail would be rude. Here only the namespaced
      * form exists, which is the only one a button ever uses.
      */
+    /**
+     * Where the given world keeps everybody's saved inventory.
+     *
+     * <p>Minecraft 26.1 moved this from {@code <world>/playerdata/} to {@code <world>/players/data/},
+     * folding it in beside {@code advancements} and {@code stats} under one {@code players/} folder.
+     * A world that has been converted has the new folder; one that has not — an older save, or a
+     * server not yet on 26.1 — still has only the old one. Checked once, here, rather than trusting
+     * the running version: a world can be older than the server reading it.
+     */
+    private Path playerDataDirOf(org.bukkit.World world) {
+        Path root = world.getWorldFolder().toPath();
+        Path modern = root.resolve("players").resolve("data");
+        return Files.isDirectory(modern) ? modern : root.resolve("playerdata");
+    }
+
     /**
      * Reads the moderation half of the settings onto the guard.
      *
