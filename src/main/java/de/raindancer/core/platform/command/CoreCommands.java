@@ -2,6 +2,8 @@ package de.raindancer.core.platform.command;
 
 import de.raindancer.core.ui.chat.ClickCommand;
 import de.raindancer.core.data.settings.SettingsCommand;
+import de.raindancer.core.ui.profile.ProfileCommand;
+import de.raindancer.core.ui.profile.ProfileLink;
 import de.raindancer.core.world.manage.WorldCommand;
 import io.papermc.paper.command.brigadier.Commands;
 
@@ -68,6 +70,21 @@ public final class CoreCommands {
     /** The same, as {@code rcclick} — which is what {@code buttons()} expects by default. */
     public static void clickCallback(Commands registrar) {
         clickCallback(registrar, "rcclick");
+    }
+
+    /**
+     * The command a clicked player name opens their profile through — see {@link ProfileLink} and
+     * {@code ProfileMenu}. Same shape as {@link #clickCallback}, and the same reason: a clickable
+     * thing in chat can only run a command, so this has to exist before any name in chat is clickable
+     * at all, whatever module put it there.
+     */
+    public static void profile(Commands registrar, String name) {
+        registrar.register(name, "Opens a player's profile. Not meant to be typed.", new ProfileCommand());
+    }
+
+    /** The same, as {@link ProfileLink#COMMAND} — which is what {@code ProfileLink} expects. */
+    public static void profile(Commands registrar) {
+        profile(registrar, ProfileLink.COMMAND);
     }
 
     /** Reading and changing every plugin's settings, from chat. */
