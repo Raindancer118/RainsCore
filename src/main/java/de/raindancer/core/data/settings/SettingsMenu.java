@@ -33,6 +33,19 @@ public final class SettingsMenu extends Menu {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
+    /**
+     * The clickable half of the typed-value prompt — its own constant so
+     * {@code SettingsMenuPromptTest} can parse it without a server, per this class's own note above
+     * on why nothing else here has a test.
+     *
+     * <p>{@code run_command} with no leading slash sends exactly the word "cancel" as an ordinary
+     * chat line when clicked — the same line a player could have typed by hand — so it reaches
+     * {@link de.raindancer.core.ui.prompt.ChatPrompts#offer} the same way and needs no special
+     * casing there. Typing "cancel" still works; this is one more door to the same one.
+     */
+    static final String CANCEL_BUTTON = "<click:run_command:'cancel'><hover:show_text:'<gray>Click "
+            + "to leave it as it is'><white><underlined>cancel</underlined></white></hover></click>";
+
     private final SettingsNavigation navigation;
     private final Chat chat;
 
@@ -185,7 +198,7 @@ public final class SettingsMenu extends Menu {
                 // or what it is allowed to be, and both matter more than not leaving the window.
                 viewer.closeInventory();
                 chat.tell(viewer, "<gray>Type a new value for <white><name></white>, or "
-                                + "<white>cancel</white>.",
+                                + CANCEL_BUTTON + ".",
                         Chat.arg("name", setting.title()));
                 chat.row(viewer, "<dark_gray>  now: <gray>"
                         + navigation.registry().display(setting.key()));
