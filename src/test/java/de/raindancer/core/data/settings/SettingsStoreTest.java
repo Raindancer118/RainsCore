@@ -351,6 +351,27 @@ class SettingsStoreTest {
         }
 
         @Test
+        @DisplayName("a NamedTextColor advances through all sixteen names in a fixed order, "
+                + "wrapping round, even though it is not a real Java enum")
+        void cyclesNamedTextColor() {
+            store.load();
+            NamedTextColor first = (NamedTextColor) store.cycle("fences-tint");
+            NamedTextColor second = (NamedTextColor) store.cycle("fences-tint");
+
+            assertThat(first).isNotEqualTo(NamedTextColor.AQUA);
+            assertThat(second).isNotEqualTo(first);
+
+            // Cycling all sixteen from wherever it started returns to the colour it began at —
+            // the one property "a fixed order" actually promises, without hard-coding what that
+            // order is (NamedTextColor.NAMES is a Set, not declared in colour-code order).
+            NamedTextColor last = first;
+            for (int i = 0; i < 15; i++) {
+                last = (NamedTextColor) store.cycle("fences-tint");
+            }
+            assertThat(last).isEqualTo(first);
+        }
+
+        @Test
         @DisplayName("something with no next value is left alone rather than throwing")
         void cyclingTextDoesNothing() {
             store.load();

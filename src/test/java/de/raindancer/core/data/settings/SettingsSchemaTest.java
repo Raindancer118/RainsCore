@@ -203,6 +203,14 @@ class SettingsSchemaTest {
                     .containsExactly("allow", "deny", "ask");
             assertThat(setting("fences-enabled").choices()).isEmpty();
         }
+
+        @Test
+        @DisplayName("a NamedTextColor offers the same sixteen names a GUI cycles and a command "
+                + "completes, even though it is not a Java enum")
+        void namedTextColorOffersItsChoices() {
+            assertThat(setting("fences-tint").choices()).hasSize(16)
+                    .contains("white", "black", "red", "aqua");
+        }
     }
 
     // ------------------------------------------------------------------ defaults

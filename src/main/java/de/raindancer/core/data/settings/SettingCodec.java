@@ -202,6 +202,12 @@ final class SettingCodec {
         if (setting.type() == Boolean.class) {
             return !Boolean.TRUE.equals(current);
         }
+        if (setting.type() == NamedTextColor.class) {
+            List<String> keys = setting.choices();
+            int index = keys.indexOf(NamedTextColor.NAMES.key((NamedTextColor) current));
+            String next = keys.get(index < 0 ? 0 : (index + 1) % keys.size());
+            return NamedTextColor.NAMES.value(next);
+        }
         if (setting.type().isEnum()) {
             Object[] constants = setting.type().getEnumConstants();
             for (int index = 0; index < constants.length; index++) {

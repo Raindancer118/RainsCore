@@ -212,8 +212,20 @@ public final class SettingsSchema<T> {
         }
     }
 
-    /** An enum's constants, lower case — what a command completes and a GUI cycles through. */
+    /**
+     * An enum's constants, lower case — what a command completes and a GUI cycles through.
+     *
+     * <p>{@link NamedTextColor} is not a Java enum — it is an interface with sixteen static
+     * instances — so it would otherwise fall through {@link #isSupported} needing a value typed by
+     * hand for something that is exactly the shape a cycling GUI button already handles.
+     * {@link NamedTextColor#NAMES} is the same sixteen names {@link SettingCodec} already parses and
+     * writes, in the fixed declaration order a "next colour" button needs to mean the same thing
+     * from one click to the next.
+     */
     private static List<String> choicesOf(Class<?> boxed) {
+        if (boxed == NamedTextColor.class) {
+            return List.copyOf(NamedTextColor.NAMES.keys());
+        }
         if (!boxed.isEnum()) {
             return List.of();
         }

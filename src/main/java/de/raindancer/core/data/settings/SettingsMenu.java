@@ -33,19 +33,6 @@ public final class SettingsMenu extends Menu {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
-    /**
-     * The clickable half of the typed-value prompt — its own constant so
-     * {@code SettingsMenuPromptTest} can parse it without a server, per this class's own note above
-     * on why nothing else here has a test.
-     *
-     * <p>{@code run_command} with no leading slash sends exactly the word "cancel" as an ordinary
-     * chat line when clicked — the same line a player could have typed by hand — so it reaches
-     * {@link de.raindancer.core.ui.prompt.ChatPrompts#offer} the same way and needs no special
-     * casing there. Typing "cancel" still works; this is one more door to the same one.
-     */
-    static final String CANCEL_BUTTON = "<click:run_command:'cancel'><hover:show_text:'<gray>Click "
-            + "to leave it as it is'><white><underlined>cancel</underlined></white></hover></click>";
-
     private final SettingsNavigation navigation;
     private final Chat chat;
 
@@ -57,6 +44,35 @@ public final class SettingsMenu extends Menu {
      */
     private static Messages words() {
         return de.raindancer.core.RainsCore.get().messages();
+    }
+
+    private static de.raindancer.core.ui.chat.ChatButtons buttons() {
+        return de.raindancer.core.RainsCore.get().buttons();
+    }
+
+    private static de.raindancer.core.ui.prompt.ChatPrompts prompts() {
+        return de.raindancer.core.RainsCore.get().prompts();
+    }
+
+    /**
+     * The clickable half of the typed-value prompt — a real registered-command button through
+     * {@link de.raindancer.core.ui.chat.ChatButtons}, the same mechanism a claim's Accept/Deny or a
+     * TPA request already use, rather than a click that fakes a typed chat line.
+     *
+     * <h2>Why this replaced sending "cancel" as a bare {@code run_command}</h2>
+     * A client now shows a "Confirm Command Execution" screen for any {@code run_command} click
+     * whose text is not a command it recognises, slash or no slash — the old trick of sending the
+     * word "cancel" as if typed by hand stopped being silent. A button backed by a callback runs an
+     * actual registered command ({@code /rc <token>}), which the client already
+     * knows about, so nothing intercepts the click — one press, no extra enter, exactly the button
+     * every other yes/no prompt in this codebase already is.
+     */
+    private Component cancelButton() {
+        return buttons().label("<white><underlined>cancel</underlined></white>")
+                .tooltip("<gray>Click to leave it as it is")
+                .forOnly(viewer.getUniqueId())
+                .does(who -> prompts().offer(who, "cancel"))
+                .render();
     }
 
     /** How many category buttons fit in the band — the seven columns between the frame panes. */
@@ -197,9 +213,10 @@ public final class SettingsMenu extends Menu {
                 // Typed in chat rather than in an anvil: an anvil cannot show what the value is now
                 // or what it is allowed to be, and both matter more than not leaving the window.
                 viewer.closeInventory();
-                chat.tell(viewer, "<gray>Type a new value for <white><name></white>, or "
-                                + CANCEL_BUTTON + ".",
-                        Chat.arg("name", setting.title()));
+                chat.raw(viewer, chat.prefixed("<gray>Type a new value for <white><name></white>, or ",
+                                Chat.arg("name", setting.title()))
+                        .append(cancelButton())
+                        .append(net.kyori.adventure.text.Component.text(".")));
                 chat.row(viewer, "<dark_gray>  now: <gray>"
                         + navigation.registry().display(setting.key()));
                 if (setting.min() != null) {
