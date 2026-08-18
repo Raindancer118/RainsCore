@@ -1,6 +1,7 @@
 package de.raindancer.core.data.settings;
 
 import de.raindancer.core.ui.identity.Symbols;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 
 import java.util.ArrayList;
@@ -31,6 +32,8 @@ public final class SettingsNavigation {
         NEEDS_TYPING,
         /** It needs a block or item picked, out of Core's own chooser rather than typed by hand. */
         NEEDS_MATERIAL_CHOICE,
+        /** It needs a colour picked from Core's swatch grid, rather than cycled or typed. */
+        NEEDS_COLOR_CHOICE,
         /** Nothing answers to that key. */
         UNKNOWN
     }
@@ -78,13 +81,16 @@ public final class SettingsNavigation {
      * <p>A flag and a small, named choice have an obvious next value; a number does not — up by one or
      * by a hundred? — and a piece of text has nowhere to go at all.
      *
-     * <p>{@link Material} is deliberately excluded even though {@link Setting#choices()} lists every
-     * one this server has — that list exists only so a hand-edited {@code config.yml} shows what is
-     * valid, not because cycling through several hundred materials one click at a time to find
-     * "glass" is a reasonable way to choose one. See {@link Click#NEEDS_MATERIAL_CHOICE}.
+     * <p>{@link Material} and {@link NamedTextColor} are deliberately excluded even though
+     * {@link Setting#choices()} lists every value each can be — that list exists so a hand-edited
+     * {@code config.yml} and {@code /settings set}'s tab-completion show what is valid, not because
+     * cycling through several hundred materials, or even sixteen colours, one click at a time is a
+     * reasonable way to choose one. See {@link Click#NEEDS_MATERIAL_CHOICE} and
+     * {@link Click#NEEDS_COLOR_CHOICE}.
      */
     public boolean canCycle(Setting<?> setting) {
         return setting != null && setting.type() != Material.class
+                && setting.type() != NamedTextColor.class
                 && (setting.type() == Boolean.class || !setting.choices().isEmpty());
     }
 
@@ -103,6 +109,9 @@ public final class SettingsNavigation {
         // parses and is wrong, discovered only by looking at the wall rather than at the setting.
         if (setting.get().type() == Material.class) {
             return Click.NEEDS_MATERIAL_CHOICE;
+        }
+        if (setting.get().type() == NamedTextColor.class) {
+            return Click.NEEDS_COLOR_CHOICE;
         }
         return Click.NEEDS_TYPING;
     }

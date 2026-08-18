@@ -209,6 +209,16 @@ public final class SettingsMenu extends Menu {
                         navigation.registry().saveAll();
                         refresh();
                     }).open();
+            case NEEDS_COLOR_CHOICE -> new de.raindancer.core.ui.choose.ColorChooser(viewer, brand(), this,
+                    setting.title(),
+                    net.kyori.adventure.text.format.NamedTextColor.NAMES.value(
+                            navigation.registry().display(setting.key())),
+                    chosen -> {
+                        navigation.registry().set(setting.key(),
+                                net.kyori.adventure.text.format.NamedTextColor.NAMES.key(chosen));
+                        navigation.registry().saveAll();
+                        refresh();
+                    }).open();
             case NEEDS_TYPING -> {
                 // Typed in chat rather than in an anvil: an anvil cannot show what the value is now
                 // or what it is allowed to be, and both matter more than not leaving the window.
