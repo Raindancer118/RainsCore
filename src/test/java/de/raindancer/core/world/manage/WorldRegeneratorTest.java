@@ -1,5 +1,6 @@
 package de.raindancer.core.world.manage;
 
+import de.raindancer.core.RainsCore;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -7,6 +8,7 @@ import org.bukkit.WorldCreator;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedConstruction;
@@ -16,8 +18,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
@@ -54,6 +61,29 @@ class WorldRegeneratorTest {
         when(world.getPlayers()).thenReturn(List.of());
     }
 
+    private static Player playerWithId(UUID id) {
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(id);
+        when(player.teleportAsync(any(Location.class))).thenReturn(CompletableFuture.completedFuture(true));
+        return player;
+    }
+
+    /** Every test with an occupant reaches {@code destinationFor}, which asks Core for the tracker —
+     *  stubbed to "nothing remembered" unless a test says otherwise. */
+    private static void stubNothingRemembered(MockedStatic<RainsCore> core) {
+        RainsCore live = mock(RainsCore.class);
+        WorldEntryPoints tracker = mock(WorldEntryPoints.class);
+        when(tracker.before(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        when(live.worldEntryPoints()).thenReturn(tracker);
+        core.when(RainsCore::get).thenReturn(live);
+    }
+
+    private static Boolean awaitResult(java.util.function.Consumer<java.util.function.Consumer<Boolean>> call) {
+        AtomicReference<Boolean> result = new AtomicReference<>();
+        call.accept(result::set);
+        return result.get();
+    }
+
     @Test
     @DisplayName("reads getWorldFolder() from the still-loaded World before unloading")
     void readsFolderFromTheWorldItself() {
@@ -63,7 +93,7 @@ class WorldRegeneratorTest {
                              .thenReturn(mock(World.class)))) {
             stubServerBasics(bukkit);
 
-            boolean ok = regenerator.regenerate(world);
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
 
             assertThat(ok).isTrue();
             verify(world).getWorldFolder();
@@ -80,7 +110,7 @@ class WorldRegeneratorTest {
                              .thenReturn(mock(World.class)))) {
             stubServerBasics(bukkit);
 
-            boolean ok = regenerator.regenerate(world);
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
 
             assertThat(ok).isTrue();
             assertThat(creators.constructed()).hasSize(1);
@@ -89,27 +119,116 @@ class WorldRegeneratorTest {
     }
 
     @Test
-    @DisplayName("sends occupants out, but does not unload or delete while they are still mid-move")
-    void evacuatesOccupantsWithoutUnloadingYet() {
+    @DisplayName("an occupant is evacuated and the regeneration still completes once they land")
+    void evacuatesOccupantsThenCompletes() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
              MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
                      (mockCreator, context) -> when(mockCreator.createWorld())
                              .thenReturn(mock(World.class)))) {
+            Player occupant = playerWithId(UUID.randomUUID());
+            when(world.getPlayers()).thenReturn(List.of(occupant));
+            stubServerBasics(bukkit);
+            stubNothingRemembered(core);
+
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            // teleportAsync resolves synchronously in this test, so the whole chain — unload, delete,
+            // recreate — runs to completion in the same call, exactly as it would once a real
+            // teleport's future completes on the main thread.
+            assertThat(ok).isTrue();
+            verify(occupant).teleportAsync(any(Location.class));
+            bukkit.verify(() -> Bukkit.unloadWorld(world, false));
+            assertThat(worldFolder).doesNotExist();
+        }
+    }
+
+    @Test
+    @DisplayName("does not unload or delete until every occupant's teleport has actually landed")
+    void waitsForTeleportsBeforeUnloading() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedStatic<RainsCore> core = mockStatic(RainsCore.class)) {
             Player occupant = mock(Player.class);
+            when(occupant.getUniqueId()).thenReturn(UUID.randomUUID());
+            CompletableFuture<Boolean> pending = new CompletableFuture<>();
+            when(occupant.teleportAsync(any(Location.class))).thenReturn(pending);
+            when(world.getPlayers()).thenReturn(List.of(occupant));
+            stubServerBasics(bukkit);
+            stubNothingRemembered(core);
+
+            AtomicReference<Boolean> result = new AtomicReference<>();
+            regenerator.delete(world, result::set);
+
+            assertThat(result.get()).as("nothing decided yet — the teleport has not landed").isNull();
+            bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
+            assertThat(worldFolder).exists();
+
+            pending.complete(true);
+
+            assertThat(result.get()).isTrue();
+            bukkit.verify(() -> Bukkit.unloadWorld(world, false));
+            assertThat(worldFolder).doesNotExist();
+        }
+    }
+
+    @Test
+    @DisplayName("an occupant with a remembered location is sent there, not to the generic spawn")
+    void sendsOccupantToTheirRememberedLocation() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
+                     (mockCreator, context) -> when(mockCreator.createWorld())
+                             .thenReturn(mock(World.class)))) {
+            UUID occupantId = UUID.randomUUID();
+            Player occupant = playerWithId(occupantId);
             when(world.getPlayers()).thenReturn(List.of(occupant));
             stubServerBasics(bukkit);
 
-            boolean ok = regenerator.regenerate(world);
+            World rememberedWorld = mock(World.class);
+            Location remembered = new Location(rememberedWorld, 100, 65, 100);
+            RainsCore live = mock(RainsCore.class);
+            WorldEntryPoints tracker = mock(WorldEntryPoints.class);
+            when(tracker.before(occupantId)).thenReturn(Optional.of(remembered));
+            when(live.worldEntryPoints()).thenReturn(tracker);
+            core.when(RainsCore::get).thenReturn(live);
 
-            // Started, not finished: the teleport is in flight, so unloading or deleting now would
-            // either strand the occupant or race Bukkit's own refusal to unload an occupied world.
-            // A caller sees false and is expected to try again once they have actually left — see
-            // FarmWorlds#regenerateOne, which this mirrors.
-            assertThat(ok).isFalse();
-            verify(occupant).teleportAsync(org.mockito.ArgumentMatchers.any(Location.class));
-            bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
-            assertThat(worldFolder).exists();
-            assertThat(creators.constructed()).isEmpty();
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            assertThat(ok).isTrue();
+            verify(occupant).teleportAsync(remembered);
+        }
+    }
+
+    @Test
+    @DisplayName("a remembered location still inside the world being deleted is not trusted")
+    void ignoresARememberedLocationInTheDoomedWorldItself() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
+                     (mockCreator, context) -> when(mockCreator.createWorld())
+                             .thenReturn(mock(World.class)))) {
+            UUID occupantId = UUID.randomUUID();
+            Player occupant = playerWithId(occupantId);
+            when(world.getPlayers()).thenReturn(List.of(occupant));
+
+            Location remembered = new Location(world, 1, 65, 1);
+            RainsCore live = mock(RainsCore.class);
+            WorldEntryPoints tracker = mock(WorldEntryPoints.class);
+            when(tracker.before(occupantId)).thenReturn(Optional.of(remembered));
+            when(live.worldEntryPoints()).thenReturn(tracker);
+            core.when(RainsCore::get).thenReturn(live);
+
+            Location expectedFallback = mock(Location.class);
+            World mainWorld = mock(World.class);
+            when(mainWorld.getSpawnLocation()).thenReturn(expectedFallback);
+            bukkit.when(Bukkit::getWorlds).thenReturn(List.of(mainWorld));
+            bukkit.when(() -> Bukkit.unloadWorld(world, false)).thenReturn(true);
+
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            assertThat(ok).isTrue();
+            verify(occupant).teleportAsync(expectedFallback);
+            verify(occupant, never()).teleportAsync(remembered);
         }
     }
 
@@ -122,7 +241,7 @@ class WorldRegeneratorTest {
                              .thenReturn(mock(World.class)))) {
             stubServerBasics(bukkit);
 
-            boolean ok = regenerator.regenerate(world);
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
 
             assertThat(ok).isTrue();
             assertThat(worldFolder).doesNotExist();
@@ -139,7 +258,7 @@ class WorldRegeneratorTest {
             bukkit.when(Bukkit::getWorlds).thenReturn(List.of(mainWorld));
             bukkit.when(() -> Bukkit.unloadWorld(world, false)).thenReturn(false);
 
-            boolean ok = regenerator.regenerate(world);
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
 
             assertThat(ok).isFalse();
             assertThat(worldFolder).exists();
@@ -149,7 +268,116 @@ class WorldRegeneratorTest {
     @Test
     @DisplayName("a null world is refused rather than throwing")
     void nullWorldRefused() {
-        assertThat(regenerator.regenerate(null)).isFalse();
+        assertThat(awaitResult(cb -> regenerator.regenerate(null, cb))).isFalse();
+    }
+
+    @Test
+    @DisplayName("regenerate refuses the primary world without ever asking Bukkit to unload it")
+    void regenerateRefusesThePrimaryWorld() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getWorlds).thenReturn(List.of(world));
+
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            assertThat(ok).isFalse();
+            assertThat(worldFolder).exists();
+            bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
+        }
+    }
+
+    @Nested
+    @DisplayName("create")
+    class Create {
+
+        @Test
+        @DisplayName("creates a world that is not already loaded")
+        void createsAnUnloadedWorld() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
+                         (mockCreator, context) -> when(mockCreator.createWorld())
+                                 .thenReturn(mock(World.class)))) {
+                bukkit.when(() -> Bukkit.getWorld("fresh")).thenReturn(null);
+
+                boolean ok = regenerator.create("fresh");
+
+                assertThat(ok).isTrue();
+                assertThat(creators.constructed()).hasSize(1);
+            }
+        }
+
+        @Test
+        @DisplayName("refuses a world that is already loaded, without touching WorldCreator")
+        void refusesAnAlreadyLoadedWorld() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class)) {
+                bukkit.when(() -> Bukkit.getWorld("build")).thenReturn(world);
+
+                boolean ok = regenerator.create("build");
+
+                assertThat(ok).isFalse();
+                assertThat(creators.constructed()).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("a blank or null name is refused rather than throwing")
+        void blankNameRefused() {
+            assertThat(regenerator.create(null)).isFalse();
+            assertThat(regenerator.create("")).isFalse();
+            assertThat(regenerator.create("   ")).isFalse();
+        }
+
+        @Test
+        @DisplayName("Bukkit refusing to create it comes back false")
+        void bukkitRefusalComesBackFalse() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
+                         (mockCreator, context) -> when(mockCreator.createWorld()).thenReturn(null))) {
+                bukkit.when(() -> Bukkit.getWorld("stubborn")).thenReturn(null);
+
+                assertThat(regenerator.create("stubborn")).isFalse();
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("delete")
+    class Delete {
+
+        @Test
+        @DisplayName("unloads and deletes the folder, without recreating anything")
+        void deletesWithoutRecreating() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class)) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> regenerator.delete(world, cb));
+
+                assertThat(ok).isTrue();
+                assertThat(worldFolder).doesNotExist();
+                assertThat(creators.constructed()).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("refuses the primary world without ever asking Bukkit to unload it")
+        void refusesThePrimaryWorld() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+                bukkit.when(Bukkit::getWorlds).thenReturn(List.of(world));
+
+                Boolean ok = awaitResult(cb -> regenerator.delete(world, cb));
+
+                assertThat(ok).isFalse();
+                assertThat(worldFolder).exists();
+                bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
+            }
+        }
+
+        @Test
+        @DisplayName("a null world is refused rather than throwing")
+        void nullWorldRefused() {
+            assertThat(awaitResult(cb -> regenerator.delete(null, cb))).isFalse();
+        }
     }
 
     private void stubServerBasics(MockedStatic<Bukkit> bukkit) {

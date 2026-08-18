@@ -192,6 +192,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatButtons buttons;
     private Scoreboards scoreboards;
     private BossBars bossBars;
+    private final de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints =
+            new de.raindancer.core.world.manage.WorldEntryPoints();
     private PoiStore places;
     private Identities identities;
     private Grants grants;
@@ -279,6 +281,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         actionBars = new ActionBars(new BukkitActionBarSink(), System::currentTimeMillis);
         scoreboards = new Scoreboards(new FastBoardFactory());
         bossBars = new BossBars(new BukkitBarViewers());
+        getServer().getPluginManager().registerEvents(worldEntryPoints, this);
 
         // Before every store, because each of them is handed one. Opening a database applies its
         // schema, so a subsystem given one whose tables are not there yet fails a query at a time in
@@ -1039,6 +1042,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints() {
+        return worldEntryPoints;
+    }
+
+    @Override
     public ResourcePacks resourcePacks() {
         return resourcePacks;
     }
@@ -1266,6 +1274,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         land.forget(player.getUniqueId());
         movementProtection.forget(player.getUniqueId());
         seclusion.forget(player.getUniqueId());
+        worldEntryPoints.forget(player.getUniqueId());
         if (combatListener != null) {
             combatListener.forget(player.getUniqueId());
         }

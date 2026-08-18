@@ -138,19 +138,21 @@ public final class WorldCommand implements BasicCommand {
             }
         }
         chat().tell(sender, "<gray>Regenerating <name> — the server will pause.", Chat.arg("name", name));
-        boolean ok = regenerator.regenerate(world);
-        if (!ok) {
-            chat().no(sender, "Something went wrong; the server log has it.");
-            return;
-        }
-        chat().ok(sender, "<name> is new.", Chat.arg("name", name));
-        if (toReturn instanceof Player player) {
-            World fresh = Bukkit.getWorld(name);
-            if (fresh != null) {
-                var target = fresh.getSpawnLocation();
-                Scheduling.region(plugin(), target, () -> player.teleport(target));
+        OfflinePlayer finalToReturn = toReturn;
+        regenerator.regenerate(world, ok -> {
+            if (!ok) {
+                chat().no(sender, "Something went wrong; the server log has it.");
+                return;
             }
-        }
+            chat().ok(sender, "<name> is new.", Chat.arg("name", name));
+            if (finalToReturn instanceof Player player) {
+                World fresh = Bukkit.getWorld(name);
+                if (fresh != null) {
+                    var target = fresh.getSpawnLocation();
+                    Scheduling.region(plugin(), target, () -> player.teleport(target));
+                }
+            }
+        });
     }
 
     // ------------------------------------------------------------------------ completion

@@ -115,6 +115,13 @@ public interface RainsCore {
     BossBars bossBars();
 
     /**
+     * Where every player was, right before the last time their world actually changed — what
+     * {@link de.raindancer.core.world.manage.WorldRegenerator} sends somebody back to when the world
+     * they are standing in is deleted out from under them, in place of a generic spawn.
+     */
+    de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints();
+
+    /**
      * Every place any plugin has asked to remember: homes, stops on a ghast line, where somebody
      * died. One store, so a ghast line can fly a player to their own home without either plugin
      * knowing about the other.
