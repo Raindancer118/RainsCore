@@ -191,9 +191,13 @@ public final class WorldRegenerator {
         return true;
     }
 
-    /** Whether {@code world} is the one at index 0 of {@link Bukkit#getWorlds()} — Paper's own
-     *  level-name world, which {@link Bukkit#unloadWorld} refuses unconditionally. */
-    private static boolean isPrimaryWorld(World world) {
+    /**
+     * Whether {@code world} is the one at index 0 of {@link Bukkit#getWorlds()} — Paper's own
+     * level-name world, which {@link Bukkit#unloadWorld} refuses unconditionally. Public so a caller
+     * can warn about a configuration that names the primary world before ever attempting
+     * {@link #delete}/{@link #regenerate}, rather than only finding out when one fails.
+     */
+    public static boolean isPrimaryWorld(World world) {
         List<World> worlds = Bukkit.getWorlds();
         return !worlds.isEmpty() && worlds.getFirst().equals(world);
     }

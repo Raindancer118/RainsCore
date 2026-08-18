@@ -272,6 +272,18 @@ class WorldRegeneratorTest {
     }
 
     @Test
+    @DisplayName("isPrimaryWorld answers true for the world at index 0, and false for any other")
+    void isPrimaryWorldChecksTheFirstWorld() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            World other = mock(World.class);
+            bukkit.when(Bukkit::getWorlds).thenReturn(List.of(world, other));
+
+            assertThat(WorldRegenerator.isPrimaryWorld(world)).isTrue();
+            assertThat(WorldRegenerator.isPrimaryWorld(other)).isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("regenerate refuses the primary world without ever asking Bukkit to unload it")
     void regenerateRefusesThePrimaryWorld() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
