@@ -78,6 +78,18 @@ class WorldRegeneratorTest {
         core.when(RainsCore::get).thenReturn(live);
     }
 
+    /**
+     * Every {@link WorldCreator} built while this is open hands back {@code result} — and returns
+     * itself from {@code environment(...)}, the way the real builder does, so the call chain a
+     * regeneration makes does not fall over a mock's default {@code null}.
+     */
+    private static MockedConstruction<WorldCreator> creatorsMaking(World result) {
+        return mockConstruction(WorldCreator.class, (creator, context) -> {
+            when(creator.environment(any())).thenReturn(creator);
+            when(creator.createWorld()).thenReturn(result);
+        });
+    }
+
     private static Boolean awaitResult(java.util.function.Consumer<java.util.function.Consumer<Boolean>> call) {
         AtomicReference<Boolean> result = new AtomicReference<>();
         call.accept(result::set);
@@ -88,9 +100,7 @@ class WorldRegeneratorTest {
     @DisplayName("reads getWorldFolder() from the still-loaded World before unloading")
     void readsFolderFromTheWorldItself() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             stubServerBasics(bukkit);
 
             Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
@@ -101,13 +111,30 @@ class WorldRegeneratorTest {
         }
     }
 
+    /**
+     * A nether that came back as an overworld would be a silent, unrecoverable swap: the folder is
+     * gone by then, and nothing about the new world says it was ever meant to be anything else.
+     */
+    @Test
+    @DisplayName("puts the world back in the environment it had, not always a plain overworld")
+    void keepsTheEnvironmentItHad() {
+        when(world.getEnvironment()).thenReturn(World.Environment.NETHER);
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
+            stubServerBasics(bukkit);
+
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            assertThat(ok).isTrue();
+            verify(creators.constructed().getFirst()).environment(World.Environment.NETHER);
+        }
+    }
+
     @Test
     @DisplayName("never sets a seed on the new WorldCreator")
     void neverSetsASeed() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             stubServerBasics(bukkit);
 
             Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
@@ -123,9 +150,7 @@ class WorldRegeneratorTest {
     void evacuatesOccupantsThenCompletes() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
              MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             Player occupant = playerWithId(UUID.randomUUID());
             when(world.getPlayers()).thenReturn(List.of(occupant));
             stubServerBasics(bukkit);
@@ -176,9 +201,7 @@ class WorldRegeneratorTest {
     void sendsOccupantToTheirRememberedLocation() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
              MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             UUID occupantId = UUID.randomUUID();
             Player occupant = playerWithId(occupantId);
             when(world.getPlayers()).thenReturn(List.of(occupant));
@@ -204,9 +227,7 @@ class WorldRegeneratorTest {
     void ignoresARememberedLocationInTheDoomedWorldItself() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
              MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             UUID occupantId = UUID.randomUUID();
             Player occupant = playerWithId(occupantId);
             when(world.getPlayers()).thenReturn(List.of(occupant));
@@ -236,9 +257,7 @@ class WorldRegeneratorTest {
     @DisplayName("an empty world still regenerates as before")
     void emptyWorldStillRegenerates() {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
-             MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                     (mockCreator, context) -> when(mockCreator.createWorld())
-                             .thenReturn(mock(World.class)))) {
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             stubServerBasics(bukkit);
 
             Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
@@ -305,9 +324,7 @@ class WorldRegeneratorTest {
         @DisplayName("creates a world that is not already loaded")
         void createsAnUnloadedWorld() {
             try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
-                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                         (mockCreator, context) -> when(mockCreator.createWorld())
-                                 .thenReturn(mock(World.class)))) {
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
                 bukkit.when(() -> Bukkit.getWorld("fresh")).thenReturn(null);
 
                 boolean ok = regenerator.create("fresh");
@@ -340,11 +357,24 @@ class WorldRegeneratorTest {
         }
 
         @Test
+        @DisplayName("builds the world in the environment it was asked for")
+        void createsInTheGivenEnvironment() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
+                bukkit.when(() -> Bukkit.getWorld("fresh_nether")).thenReturn(null);
+
+                boolean ok = regenerator.create("fresh_nether", World.Environment.NETHER);
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).environment(World.Environment.NETHER);
+            }
+        }
+
+        @Test
         @DisplayName("Bukkit refusing to create it comes back false")
         void bukkitRefusalComesBackFalse() {
             try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
-                 MockedConstruction<WorldCreator> creators = mockConstruction(WorldCreator.class,
-                         (mockCreator, context) -> when(mockCreator.createWorld()).thenReturn(null))) {
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(null)) {
                 bukkit.when(() -> Bukkit.getWorld("stubborn")).thenReturn(null);
 
                 assertThat(regenerator.create("stubborn")).isFalse();

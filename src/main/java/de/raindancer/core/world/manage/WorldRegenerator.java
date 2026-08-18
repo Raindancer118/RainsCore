@@ -74,12 +74,16 @@ public final class WorldRegenerator {
             return;
         }
         String name = world.getName();
+        // Read while the world is still there, for the same reason its folder is: once it is deleted
+        // nothing left says whether it was a nether, an end or a plain overworld, and recreating it as
+        // the wrong one is a swap nobody can undo — the old folder is gone by then.
+        World.Environment environment = world.getEnvironment();
         delete(world, deleted -> {
             if (!deleted) {
                 whenDone.accept(false);
                 return;
             }
-            whenDone.accept(create(name));
+            whenDone.accept(create(name, environment));
         });
     }
 
@@ -175,6 +179,18 @@ public final class WorldRegenerator {
      * @return whether it now exists and is loaded
      */
     public boolean create(String name) {
+        return create(name, World.Environment.NORMAL);
+    }
+
+    /**
+     * The same, in a chosen dimension — a nether or an end rather than an overworld. What
+     * {@link #regenerate} uses to put a world back as whatever it already was, and what a caller
+     * building a linked set of worlds ({@code x}, {@code x_nether}, {@code x_the_end}) needs to make
+     * the other two at all.
+     *
+     * @return whether it now exists and is loaded
+     */
+    public boolean create(String name, World.Environment environment) {
         if (name == null || name.isBlank()) {
             return false;
         }
@@ -182,7 +198,9 @@ public final class WorldRegenerator {
             log.warn("'{}' is already loaded; not creating it again.", name);
             return false;
         }
-        World created = new WorldCreator(name).createWorld();
+        World created = new WorldCreator(name)
+                .environment(environment == null ? World.Environment.NORMAL : environment)
+                .createWorld();
         if (created == null) {
             log.error("The server would not create the world '{}'.", name);
             return false;
