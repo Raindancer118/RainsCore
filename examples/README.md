@@ -20,7 +20,7 @@ URL goes instead.
 <dependency>
     <groupId>de.raindancer</groupId>
     <artifactId>RainsCore</artifactId>
-    <version>1.18.0</version>
+    <version>1.30.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("de.raindancer:RainsCore:1.18.0")
+    compileOnly("de.raindancer:RainsCore:1.30.0")
 }
 ```
 
