@@ -3,6 +3,7 @@ package de.raindancer.core.world.geometry;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -27,6 +28,34 @@ public record ColumnPolygon(List<Column> vertices) {
         public Column offset(int dx, int dz) {
             return new Column(x + dx, z + dz);
         }
+
+        /** How a column is written down — one line, so a stored shape is a readable list. */
+        public String serialize() {
+            return x + "," + z;
+        }
+
+        /**
+         * Reads one back.
+         *
+         * <p>Empty rather than a default for anything that is not a column. A file with one damaged
+         * line otherwise loads a shape with a corner silently at the world origin, which is a wall
+         * running off to 0/0 — visibly wrong, but only once it has been built.
+         */
+        public static Optional<Column> deserialize(String text) {
+            if (text == null) {
+                return Optional.empty();
+            }
+            String[] parts = text.split(",");
+            if (parts.length != 2) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(new Column(Integer.parseInt(parts[0].trim()),
+                        Integer.parseInt(parts[1].trim())));
+            } catch (NumberFormatException notANumber) {
+                return Optional.empty();
+            }
+        }
     }
 
     public ColumnPolygon {
@@ -34,6 +63,23 @@ public record ColumnPolygon(List<Column> vertices) {
         if (vertices.size() < 3) {
             throw new IllegalArgumentException("a polygon needs at least three corners, got " + vertices.size());
         }
+    }
+
+    /**
+     * The rectangle between two opposite corners, in either order.
+     *
+     * <p>Here rather than in every caller: two corners is how a rectangle is actually marked out —
+     * one click and then the other — and the four-corner list that follows from them is the same
+     * four every time, written wrongly in a different way by each caller that writes it out by hand.
+     */
+    public static ColumnPolygon rectangle(int x1, int z1, int x2, int z2) {
+        int minX = Math.min(x1, x2);
+        int maxX = Math.max(x1, x2);
+        int minZ = Math.min(z1, z2);
+        int maxZ = Math.max(z1, z2);
+        return new ColumnPolygon(List.of(
+                new Column(minX, minZ), new Column(maxX, minZ),
+                new Column(maxX, maxZ), new Column(minX, maxZ)));
     }
 
     /**

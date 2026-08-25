@@ -92,6 +92,48 @@ class ColumnPolygonTest {
     }
 
     @Test
+    @DisplayName("a rectangle is the same four corners whichever two it was given")
+    void rectangleNormalisesItsCorners() {
+        ColumnPolygon fromTopLeft = ColumnPolygon.rectangle(0, 0, 10, 6);
+        ColumnPolygon fromBottomRight = ColumnPolygon.rectangle(10, 6, 0, 0);
+
+        assertThat(fromTopLeft).isEqualTo(fromBottomRight);
+        assertThat(fromTopLeft.vertices()).containsExactly(
+                new Column(0, 0), new Column(10, 0), new Column(10, 6), new Column(0, 6));
+    }
+
+    @Test
+    @DisplayName("a rectangle with no width is still a shape one column wide, not an error")
+    void rectangleToleratesADegenerateSide() {
+        assertThat(ColumnPolygon.rectangle(4, 4, 4, 9).interiorColumns()).hasSize(6);
+    }
+
+    @Test
+    @DisplayName("a column survives being written down and read back")
+    void roundTripsThroughText() {
+        Column column = new Column(-1234, 5678);
+
+        assertThat(Column.deserialize(column.serialize())).contains(column);
+    }
+
+    @Test
+    @DisplayName("text that is not a column reads as nothing rather than as 0,0")
+    void refusesRubbish() {
+        assertThat(Column.deserialize("not a column")).isEmpty();
+        assertThat(Column.deserialize("1")).isEmpty();
+        assertThat(Column.deserialize("1,2,3")).isEmpty();
+        assertThat(Column.deserialize("x,2")).isEmpty();
+        assertThat(Column.deserialize(null)).isEmpty();
+        assertThat(Column.deserialize("")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("stray whitespace around a written column is tolerated — a hand-edited file still loads")
+    void toleratesWhitespace() {
+        assertThat(Column.deserialize(" 4 , -7 ")).contains(new Column(4, -7));
+    }
+
+    @Test
     @DisplayName("the bounds are the corners' own extremes")
     void boundsAreTheExtremes() {
         ColumnPolygon polygon = new ColumnPolygon(List.of(
