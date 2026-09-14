@@ -68,6 +68,13 @@ public final class GrantListener implements Listener {
         if (player == null) {
             return;
         }
+        if (grants.usesLuckPerms()) {
+            // LuckPerms already applies its own groups and nodes to the player through its own
+            // mechanism, well before this ever runs. An attachment on top would either be pure
+            // duplication or, worse, could outrank a deliberate negation an admin wrote in LuckPerms —
+            // so with LuckPerms behind Grants, this listener has nothing to do.
+            return;
+        }
         UUID who = player.getUniqueId();
         // The old attachment goes first. Setting the new nodes over the top of it would leave anything
         // that was revoked still attached, so a demotion would not take effect until the next relog.

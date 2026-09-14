@@ -5,6 +5,7 @@ import de.raindancer.core.world.geometry.ColumnPolygon.Column;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One player marking a shape out by clicking blocks — the corners so far, and whether they are a
@@ -36,6 +37,16 @@ public final class MarkingSession {
     private final Mode mode;
     private final List<Column> vertices = new ArrayList<>();
 
+    /**
+     * The height each corner was clicked at, for showing the marking back to whoever is making it.
+     *
+     * <p>Deliberately <em>not</em> part of the shape — a shape marked while standing on a hill has to
+     * be the same shape as one marked from the valley, which is the whole reason {@link Column} has no
+     * height. This is only so a preview can put a marker where the click actually landed rather than
+     * guessing at the ground, and nothing about what gets built may read it.
+     */
+    private final List<Integer> clickedY = new ArrayList<>();
+
     public MarkingSession(String world, Mode mode) {
         this.world = world;
         this.mode = mode;
@@ -59,11 +70,25 @@ public final class MarkingSession {
      * @return whether it was added
      */
     public boolean add(Column column) {
+        return add(column, null);
+    }
+
+    /** The same, remembering where the click landed so a preview can mark it. */
+    public boolean add(Column column, Integer y) {
         if (!vertices.isEmpty() && vertices.get(vertices.size() - 1).equals(column)) {
             return false;
         }
         vertices.add(column);
+        clickedY.add(y);
         return true;
+    }
+
+    /** The height this corner was clicked at, if it was clicked rather than typed. */
+    public Optional<Integer> clickedYAt(int index) {
+        if (index < 0 || index >= clickedY.size()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(clickedY.get(index));
     }
 
     /** @return whether there was a corner to take back */
@@ -72,6 +97,7 @@ public final class MarkingSession {
             return false;
         }
         vertices.remove(vertices.size() - 1);
+        clickedY.remove(clickedY.size() - 1);
         return true;
     }
 

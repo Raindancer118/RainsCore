@@ -73,11 +73,16 @@ class MarkingListenerTest {
     }
 
     private Block blockAt(String world, int x, int z) {
+        return blockAt(world, x, 70, z);
+    }
+
+    private Block blockAt(String world, int x, int y, int z) {
         Block block = mock(Block.class);
         World bukkitWorld = mock(World.class);
         when(bukkitWorld.getName()).thenReturn(world);
         when(block.getWorld()).thenReturn(bukkitWorld);
         when(block.getX()).thenReturn(x);
+        when(block.getY()).thenReturn(y);
         when(block.getZ()).thenReturn(z);
         return block;
     }
@@ -94,6 +99,15 @@ class MarkingListenerTest {
 
         assertThat(recorded).containsExactly(new Recorded("added", 1));
         assertThat(sessions.sessionOf(playerId).orElseThrow().vertices()).containsExactly(new Column(7, 9));
+    }
+
+    @Test
+    @DisplayName("the corner remembers the block that was clicked, not where the clicker stood")
+    void remembersTheClickedBlocksHeight() {
+        listener.onInteract(click(Action.RIGHT_CLICK_BLOCK, blockAt("world", 3, 64, 3),
+                EquipmentSlot.HAND));
+
+        assertThat(sessions.sessionOf(playerId).orElseThrow().clickedYAt(0)).contains(64);
     }
 
     @Test

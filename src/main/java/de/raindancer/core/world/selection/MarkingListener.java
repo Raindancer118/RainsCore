@@ -115,7 +115,10 @@ public final class MarkingListener implements Listener {
             if (!block.getWorld().getName().equals(session.world())) {
                 return;
             }
-            if (session.add(new Column(block.getX(), block.getZ()))) {
+            // The clicked block's own height, not the clicker's: a preview marker put at the player's
+            // feet floats above the ground they were pointing at, which is what it looked like on the
+            // test server. The shape itself still ignores this — see MarkingSession#clickedYAt.
+            if (session.add(new Column(block.getX(), block.getZ()), block.getY())) {
                 callback.onVertexAdded(player, session);
             }
         }

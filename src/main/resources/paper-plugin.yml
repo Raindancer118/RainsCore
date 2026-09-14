@@ -26,3 +26,10 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
+    # Same treatment. Grants picks a LuckPerms-backed store over its own file when this is present —
+    # see Grants and LuckPermsGrantStore — and load: BEFORE is what lets it ask
+    # LuckPermsProvider.get() during onEnable rather than racing LuckPerms' own startup.
+    LuckPerms:
+      load: BEFORE
+      required: false
+      join-classpath: true

@@ -328,8 +328,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                     org.bukkit.permissions.PermissionDefault.FALSE));
         }
 
-        grants = new Grants(getDataFolder().toPath());
+        grants = new Grants(getDataFolder().toPath(), this);
         grants.load();
+        log.info(grants.usesLuckPerms()
+                ? "Permissions granted through moderation and elsewhere are managed through LuckPerms."
+                : "Permissions granted through moderation and elsewhere use the built-in local store — "
+                        + "install LuckPerms for groups, inheritance and contexts.");
         grantListener = new GrantListener(this, grants);
         // What makes a promotion or a demotion take effect while the player is standing there. Without
         // it the grant sat in grants.yml doing nothing until they reconnected — and the revocation case

@@ -1,18 +1,13 @@
 package de.raindancer.core.platform.permission;
 
-import de.raindancer.core.data.store.YamlStore;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
-import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
@@ -20,19 +15,20 @@ import java.util.function.BiConsumer;
  *
  * <h2>What this is not</h2>
  * <b>Not a permissions plugin.</b> No groups, no inheritance, no contexts, no wildcards, no negative
- * nodes — and it should never grow them. LuckPerms exists and is better at every one of those. This is
- * the small thing a server <em>without</em> one needs: a list of nodes granted to a named person,
- * applied when they join, and still there tomorrow.
+ * nodes — and it should never grow them itself. LuckPerms exists and is better at every one of those,
+ * which is exactly why {@link LuckPermsGrantStore} hands this class's questions to LuckPerms rather than
+ * this class reinventing any of it.
  *
- * <p>It layers rather than replaces. A server that later installs LuckPerms keeps whatever it grants;
- * these are applied on top through a {@link org.bukkit.permissions.PermissionAttachment}, which is the
- * per-player mechanism Bukkit already has for exactly this.
+ * <p>It layers rather than replaces. A server without LuckPerms gets {@link LocalGrantStore}: a list of
+ * nodes granted to a named person, applied when they join, and still there tomorrow. A server that has
+ * LuckPerms installed gets {@link LuckPermsGrantStore} instead, transparently — every caller of this
+ * class asks the exact same questions either way and neither knows or needs to know which store is
+ * underneath.
  *
- * <h2>Why it is here rather than in whichever plugin needed it first</h2>
- * The plugin that needed it first was a moderation module handing out staff presets — and those presets
- * include <em>land claim</em> permissions. A grant store inside the moderation module would be a
- * moderation module that the claims module depends on, which is the cycle the whole arrangement exists
- * to prevent. Two plugins wanted this before it was written.
+ * <h2>Which store, and when that is decided</h2>
+ * Chosen once, at construction, by whichever constructor is used — never re-decided afterwards. A server
+ * that installs LuckPerms mid-session does not have its grants migrate under it; that only happens on
+ * the restart LuckPerms needed anyway.
  *
  * <h2>Nodes are stored exactly as written</h2>
  * Deliberately not normalised. Bukkit compares permission strings literally, so lower-casing a node
@@ -41,15 +37,15 @@ import java.util.function.BiConsumer;
  *
  * <h2>Thread safety</h2>
  * Read from permission checks, which happen on every command and inside render loops; written from
- * commands and menu clicks. Safe from any thread. {@link #load} and {@link #flush} touch disk and
- * should not be called on the server thread.
+ * commands and menu clicks. Safe from any thread. {@link #load} and {@link #flush} touch disk (or, with
+ * LuckPerms, the network) and should not be called on the server thread.
  */
 public final class Grants {
 
     private static final LogChannel log = Log.of("permissions");
 
-    private final ConcurrentHashMap<UUID, Set<String>> granted = new ConcurrentHashMap<>();
-    private final YamlStore store;
+    private final GrantStore store;
+    private final boolean usesLuckPerms;
 
     /**
      * Told whenever somebody's grants actually change, so their live session can follow.
@@ -62,8 +58,53 @@ public final class Grants {
     private final java.util.List<java.util.function.Consumer<UUID>> watchers =
             new java.util.concurrent.CopyOnWriteArrayList<>();
 
+    /** Always the local file store — used by every test, and by anything that has no server to ask. */
     public Grants(Path folder) {
-        this.store = new YamlStore(folder.resolve("grants.yml"));
+        this.store = new LocalGrantStore(folder);
+        this.usesLuckPerms = false;
+    }
+
+    /**
+     * Picks the store: LuckPerms if the server has it installed and it answers, the local file
+     * otherwise.
+     *
+     * <p>The one time this differs from the constructor above — the one every real server should use.
+     * When LuckPerms is found and a pre-LuckPerms {@code grants.yml} already exists in {@code folder},
+     * it is imported once: every node it held is granted to the same person directly through LuckPerms,
+     * and the old file is renamed to {@code grants.yml.imported-into-luckperms} rather than deleted, so
+     * nobody's permissions silently vanish on the restart that installed a permissions plugin.
+     */
+    public Grants(Path folder, Plugin plugin) {
+        net.luckperms.api.LuckPerms luckPerms = tryLuckPerms(plugin);
+        if (luckPerms != null) {
+            LuckPermsGrantStore lp = new LuckPermsGrantStore(folder, luckPerms);
+            lp.importFromLocalIfPresent(folder.resolve("grants.yml"));
+            this.store = lp;
+            this.usesLuckPerms = true;
+        } else {
+            this.store = new LocalGrantStore(folder);
+            this.usesLuckPerms = false;
+        }
+    }
+
+    private static net.luckperms.api.LuckPerms tryLuckPerms(Plugin plugin) {
+        if (plugin == null || plugin.getServer() == null
+                || plugin.getServer().getPluginManager().getPlugin("LuckPerms") == null) {
+            return null;
+        }
+        try {
+            return net.luckperms.api.LuckPermsProvider.get();
+        } catch (IllegalStateException notYetLoaded) {
+            log.warn("LuckPerms is installed but was not ready yet when Grants asked for it — falling "
+                    + "back to the local file store for this session. If this persists, check that "
+                    + "LuckPerms loads before this plugin.");
+            return null;
+        }
+    }
+
+    /** Whether LuckPerms is what actually holds these grants. For {@link GrantListener}. */
+    public boolean usesLuckPerms() {
+        return usesLuckPerms;
     }
 
     /**
@@ -78,25 +119,17 @@ public final class Grants {
         }
     }
 
-    /**
-     * Says somebody changed. Only ever called when something really did — re-applying a preset that
-     * already matches happens on every menu render, and rebuilding an attachment per frame is a
-     * permission recalculation per frame.
-     */
     private void changed(UUID who) {
         for (java.util.function.Consumer<UUID> watcher : watchers) {
             try {
                 watcher.accept(who);
             } catch (RuntimeException refreshFailed) {
-                // The store is the durable half and has already been written. Letting this escape
-                // would half-apply a promotion: the file grants it, the menu shows it, and the caller
-                // sees an exception. Refreshing a session is the part that can be retried by relogging.
                 log.warn("Could not refresh {} after a grant change: {}", who, refreshFailed.toString());
             }
         }
     }
 
-    /** Where they are kept — for a diagnostic, and for a test that wants to break the file. */
+    /** Where this store's own bookkeeping is kept — for a diagnostic, and for a test. */
     public Path file() {
         return store.file();
     }
@@ -105,151 +138,96 @@ public final class Grants {
 
     /** Adds one node. @return whether this changed anything */
     public boolean grant(UUID who, String node) {
-        if (who == null || node == null || node.isBlank()) {
-            return false;
+        boolean did = store.grant(who, node);
+        if (did) {
+            changed(who);
         }
-        if (!nodesOf(who).add(node.trim())) {
-            return false;
-        }
-        changed(who);
-        return true;
+        return did;
     }
 
     /** Takes one back. @return whether they had it */
     public boolean revoke(UUID who, String node) {
-        if (who == null || node == null || node.isBlank()) {
-            return false;
+        boolean did = store.revoke(who, node);
+        if (did) {
+            changed(who);
         }
-        Set<String> theirs = granted.get(who);
-        if (theirs == null || !theirs.remove(node.trim())) {
-            return false;
-        }
-        forgetIfEmpty(who, theirs);
-        changed(who);
-        return true;
+        return did;
     }
 
     /**
-     * Replaces everything they have with this set.
+     * Replaces everything held directly with this set.
      *
      * <p>Replaces rather than adds, which is the whole point when a preset is applied: somebody moved
-     * from Moderator down to Helper has to <em>lose</em> what Helper does not have. A version that only
-     * added would make every demotion a no-op — and the demotion nobody notices failed is the dangerous
-     * direction.
+     * from Moderator down to Helper has to <em>lose</em> what Helper does not have.
      */
     public void set(UUID who, Collection<String> nodes) {
-        if (who == null) {
-            return;
-        }
-        if (nodes == null || nodes.isEmpty()) {
-            // Emptying somebody is a demotion by another name, so it announces itself like one.
-            if (granted.remove(who) != null) {
-                changed(who);
-            }
-            return;
-        }
-        Set<String> fresh = ConcurrentHashMap.newKeySet();
-        for (String node : nodes) {
-            if (node != null && !node.isBlank()) {
-                fresh.add(node.trim());
-            }
-        }
-        if (fresh.isEmpty()) {
-            if (granted.remove(who) != null) {
-                changed(who);
-            }
-            return;
-        }
-        Set<String> before = granted.put(who, fresh);
-        if (before == null || !before.equals(fresh)) {
+        if (store.set(who, nodes)) {
             changed(who);
         }
+    }
+
+    /**
+     * Replaces the named preset somebody holds — a staff rank, most often — with exactly this node set.
+     *
+     * <p>The distinction from {@link #set} only matters with a LuckPerms store behind this: there, a
+     * preset becomes a maintained LuckPerms group rather than a pile of per-user nodes, so an admin
+     * reading the LuckPerms editor sees "Moderator" rather than eleven unrelated-looking strings.
+     *
+     * @param presetId a stable identifier for the preset — {@code StaffRank#key()}, for the one caller
+     *                 that has one
+     * @return whether this changed anything
+     */
+    public boolean setPreset(UUID who, String presetId, Collection<String> nodes) {
+        boolean did = store.setPreset(who, presetId, nodes);
+        if (did) {
+            changed(who);
+        }
+        return did;
     }
 
     /**
      * Adds every one of these nodes, leaving whatever they already hold — granted or revoked —
      * completely alone.
      *
-     * <p>{@link #set} answers "what should this person hold, exactly" and is right for a promotion or
-     * a deliberate reset. This answers a narrower question: "has anything new appeared that they
-     * should have too", where "new" means new to the <em>preset</em>, not new to them — a node
-     * somebody explicitly {@link #revoke}d stays revoked, because a preset gaining a node it always
-     * granted is not the admin who took that one node away changing their mind. See
-     * {@code StaffRoster#topUpFromPreset}, the one caller that needs exactly this rather than
-     * {@link #set}.
-     *
      * @return whether anything was actually new
      */
     public boolean grantAll(UUID who, Collection<String> nodes) {
-        if (who == null || nodes == null || nodes.isEmpty()) {
-            return false;
-        }
-        Set<String> theirs = nodesOf(who);
-        boolean changed = false;
-        for (String node : nodes) {
-            if (node != null && !node.isBlank() && theirs.add(node.trim())) {
-                changed = true;
-            }
-        }
-        if (changed) {
+        boolean did = store.grantAll(who, nodes);
+        if (did) {
             changed(who);
         }
-        return changed;
-    }
-
-    /** {@link #set} without announcing it. Only for {@link #load}; see the comment there. */
-    private void replaceQuietly(UUID who, Collection<String> nodes) {
-        Set<String> fresh = ConcurrentHashMap.newKeySet();
-        for (String node : nodes) {
-            if (node != null && !node.isBlank()) {
-                fresh.add(node.trim());
-            }
-        }
-        if (fresh.isEmpty()) {
-            granted.remove(who);
-        } else {
-            granted.put(who, fresh);
-        }
+        return did;
     }
 
     /** Takes everything away. @return whether they had anything */
     public boolean clear(UUID who) {
-        if (who == null || granted.remove(who) == null) {
-            return false;
+        boolean did = store.clear(who);
+        if (did) {
+            changed(who);
         }
-        changed(who);
-        return true;
+        return did;
     }
 
     // ---------------------------------------------------------------------------- asking
 
     /** Whether this server has granted them this node. */
     public boolean has(UUID who, String node) {
-        if (who == null || node == null || node.isBlank()) {
-            return false;
-        }
-        Set<String> theirs = granted.get(who);
-        return theirs != null && theirs.contains(node.trim());
+        return store.has(who, node);
     }
 
     /** Everything granted to them, as a copy. */
     public Set<String> nodesFor(UUID who) {
-        if (who == null) {
-            return new LinkedHashSet<>();
-        }
-        Set<String> theirs = granted.get(who);
-        return theirs == null ? new LinkedHashSet<>() : new LinkedHashSet<>(theirs);
+        return store.nodesFor(who);
     }
 
     /** How many nodes they hold. */
     public int countFor(UUID who) {
-        Set<String> theirs = who == null ? null : granted.get(who);
-        return theirs == null ? 0 : theirs.size();
+        return store.countFor(who);
     }
 
     /** Everybody with anything granted at all. */
     public Set<UUID> everybody() {
-        return Set.copyOf(granted.keySet());
+        return store.everybody();
     }
 
     // ---------------------------------------------------------------------------- applying
@@ -257,9 +235,9 @@ public final class Grants {
     /**
      * Hands every granted node to whatever sets permissions.
      *
-     * <p>Takes a consumer rather than a {@code Player} so the interesting half — which nodes, and how
-     * many times each — is testable without a server. The Bukkit side is
-     * {@code GrantListener}, which passes {@code attachment::setPermission}.
+     * <p>Only meaningful for the local store — see {@link #usesLuckPerms()}. With LuckPerms behind this,
+     * the nodes are already live through LuckPerms' own mechanism and this is never called; it still
+     * answers correctly if it is, since it only reads {@link #nodesFor}.
      */
     public void applyTo(UUID who, BiConsumer<String, Boolean> setter) {
         if (who == null || setter == null) {
@@ -272,57 +250,13 @@ public final class Grants {
 
     // ---------------------------------------------------------------------------- persistence
 
-    /** Reads what is on disk, replacing what is held. */
+    /** Reads whatever this store keeps of its own. */
     public void load() {
-        granted.clear();
-        ConfigurationSection root = store.read().getConfigurationSection("granted");
-        if (root == null) {
-            return;
-        }
-        List<String> unreadable = new ArrayList<>();
-        for (String id : root.getKeys(false)) {
-            UUID who;
-            try {
-                who = UUID.fromString(id);
-            } catch (IllegalArgumentException notAnId) {
-                unreadable.add(id);
-                continue;
-            }
-            // Deliberately not set(): load runs at startup, before anybody is online and before the
-            // listener that refreshes sessions exists. Announcing here would be one wasted attachment
-            // rebuild per stored player, for players who are all about to be given theirs on join.
-            replaceQuietly(who, root.getStringList(id));
-        }
-        if (!unreadable.isEmpty()) {
-            // Loud, because the consequence is somebody who should have permissions and silently does
-            // not — which they will report as "my commands stopped working".
-            log.error("{} entry/entries in grants.yml are not player ids and have been skipped: {}. "
-                            + "Anybody they belonged to has no granted permissions this session.",
-                    unreadable.size(), String.join(", ", unreadable));
-        }
+        store.load();
     }
 
-    /** Writes the lot. @return whether it reached the disk */
+    /** Writes whatever this store keeps of its own. @return whether it reached the disk */
     public boolean flush() {
-        return store.write(yaml -> granted.forEach((who, nodes) ->
-                yaml.set("granted." + who, new ArrayList<>(nodes))));
-    }
-
-    // ---------------------------------------------------------------------------- internals
-
-    private Set<String> nodesOf(UUID who) {
-        return granted.computeIfAbsent(who, id -> ConcurrentHashMap.newKeySet());
-    }
-
-    /**
-     * Drops the entry when the last node goes.
-     *
-     * <p>Otherwise the map grows by one empty set per player who has ever been staff and keeps it for
-     * the life of the server — the same leak a listener that is never told a player left has.
-     */
-    private void forgetIfEmpty(UUID who, Set<String> theirs) {
-        if (theirs.isEmpty()) {
-            granted.remove(who, theirs);
-        }
+        return store.flush();
     }
 }

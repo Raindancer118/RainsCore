@@ -36,4 +36,18 @@ public interface Ground {
     default boolean isLoaded(Spot spot) {
         return true;
     }
+
+    /**
+     * Which biome this position is in, lower case and without its namespace — {@code "taiga"},
+     * {@code "mangrove_swamp"} — or {@code null} where that cannot be answered.
+     *
+     * <p>Here because what a thing is <em>built from</em> often should follow where it is built: a
+     * trestle bridge in a mangrove swamp made of oak looks imported, and one made of the wood growing
+     * beside it looks like somebody who lives there built it. A name rather than the enum for the
+     * same reason materials are names: resolving one needs the server's registry, and a value with no
+     * registry in it is what lets the interesting half be tested.
+     */
+    default String biomeAt(Spot spot) {
+        return null;
+    }
 }

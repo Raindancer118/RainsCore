@@ -87,6 +87,46 @@ class MarkingSessionTest {
     }
 
     @Test
+    @DisplayName("the height a corner was clicked at is remembered, for showing it back")
+    void remembersWhereTheClickLanded() {
+        MarkingSession session = polygon();
+
+        session.add(new Column(4, 4), 71);
+
+        assertThat(session.clickedYAt(0)).contains(71);
+    }
+
+    @Test
+    @DisplayName("a corner added without a height has none — the shape never depended on one")
+    void heightIsOptional() {
+        MarkingSession session = polygon();
+
+        session.add(new Column(4, 4));
+
+        assertThat(session.clickedYAt(0)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("undoing forgets that corner's height with it")
+    void undoDropsTheHeightToo() {
+        MarkingSession session = polygon();
+        session.add(new Column(1, 1), 64);
+        session.add(new Column(2, 2), 70);
+
+        session.undo();
+
+        assertThat(session.clickedYAt(1)).isEmpty();
+        assertThat(session.clickedYAt(0)).contains(64);
+    }
+
+    @Test
+    @DisplayName("asking about a corner that is not there is empty, not an error")
+    void toleratesAnIndexPastTheEnd() {
+        assertThat(polygon().clickedYAt(7)).isEmpty();
+        assertThat(polygon().clickedYAt(-1)).isEmpty();
+    }
+
+    @Test
     @DisplayName("the world is remembered, so a marking cannot be finished somewhere else")
     void remembersItsWorld() {
         assertThat(polygon().world()).isEqualTo("world");
