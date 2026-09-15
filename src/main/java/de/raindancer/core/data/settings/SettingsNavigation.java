@@ -26,10 +26,14 @@ public final class SettingsNavigation {
 
     /** What clicking a setting did. */
     public enum Click {
-        /** Flipped or advanced on the spot. */
+        /** Flipped on the spot — a flag, and nothing else. */
         CYCLED,
-        /** It needs a value typed — a number, some text, a list. */
+        /** It needs a value typed: free text, or a number with no range to show. */
         NEEDS_TYPING,
+        /** It needs one of a named set picked — an enum, out of a page listing every answer. */
+        NEEDS_OPTION_CHOICE,
+        /** It needs a number picked out of its own range, rather than typed into chat. */
+        NEEDS_NUMBER_CHOICE,
         /** It needs a block or item picked, out of Core's own chooser rather than typed by hand. */
         NEEDS_MATERIAL_CHOICE,
         /** It needs a colour picked from Core's swatch grid, rather than cycled or typed. */
@@ -89,9 +93,21 @@ public final class SettingsNavigation {
      * {@link Click#NEEDS_COLOR_CHOICE}.
      */
     public boolean canCycle(Setting<?> setting) {
-        return setting != null && setting.type() != Material.class
-                && setting.type() != NamedTextColor.class
-                && (setting.type() == Boolean.class || !setting.choices().isEmpty());
+        return setting != null && setting.type() == Boolean.class;
+    }
+
+    /** Whether this is one of a named set — an enum — with a page of answers to pick from. */
+    public boolean hasOptions(Setting<?> setting) {
+        return setting != null && !setting.choices().isEmpty()
+                && setting.type() != Boolean.class
+                && setting.type() != Material.class
+                && setting.type() != NamedTextColor.class;
+    }
+
+    /** Whether this is a number with both ends of its range known, so it can be picked rather than typed. */
+    public boolean hasRange(Setting<?> setting) {
+        return setting != null && setting.min() != null && setting.max() != null
+                && (setting.type() == Integer.class || setting.type() == int.class);
     }
 
     /** Clicks a setting: flips it, opens a chooser, or says it needs typing. */
@@ -103,6 +119,17 @@ public final class SettingsNavigation {
         if (canCycle(setting.get())) {
             registry.cycle(key);
             return Click.CYCLED;
+        }
+        // A named set is picked out of a list, never advanced one click at a time. Cycling made the
+        // lore the only place that said where you had landed, and overshooting the answer you wanted
+        // meant going all the way round again — on a five-value enum that is four clicks to undo one.
+        if (hasOptions(setting.get())) {
+            return Click.NEEDS_OPTION_CHOICE;
+        }
+        // And a number with both ends known is picked out of its own range: typing one into chat
+        // closes the window, and nothing about "40000" is easier to get right by hand.
+        if (hasRange(setting.get())) {
+            return Click.NEEDS_NUMBER_CHOICE;
         }
         // A block or an item is exactly what Core's own creative-inventory chooser is for. Typed by
         // hand, this is where a server ended up with a wall built from "gray_candle" — a name that
@@ -150,9 +177,13 @@ public final class SettingsNavigation {
                 lines.add("<dark_gray>from " + store.schema().id()));
 
         lines.add("");
+        // "Type" is the last resort now, and it says so only where it is true: free text, and a
+        // number with no range to draw a picker from.
+        boolean picked = hasOptions(setting) || hasRange(setting)
+                || setting.type() == Material.class || setting.type() == NamedTextColor.class;
         lines.add(canCycle(setting)
                 ? "<yellow>" + Symbols.ARROW + " Click to change"
-                : setting.type() == Material.class
+                : picked
                         ? "<yellow>" + Symbols.ARROW + " Click to choose"
                         : "<yellow>" + Symbols.ARROW + " Click to type a new value");
         return lines;

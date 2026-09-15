@@ -36,9 +36,11 @@ class SettingsNavigationTest {
             int claimsPerPlayer,
             @In("management/fences") @Title("Show fences") boolean fencesEnabled,
             @In("management/fences") @Title("Fence style") Style fenceStyle,
-            @In("management/fences") @Title("Fence block") Material fenceBlock) {
+            @In("management/fences") @Title("Fence block") Material fenceBlock,
+            @In("config/limits") @Title("World seed") long worldSeed) {
 
-        static final ClaimConfig DEFAULTS = new ClaimConfig(40_000, 5, true, Style.SOLID, Material.OAK_FENCE);
+        static final ClaimConfig DEFAULTS =
+                new ClaimConfig(40_000, 5, true, Style.SOLID, Material.OAK_FENCE, 12345L);
     }
 
     enum Style { SOLID, DASHED, NONE }
@@ -90,7 +92,7 @@ class SettingsNavigationTest {
         void aPageWithBoth() {
             SettingsPage limits = navigation.page("config/limits");
             assertThat(limits.settings()).extracting(Setting::key)
-                    .containsExactly("blocks-per-player");
+                    .containsExactly("blocks-per-player", "world-seed");
             assertThat(limits.subtopics()).extracting(SettingsTopic::path)
                     .containsExactly("config/limits/claims");
         }
@@ -186,24 +188,33 @@ class SettingsNavigationTest {
         }
 
         @Test
-        @DisplayName("a choice advances, and wraps")
-        void choicesCycle() {
-            assertThat(navigation.click("fence-style")).isEqualTo(SettingsNavigation.Click.CYCLED);
-            assertThat(registry.display("fence-style")).isEqualTo("dashed");
-            navigation.click("fence-style");
-            navigation.click("fence-style");
-            assertThat(registry.display("fence-style")).isEqualTo("solid");
+        @DisplayName("a named choice opens the list of them rather than advancing by one")
+        void choicesArePicked() {
+            // Cycling meant reading the lore to find out where you had landed, and clicking past the
+            // one you wanted meant going all the way round again. A list shows every answer at once.
+            assertThat(navigation.click("fence-style"))
+                    .isEqualTo(SettingsNavigation.Click.NEEDS_OPTION_CHOICE);
+            assertThat(registry.display("fence-style"))
+                    .as("clicking must not have changed it")
+                    .isEqualTo("solid");
         }
 
         @Test
-        @DisplayName("a number cannot be cycled — it has to be typed")
-        void numbersNeedTyping() {
+        @DisplayName("a number inside a range is picked, not typed")
+        void rangedNumbersArePicked() {
             assertThat(navigation.canCycle(setting("blocks-per-player"))).isFalse();
             assertThat(navigation.click("blocks-per-player"))
-                    .isEqualTo(SettingsNavigation.Click.NEEDS_TYPING);
+                    .isEqualTo(SettingsNavigation.Click.NEEDS_NUMBER_CHOICE);
             assertThat(registry.display("blocks-per-player"))
                     .as("clicking must not have changed it")
                     .isEqualTo("40000");
+        }
+
+        @Test
+        @DisplayName("a number with no range at all still has to be typed — there is nothing to show")
+        void unboundedNumbersStillNeedTyping() {
+            assertThat(navigation.click("world-seed"))
+                    .isEqualTo(SettingsNavigation.Click.NEEDS_TYPING);
         }
 
         @Test
@@ -241,7 +252,7 @@ class SettingsNavigationTest {
             assertThat(lore).anySatisfy(line -> assertThat(line).contains("40000"));
             assertThat(lore).anySatisfy(line -> assertThat(line).contains("0"));
             assertThat(lore).anySatisfy(line -> assertThat(line).contains("100000"));
-            assertThat(lore).anySatisfy(line -> assertThat(line).containsIgnoringCase("type"));
+            assertThat(lore).anySatisfy(line -> assertThat(line).containsIgnoringCase("choose"));
         }
 
         @Test
@@ -256,6 +267,15 @@ class SettingsNavigationTest {
         void listsChoices() {
             assertThat(navigation.describe(setting("fence-style")))
                     .anySatisfy(line -> assertThat(line).contains("dashed"));
+        }
+
+        @Test
+        @DisplayName("only a free-text value is still described as something to type")
+        void onlyTextSaysType() {
+            assertThat(navigation.describe(setting("fence-style")))
+                    .noneSatisfy(line -> assertThat(line).containsIgnoringCase("to type"));
+            assertThat(navigation.describe(setting("world-seed")))
+                    .anySatisfy(line -> assertThat(line).containsIgnoringCase("to type"));
         }
 
         @Test

@@ -84,11 +84,36 @@ public final class SettingsMenu extends Menu {
 
     public SettingsMenu(Player viewer, Brand brand, Chat chat, SettingsNavigation navigation,
                         String path, Menu parent) {
-        super(viewer, brand, parent);
+        super(viewer, brand, parent == null ? pageAbove(viewer, brand, chat, navigation, path) : parent);
         this.navigation = navigation;
         this.chat = chat;
         this.path = path;
         this.page = navigation.page(path);
+    }
+
+    /**
+     * The page one level up, built from the path alone — what Back goes to when nobody handed this
+     * window a parent.
+     *
+     * <h2>Why this exists</h2>
+     * Because a settings page can be opened without one, and then it had no Back button at all: the
+     * chrome paints one only when {@code parent != null}, and {@link SettingsChatInput} reopens the
+     * page somebody was on after they type a value with no parent to hand it. The result was a page
+     * three levels into the tree with nothing on it but Close — reported as exactly that, "on this
+     * page we're missing a back button". A page's parent is not a secret the opener has to remember;
+     * it is in the path, so it is derived from the path.
+     *
+     * <p>Recursive, and it terminates: every step drops a segment, and the root has no path at all.
+     * Building the chain is cheap — a {@link SettingsPage} is a lookup in a tree that is already in
+     * memory, and nothing is drawn until somebody actually presses Back.
+     */
+    private static Menu pageAbove(Player viewer, Brand brand, Chat chat, SettingsNavigation navigation,
+                                  String path) {
+        if (path == null || path.isBlank()) {
+            return null;   // the front page: there is nothing above it
+        }
+        return new SettingsMenu(viewer, brand, chat, navigation,
+                navigation.page(path).parentPath(), null);
     }
 
     /** The front page. */
@@ -116,7 +141,7 @@ public final class SettingsMenu extends Menu {
                 ? List.of("Everything every plugin on this server can be told to do.",
                         "Click a category to go in.")
                 : List.of("Click a setting to change it.",
-                        "Numbers and text are typed in chat.");
+                        "Only free text is typed in chat.");
     }
 
     @Override
@@ -238,7 +263,35 @@ public final class SettingsMenu extends Menu {
                     chat.raw(viewer, words().prefixed("settings.finish-first"));
                 }
             }
+            case NEEDS_OPTION_CHOICE -> new de.raindancer.core.ui.choose.OptionChooser(viewer, brand(),
+                    this, setting.title(), setting.choices(),
+                    navigation.registry().display(setting.key()),
+                    chosen -> {
+                        navigation.registry().set(setting.key(), chosen);
+                        navigation.registry().saveAll();
+                        refresh();
+                    }).open();
+            case NEEDS_NUMBER_CHOICE -> new de.raindancer.core.ui.choose.AmountChooser(viewer, brand(),
+                    this, setting.title(), currentNumber(setting), setting.min(), setting.max(),
+                    chosen -> {
+                        navigation.registry().set(setting.key(), String.valueOf(chosen));
+                        navigation.registry().saveAll();
+                        refresh();
+                    }).open();
             case UNKNOWN -> chat.raw(viewer, words().prefixed("settings.gone"));
+        }
+    }
+
+    /**
+     * Where the number picker opens: what the setting is now, or its lower bound when whatever is on
+     * disk will not parse as a number. Never a guess like zero — a range that starts at 100 would
+     * open outside itself, and {@code AmountChooser} would then have to explain a value nobody set.
+     */
+    private int currentNumber(Setting<?> setting) {
+        try {
+            return Integer.parseInt(navigation.registry().display(setting.key()).trim());
+        } catch (NumberFormatException notANumber) {
+            return setting.min();
         }
     }
 
