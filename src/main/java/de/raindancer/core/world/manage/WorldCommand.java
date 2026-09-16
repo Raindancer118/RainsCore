@@ -42,12 +42,22 @@ public final class WorldCommand implements BasicCommand {
     private final WorldRegenerator regenerator;
 
     public WorldCommand() {
-        this(new WorldRegenerator());
+        this(null);
     }
 
-    /** For tests: a fake regenerator that never touches a real world. */
+    /**
+     * For tests: a fake regenerator that never touches a real world.
+     *
+     * @param regenerator null asks Core for its own when a regeneration actually runs — built at
+     *                    bootstrap, this exists before Core does, and Core's is the one that writes the
+     *                    outgoing seed down
+     */
     WorldCommand(WorldRegenerator regenerator) {
         this.regenerator = regenerator;
+    }
+
+    private WorldRegenerator regenerator() {
+        return regenerator != null ? regenerator : RainsCore.get().worldRegenerator();
     }
 
     private Plugin plugin() {
@@ -139,7 +149,7 @@ public final class WorldCommand implements BasicCommand {
         }
         chat().tell(sender, "<gray>Regenerating <name> — the server will pause.", Chat.arg("name", name));
         OfflinePlayer finalToReturn = toReturn;
-        regenerator.regenerate(world, ok -> {
+        regenerator().regenerate(world, ok -> {
             if (!ok) {
                 chat().no(sender, "Something went wrong; the server log has it.");
                 return;

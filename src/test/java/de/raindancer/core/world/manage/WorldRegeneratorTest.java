@@ -86,6 +86,8 @@ class WorldRegeneratorTest {
     private static MockedConstruction<WorldCreator> creatorsMaking(World result) {
         return mockConstruction(WorldCreator.class, (creator, context) -> {
             when(creator.environment(any())).thenReturn(creator);
+            when(creator.seed(anyLong())).thenReturn(creator);
+            when(creator.copy(any(World.class))).thenReturn(creator);
             when(creator.createWorld()).thenReturn(result);
         });
     }
@@ -131,8 +133,11 @@ class WorldRegeneratorTest {
     }
 
     @Test
-    @DisplayName("never sets a seed on the new WorldCreator")
-    void neverSetsASeed() {
+    @DisplayName("a random regeneration draws a new seed rather than keeping the one the copied creator carries")
+    void randomIsANewSeed() {
+        // WorldCreator#copy brings the old seed along with the generator and the world type. Leaving the
+        // seed alone after that would quietly regenerate the same map every time.
+        when(world.getSeed()).thenReturn(777L);
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
              MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             stubServerBasics(bukkit);
@@ -141,7 +146,9 @@ class WorldRegeneratorTest {
 
             assertThat(ok).isTrue();
             assertThat(creators.constructed()).hasSize(1);
-            verify(creators.constructed().getFirst(), never()).seed(anyLong());
+            org.mockito.ArgumentCaptor<Long> seed = org.mockito.ArgumentCaptor.forClass(Long.class);
+            verify(creators.constructed().getFirst()).seed(seed.capture());
+            assertThat(seed.getValue()).isNotEqualTo(777L);
         }
     }
 
@@ -208,6 +215,9 @@ class WorldRegeneratorTest {
             stubServerBasics(bukkit);
 
             World rememberedWorld = mock(World.class);
+            UUID rememberedId = UUID.randomUUID();
+            when(rememberedWorld.getUID()).thenReturn(rememberedId);
+            bukkit.when(() -> Bukkit.getWorld(rememberedId)).thenReturn(rememberedWorld);
             Location remembered = new Location(rememberedWorld, 100, 65, 100);
             RainsCore live = mock(RainsCore.class);
             WorldEntryPoints tracker = mock(WorldEntryPoints.class);
@@ -270,7 +280,8 @@ class WorldRegeneratorTest {
     @Test
     @DisplayName("a world that would not unload is left alone and the folder survives")
     void unloadFailureLeavesFolderAlone() {
-        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
             World mainWorld = mock(World.class);
             Location spawn = mock(Location.class);
             when(mainWorld.getSpawnLocation()).thenReturn(spawn);
@@ -419,6 +430,521 @@ class WorldRegeneratorTest {
         @DisplayName("a null world is refused rather than throwing")
         void nullWorldRefused() {
             assertThat(awaitResult(cb -> regenerator.delete(null, cb))).isFalse();
+        }
+    }
+
+    /**
+     * A speedrun resets its overworld before its nether. Whoever is still in the nether then entered it
+     * from an overworld that no longer exists, and asking that Location for its world throws "World
+     * unloaded" — which used to abort the nether's reset and never reach the end at all.
+     */
+    @Test
+    @DisplayName("a remembered place in a world that has since been unloaded falls back to spawn")
+    void aRememberedPlaceInAnUnloadedWorld() {
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+             MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+             MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
+            UUID occupantId = UUID.randomUUID();
+            Player occupant = playerWithId(occupantId);
+            when(world.getPlayers()).thenReturn(List.of(occupant));
+            stubServerBasics(bukkit);
+            Location mainSpawn = Bukkit.getWorlds().getFirst().getSpawnLocation();
+
+            Location gone = mock(Location.class);
+            when(gone.isWorldLoaded()).thenReturn(false);
+            when(gone.getWorld()).thenThrow(new IllegalArgumentException("World unloaded"));
+            RainsCore live = mock(RainsCore.class);
+            WorldEntryPoints tracker = mock(WorldEntryPoints.class);
+            when(tracker.before(occupantId)).thenReturn(Optional.of(gone));
+            when(live.worldEntryPoints()).thenReturn(tracker);
+            core.when(RainsCore::get).thenReturn(live);
+
+            Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+            assertThat(ok).isTrue();
+            verify(occupant).teleportAsync(mainSpawn);
+        }
+    }
+
+    /**
+     * Experience rather than theory: a flat or amplified world, or one with a generator plugin, that came
+     * back as plain default terrain — and the owner's game rules and border gone with the old folder.
+     */
+    @Nested
+    @DisplayName("what an owner set up survives a regeneration")
+    class Preserved {
+
+        @Test
+        @DisplayName("the new world is made from a copy of the old one's creator settings")
+        void copiesTheCreator() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(mock(World.class))) {
+                stubServerBasics(bukkit);
+
+                awaitResult(cb -> regenerator.regenerate(world, WorldSeed.random(), cb));
+
+                // Read while the old world was still loaded: generator, world type, structures,
+                // hardcore — everything WorldCreator#copy knows how to carry.
+                verify(creators.constructed().getFirst()).copy(world);
+            }
+        }
+
+        @Test
+        @DisplayName("game rules come across to the new world")
+        void gameRulesComeAcross() {
+            when(world.getGameRules()).thenReturn(new String[]{"keepInventory"});
+            when(world.getGameRuleValue("keepInventory")).thenReturn("true");
+            World made = mock(World.class);
+            when(made.getWorldBorder()).thenReturn(mock(org.bukkit.WorldBorder.class));
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(made)) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> regenerator.regenerate(world, WorldSeed.same(), cb));
+
+                assertThat(ok).isTrue();
+                verify(made).setGameRuleValue("keepInventory", "true");
+            }
+        }
+
+        @Test
+        @DisplayName("the primary level's own nether and end are refused, like the primary world is")
+        void refusesTheServersOwnDimensions() {
+            when(world.getKey()).thenReturn(org.bukkit.NamespacedKey.minecraft("the_nether"));
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> regenerator.regenerate(world, cb));
+
+                assertThat(ok).isFalse();
+                assertThat(worldFolder).exists();
+                bukkit.verify(() -> Bukkit.unloadWorld(world, false), never());
+                assertThat(WorldRegenerator.isServerDimension(world)).isTrue();
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("choosing the seed")
+    class Seeds {
+
+        private final SeedHistory history = mock(SeedHistory.class);
+        private final WorldRegenerator recording = new WorldRegenerator(history);
+
+        private World madeWithSeed(long seed) {
+            World made = mock(World.class);
+            when(made.getSeed()).thenReturn(seed);
+            return made;
+        }
+
+        @Test
+        @DisplayName("the same seed puts the map back exactly as it was generated")
+        void sameSeedIsTheOldOne() {
+            when(world.getSeed()).thenReturn(777L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(777L))) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> recording.regenerate(world, WorldSeed.same(), cb));
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).seed(777L);
+            }
+        }
+
+        @Test
+        @DisplayName("a chosen seed is the seed the new world is made with")
+        void aFixedSeed() {
+            when(world.getSeed()).thenReturn(777L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(42L))) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> recording.regenerate(world, WorldSeed.fixed(42L), cb));
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).seed(42L);
+            }
+        }
+
+        @Test
+        @DisplayName("a random seed is a fresh one, not the seed of the world it replaces")
+        void randomSetsAFreshSeed() {
+            when(world.getSeed()).thenReturn(777L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(5L))) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> recording.regenerate(world, WorldSeed.random(), cb));
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst(), never()).seed(777L);
+            }
+        }
+
+        @Test
+        @DisplayName("the history gets the seed being thrown away and the seed that replaced it")
+        void bothEndsAreRecorded() {
+            when(world.getSeed()).thenReturn(777L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(5L))) {
+                stubServerBasics(bukkit);
+
+                awaitResult(cb -> recording.regenerate(world, WorldSeed.random(), cb));
+
+                // The outgoing seed is recorded before anything is deleted: a world that predates the
+                // history would otherwise lose the one seed nobody wrote down anywhere else.
+                org.mockito.InOrder order = org.mockito.Mockito.inOrder(history);
+                order.verify(history).record("build", 777L, SeedHistory.Cause.REPLACED);
+                order.verify(history).record("build", 5L, SeedHistory.Cause.REGENERATED);
+            }
+        }
+
+        @Test
+        @DisplayName("a regeneration that failed to delete records the old seed and no new one")
+        void aFailureRecordsNoNewSeed() {
+            when(world.getSeed()).thenReturn(777L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(5L))) {
+                stubServerBasics(bukkit);
+                bukkit.when(() -> Bukkit.unloadWorld(world, false)).thenReturn(false);
+
+                Boolean ok = awaitResult(cb -> recording.regenerate(world, WorldSeed.random(), cb));
+
+                assertThat(ok).isFalse();
+                verify(history).record("build", 777L, SeedHistory.Cause.REPLACED);
+                verify(history, never()).record(any(), org.mockito.ArgumentMatchers.eq(5L), any());
+            }
+        }
+
+        @Test
+        @DisplayName("creating a new world takes a seed too, and records the one it got")
+        void createWithASeed() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(99L))) {
+
+                boolean ok = recording.create("fresh", World.Environment.THE_END, WorldSeed.fixed(99L));
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).seed(99L);
+                verify(creators.constructed().getFirst()).environment(World.Environment.THE_END);
+                verify(history).record("fresh", 99L, SeedHistory.Cause.CREATED);
+            }
+        }
+
+        @Test
+        @DisplayName("deleting a world writes its seed down first — afterwards it exists nowhere")
+        void deletingRecordsTheSeed() {
+            when(world.getSeed()).thenReturn(4242L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> recording.delete(world, cb));
+
+                assertThat(ok).isTrue();
+                verify(history).record("build", 4242L, SeedHistory.Cause.DELETED);
+            }
+        }
+
+        @Test
+        @DisplayName("a regeneration records the old seed once, as replaced rather than deleted")
+        void regeneratingIsNotDeleting() {
+            when(world.getSeed()).thenReturn(4242L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(1L))) {
+                stubServerBasics(bukkit);
+
+                awaitResult(cb -> recording.regenerate(world, WorldSeed.random(), cb));
+
+                verify(history, never()).record(any(), anyLong(), org.mockito.ArgumentMatchers.eq(SeedHistory.Cause.DELETED));
+                verify(history, org.mockito.Mockito.times(1)).record("build", 4242L, SeedHistory.Cause.REPLACED);
+            }
+        }
+
+        @Test
+        @DisplayName("loading a world that already exists on disk writes nothing into the history")
+        void loadingIsNotCreating() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(3L))) {
+
+                boolean ok = recording.load("kept", World.Environment.NETHER);
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).environment(World.Environment.NETHER);
+                verify(creators.constructed().getFirst(), never()).seed(anyLong());
+                verify(history, never()).record(any(), anyLong(), any());
+            }
+        }
+
+        @Test
+        @DisplayName("without a history nothing is recorded and nothing breaks")
+        void noHistory() {
+            when(world.getSeed()).thenReturn(1L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedConstruction<WorldCreator> creators = creatorsMaking(madeWithSeed(1L))) {
+                stubServerBasics(bukkit);
+
+                Boolean ok = awaitResult(cb -> regenerator.regenerate(world, WorldSeed.same(), cb));
+
+                assertThat(ok).isTrue();
+                verify(creators.constructed().getFirst()).seed(1L);
+            }
+        }
+    }
+
+    /**
+     * Resetting worlds that belong together — a speedrun's overworld, nether and end — as one operation.
+     * Done one at a time, whoever stood in the second world was sent back to the first, already gone.
+     */
+    @Nested
+    @DisplayName("regenerating a group of worlds together")
+    class Groups {
+
+        @TempDir
+        Path groupDirectory;
+
+        private final SeedHistory history = mock(SeedHistory.class);
+        private final WorldRegenerator recording = new WorldRegenerator(history);
+
+        private World overworld;
+        private World nether;
+        private World end;
+
+        private World worldAt(String name, World.Environment environment, long seed) throws IOException {
+            Path folder = groupDirectory.resolve(name);
+            Files.createDirectories(folder.resolve("region"));
+            Files.writeString(folder.resolve("level.dat"), "marker");
+            World made = mock(World.class);
+            when(made.getName()).thenReturn(name);
+            when(made.getWorldFolder()).thenReturn(folder.toFile());
+            when(made.getEnvironment()).thenReturn(environment);
+            when(made.getSeed()).thenReturn(seed);
+            when(made.getPlayers()).thenReturn(List.of());
+            return made;
+        }
+
+        @BeforeEach
+        void worlds() throws IOException {
+            overworld = worldAt("run", World.Environment.NORMAL, 11L);
+            nether = worldAt("run_nether", World.Environment.NETHER, 11L);
+            end = worldAt("run_the_end", World.Environment.THE_END, 11L);
+        }
+
+        private Location stubServer(MockedStatic<Bukkit> bukkit, MockedStatic<RainsCore> core) {
+            World mainWorld = mock(World.class);
+            Location spawn = mock(Location.class);
+            when(mainWorld.getSpawnLocation()).thenReturn(spawn);
+            bukkit.when(Bukkit::getWorlds).thenReturn(List.of(mainWorld, overworld, nether, end));
+            for (World each : List.of(overworld, nether, end)) {
+                bukkit.when(() -> Bukkit.unloadWorld(each, false)).thenReturn(true);
+            }
+            RainsCore live = mock(RainsCore.class);
+            WorldEntryPoints tracker = mock(WorldEntryPoints.class);
+            when(tracker.before(any())).thenReturn(Optional.empty());
+            when(live.worldEntryPoints()).thenReturn(tracker);
+            core.when(RainsCore::get).thenReturn(live);
+            return spawn;
+        }
+
+        private static MockedConstruction<WorldCreator> creators() {
+            return mockConstruction(WorldCreator.class, (creator, context) -> {
+                when(creator.environment(any())).thenReturn(creator);
+                when(creator.seed(anyLong())).thenReturn(creator);
+                when(creator.copy(any(World.class))).thenReturn(creator);
+                World made = mock(World.class);
+                when(made.getSeed()).thenReturn(123L);
+                when(creator.createWorld()).thenReturn(made);
+            });
+        }
+
+        @Test
+        @DisplayName("all of them are deleted and come back, each as the dimension it was")
+        void allComeBack() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                Boolean ok = awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end),
+                        WorldSeed.fixed(5L), cb));
+
+                assertThat(ok).isTrue();
+                assertThat(groupDirectory.resolve("run")).doesNotExist();
+                assertThat(groupDirectory.resolve("run_nether")).doesNotExist();
+                assertThat(groupDirectory.resolve("run_the_end")).doesNotExist();
+                assertThat(creators.constructed()).hasSize(3);
+                verify(creators.constructed().get(0)).environment(World.Environment.NORMAL);
+                verify(creators.constructed().get(1)).environment(World.Environment.NETHER);
+                verify(creators.constructed().get(2)).environment(World.Environment.THE_END);
+                creators.constructed().forEach(creator -> verify(creator).seed(5L));
+            }
+        }
+
+        @Test
+        @DisplayName("somebody in the nether who came from the run's overworld is sent out of the group")
+        void nobodyIsSentIntoAnotherDoomedWorld() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                Location spawn = stubServer(bukkit, core);
+                UUID racerId = UUID.randomUUID();
+                Player racer = playerWithId(racerId);
+                when(nether.getPlayers()).thenReturn(List.of(racer));
+
+                UUID overworldId = UUID.randomUUID();
+                when(overworld.getUID()).thenReturn(overworldId);
+                bukkit.when(() -> Bukkit.getWorld(overworldId)).thenReturn(overworld);
+                Location cameFrom = new Location(overworld, 0, 70, 0);
+                when(RainsCore.get().worldEntryPoints().before(racerId)).thenReturn(Optional.of(cameFrom));
+
+                Boolean ok = awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end),
+                        WorldSeed.random(), cb));
+
+                assertThat(ok).isTrue();
+                verify(racer).teleportAsync(spawn);
+                verify(racer, never()).teleportAsync(cameFrom);
+            }
+        }
+
+        @Test
+        @DisplayName("nothing is unloaded until every occupant of every world has landed")
+        void waitsForEveryoneFirst() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+                Player inTheEnd = mock(Player.class);
+                when(inTheEnd.getUniqueId()).thenReturn(UUID.randomUUID());
+                CompletableFuture<Boolean> landing = new CompletableFuture<>();
+                when(inTheEnd.teleportAsync(any(Location.class))).thenReturn(landing);
+                when(end.getPlayers()).thenReturn(List.of(inTheEnd));
+
+                AtomicReference<Boolean> result = new AtomicReference<>();
+                recording.regenerateAll(List.of(overworld, nether, end), WorldSeed.random(), result::set);
+
+                bukkit.verify(() -> Bukkit.unloadWorld(any(World.class), org.mockito.ArgumentMatchers.anyBoolean()), never());
+                assertThat(result.get()).isNull();
+
+                landing.complete(true);
+
+                assertThat(result.get()).isTrue();
+                bukkit.verify(() -> Bukkit.unloadWorld(overworld, false));
+            }
+        }
+
+        @Test
+        @DisplayName("a random seed is one seed for the whole group, so the dimensions still belong together")
+        void oneRandomSeedForAll() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end), WorldSeed.random(), cb));
+
+                org.mockito.ArgumentCaptor<Long> seeds = org.mockito.ArgumentCaptor.forClass(Long.class);
+                for (WorldCreator creator : creators.constructed()) {
+                    verify(creator).seed(seeds.capture());
+                }
+                assertThat(seeds.getAllValues()).hasSize(3).containsOnly(seeds.getAllValues().getFirst());
+                assertThat(seeds.getAllValues().getFirst()).isNotEqualTo(11L);
+            }
+        }
+
+        @Test
+        @DisplayName("the same seed keeps each world's own, and every seed is written down on both sides")
+        void sameSeedAndHistory() {
+            when(nether.getSeed()).thenReturn(22L);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether), WorldSeed.same(), cb));
+
+                verify(creators.constructed().get(0)).seed(11L);
+                verify(creators.constructed().get(1)).seed(22L);
+                verify(history).record("run", 11L, SeedHistory.Cause.REPLACED);
+                verify(history).record("run_nether", 22L, SeedHistory.Cause.REPLACED);
+                verify(history).record("run", 123L, SeedHistory.Cause.REGENERATED);
+                verify(history).record("run_nether", 123L, SeedHistory.Cause.REGENERATED);
+            }
+        }
+
+        @Test
+        @DisplayName("a group containing the primary world is refused before anybody is moved")
+        void refusesThePrimaryWorld() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+                bukkit.when(Bukkit::getWorlds).thenReturn(List.of(overworld, nether, end));
+                Player racer = playerWithId(UUID.randomUUID());
+                when(nether.getPlayers()).thenReturn(List.of(racer));
+
+                Boolean ok = awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end),
+                        WorldSeed.random(), cb));
+
+                assertThat(ok).isFalse();
+                verify(racer, never()).teleportAsync(any(Location.class));
+                bukkit.verify(() -> Bukkit.unloadWorld(any(World.class), org.mockito.ArgumentMatchers.anyBoolean()), never());
+            }
+        }
+
+        @Test
+        @DisplayName("one world refusing to unload does not stop the others, and the answer says so")
+        void oneFailureIsNotAllFailures() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+                bukkit.when(() -> Bukkit.unloadWorld(nether, false)).thenReturn(false);
+
+                Boolean ok = awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end),
+                        WorldSeed.random(), cb));
+
+                assertThat(ok).isFalse();
+                assertThat(groupDirectory.resolve("run_nether")).exists();
+                assertThat(groupDirectory.resolve("run_the_end")).doesNotExist();
+                verify(creators.constructed().get(0)).createWorld();
+                verify(creators.constructed().get(1), never()).createWorld();
+                verify(creators.constructed().get(2)).createWorld();
+            }
+        }
+
+        @Test
+        @DisplayName("deleting a group moves everybody out of all of it first, and writes every seed down")
+        void deletingAGroup() {
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                Location spawn = stubServer(bukkit, core);
+                UUID racerId = UUID.randomUUID();
+                Player racer = playerWithId(racerId);
+                when(end.getPlayers()).thenReturn(List.of(racer));
+                UUID overworldId = UUID.randomUUID();
+                when(overworld.getUID()).thenReturn(overworldId);
+                bukkit.when(() -> Bukkit.getWorld(overworldId)).thenReturn(overworld);
+                when(RainsCore.get().worldEntryPoints().before(racerId))
+                        .thenReturn(Optional.of(new Location(overworld, 0, 70, 0)));
+
+                Boolean ok = awaitResult(cb -> recording.deleteAll(List.of(overworld, nether, end), cb));
+
+                assertThat(ok).isTrue();
+                verify(racer).teleportAsync(spawn);
+                assertThat(groupDirectory.resolve("run")).doesNotExist();
+                assertThat(groupDirectory.resolve("run_the_end")).doesNotExist();
+                assertThat(creators.constructed()).isEmpty();
+                verify(history).record("run", 11L, SeedHistory.Cause.DELETED);
+                verify(history).record("run_the_end", 11L, SeedHistory.Cause.DELETED);
+            }
+        }
+
+        @Test
+        @DisplayName("nothing to regenerate is refused rather than reported as done")
+        void empty() {
+            assertThat(awaitResult(cb -> recording.regenerateAll(List.of(), WorldSeed.random(), cb))).isFalse();
+            assertThat(awaitResult(cb -> recording.regenerateAll(null, WorldSeed.random(), cb))).isFalse();
         }
     }
 

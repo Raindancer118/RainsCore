@@ -195,6 +195,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private final de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints =
             new de.raindancer.core.world.manage.WorldEntryPoints();
     private PoiStore places;
+    private de.raindancer.core.world.manage.SeedHistory seedHistory;
+    private de.raindancer.core.world.manage.WorldRegenerator worldRegenerator;
+    private final de.raindancer.core.world.manage.WorldEntryRules worldEntryRules =
+            new de.raindancer.core.world.manage.WorldEntryRules();
     private Identities identities;
     private Grants grants;
     /**
@@ -312,6 +316,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         places = new PoiStore(databases.core());
         places.load();
+
+        seedHistory = new de.raindancer.core.world.manage.SeedHistory(databases.core(),
+                System::currentTimeMillis, flush -> {
+                    // Off the world's threads, now: waiting for the saving timer leaves a seed recorded
+                    // just before a stop to be written during onDisable, on the server thread.
+                    if (isEnabled()) {
+                        Scheduling.async(this, flush);
+                    }
+                });
+        seedHistory.load();
+        worldRegenerator = new de.raindancer.core.world.manage.WorldRegenerator(seedHistory);
 
         identities = new Identities(databases.core());
         identities.load();
@@ -588,6 +603,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // if something reaches it.
         savingTask = Scheduling.asyncTimer(this, SAVE_PERIOD_SECONDS, SAVE_PERIOD_SECONDS, task -> {
             places.flush();
+            seedHistory.flush();
             identities.flush();
             grants.flush();
             punishments.flush();
@@ -717,6 +733,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
+        // shutting down, so the final flushes below have to run on this thread, and there is nobody
+        // left on the server for them to stall — reporting them as a mistake put an ERROR line in every
+        // clean shutdown that had anything to write, which trains people to ignore the real ones.
+        watchingThreads = false;
         if (seclusion != null) {
             // Before anything else, and for the same reason as the chunk holds below: somebody left hidden by
             // a reload is invisible until they reconnect, with nothing on their screen to explain it.
@@ -753,6 +774,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (places != null) {
             places.flush();
+        }
+        if (seedHistory != null) {
+            seedHistory.flush();
         }
         if (identities != null) {
             identities.flush();
@@ -1048,6 +1072,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints() {
         return worldEntryPoints;
+    }
+
+    @Override
+    public de.raindancer.core.world.manage.SeedHistory seedHistory() {
+        return seedHistory;
+    }
+
+    @Override
+    public de.raindancer.core.world.manage.WorldRegenerator worldRegenerator() {
+        return worldRegenerator;
+    }
+
+    @Override
+    public de.raindancer.core.world.manage.WorldEntryRules worldEntryRules() {
+        return worldEntryRules;
     }
 
     @Override

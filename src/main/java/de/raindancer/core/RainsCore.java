@@ -122,6 +122,26 @@ public interface RainsCore {
     de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints();
 
     /**
+     * Every seed a world has had — written by {@link #worldRegenerator()} whenever a world is created
+     * or regenerated through it, and the only record of a regenerated world's old seed once its folder
+     * is gone.
+     */
+    de.raindancer.core.world.manage.SeedHistory seedHistory();
+
+    /**
+     * Creating, deleting and regenerating worlds, with every seed involved written into
+     * {@link #seedHistory()}. Use this one rather than {@code new WorldRegenerator()}, which records
+     * nothing.
+     */
+    de.raindancer.core.world.manage.WorldRegenerator worldRegenerator();
+
+    /**
+     * Whether a player may go into a world right now. Whatever teleports people asks; whatever locks
+     * worlds registers a rule. See {@link de.raindancer.core.world.manage.WorldEntryRules}.
+     */
+    de.raindancer.core.world.manage.WorldEntryRules worldEntryRules();
+
+    /**
      * Every place any plugin has asked to remember: homes, stops on a ghast line, where somebody
      * died. One store, so a ghast line can fly a player to their own home without either plugin
      * knowing about the other.

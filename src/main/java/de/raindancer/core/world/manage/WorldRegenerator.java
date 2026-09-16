@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -24,12 +25,16 @@ import java.util.stream.Stream;
  * gotten right, so a module needing "make sure this world exists" or "wipe this one for a fresh
  * attempt" reaches for this instead of writing its own copy of unload-then-delete-then-recreate.
  *
- * <h2>Why no seed is ever set</h2>
- * Asked for explicitly: this is a plain wipe, not a "restore this exact map" tool. A fixed seed would
- * make every regen of a given world identical to the last, which is only occasionally what somebody
- * running {@code /world regen} wants and is surprising the rest of the time. So the new
- * {@link WorldCreator} is handed nothing but the name, and whatever seed Bukkit picks for a from-scratch
- * world is whatever comes back — the same as creating a brand new world by hand.
+ * <h2>Seeds</h2>
+ * By default none is set: a plain regeneration is a wipe, not a "restore this exact map" tool, and a
+ * fixed seed would make every regeneration of a world identical to the last — only occasionally what
+ * somebody wants, and surprising the rest of the time. The overloads taking a {@link WorldSeed} are
+ * for when it <em>is</em> wanted: the map it had, or a seed somebody chose.
+ *
+ * <p>Handed a {@link SeedHistory}, every seed passing through here is written down — the outgoing one
+ * <em>before</em> its folder is deleted, since after that it exists nowhere, and the new one once the
+ * world is back. Without one nothing is recorded, which is what a test or a caller outside a running
+ * Core wants.
  *
  * <h2>Order of operations, and why it is fixed</h2>
  * Evacuate whoever is standing in it — back to wherever {@link WorldEntryPoints} last saw them before
@@ -56,6 +61,18 @@ public final class WorldRegenerator {
 
     private static final LogChannel log = Log.of("world");
 
+    private final SeedHistory history;
+
+    /** A regenerator that writes no seed down anywhere. */
+    public WorldRegenerator() {
+        this(null);
+    }
+
+    /** @param history where every seed created or thrown away is recorded; null records nothing */
+    public WorldRegenerator(SeedHistory history) {
+        this.history = history;
+    }
+
     /**
      * Deletes {@code world}'s folder and recreates it, empty, under the same name — {@link #delete}
      * followed by {@link #create}, so the two share exactly one copy of each step's own rules (the
@@ -69,22 +86,79 @@ public final class WorldRegenerator {
      *                 either way when it did not
      */
     public void regenerate(World world, Consumer<Boolean> whenDone) {
-        if (world == null) {
+        regenerate(world, WorldSeed.random(), whenDone);
+    }
+
+    /**
+     * The same, with the seed chosen — {@link WorldSeed#same()} puts back the map it had,
+     * {@link WorldSeed#fixed} makes a chosen one, and {@link WorldSeed#random()} is the plain wipe.
+     */
+    public void regenerate(World world, WorldSeed seed, Consumer<Boolean> whenDone) {
+        if (world == null || refused(world)) {
             whenDone.accept(false);
             return;
         }
         String name = world.getName();
-        // Read while the world is still there, for the same reason its folder is: once it is deleted
-        // nothing left says whether it was a nether, an end or a plain overworld, and recreating it as
-        // the wrong one is a swap nobody can undo — the old folder is gone by then.
+        // Everything below is read while the world is still there. Once it is deleted nothing left says
+        // whether it was a nether, a flat world or a generator plugin's, what its game rules were, or
+        // which seed it had — and recreating it wrong is a swap nobody can undo.
         World.Environment environment = world.getEnvironment();
-        delete(world, deleted -> {
+        long outgoing = world.getSeed();
+        record(name, outgoing, SeedHistory.Cause.REPLACED);
+        long chosen = seedFor(seed == null ? WorldSeed.random() : seed, outgoing, OptionalLong.empty());
+        WorldCreator creator = new WorldCreator(name).copy(world).environment(environment);
+        WorldSnapshot carried = WorldSnapshot.of(world);
+        deleteWithoutRecording(world, deleted -> {
             if (!deleted) {
                 whenDone.accept(false);
                 return;
             }
-            whenDone.accept(create(name, environment));
+            whenDone.accept(make(name, creator, OptionalLong.of(chosen), SeedHistory.Cause.REGENERATED,
+                    carried, chosen == outgoing));
         });
+    }
+
+    /**
+     * The seed a regenerated world is made with. Always an explicit one: the creator is a copy of the
+     * old world's, seed included, so "random" has to be drawn here or it would quietly be the old map.
+     */
+    private static long seedFor(WorldSeed seed, long outgoing, OptionalLong shared) {
+        if (seed.kind() == WorldSeed.Kind.RANDOM) {
+            return shared.isPresent() ? shared.getAsLong()
+                    : java.util.concurrent.ThreadLocalRandom.current().nextLong();
+        }
+        return seed.resolve(OptionalLong.of(outgoing)).orElse(outgoing);
+    }
+
+    /**
+     * Whether this world may not be deleted or regenerated at all — said in the log, since the caller only
+     * hears "no".
+     */
+    private static boolean refused(World world) {
+        if (isPrimaryWorld(world)) {
+            log.error("Cannot delete or regenerate '{}': it is this server's primary world, which "
+                    + "Bukkit never allows to be unloaded.", world.getName());
+            return true;
+        }
+        if (isServerDimension(world)) {
+            log.error("Cannot delete or regenerate '{}': it is the primary level's own dimension. Stop "
+                    + "the server and delete its folder instead — at runtime it cannot be made again "
+                    + "as the same dimension.", world.getName());
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code world} is one of the primary level's own three dimensions ({@code minecraft:overworld},
+     * {@code minecraft:the_nether}, {@code minecraft:the_end}). A world created at runtime under the name
+     * {@code world_nether} is a different level with its own key, and is not one of these.
+     */
+    public static boolean isServerDimension(World world) {
+        org.bukkit.NamespacedKey key = world == null ? null : world.getKey();
+        return key != null && key.getNamespace().equals(org.bukkit.NamespacedKey.MINECRAFT)
+                && (key.getKey().equals("overworld") || key.getKey().equals("the_nether")
+                || key.getKey().equals("the_end"));
     }
 
     /**
@@ -101,43 +175,202 @@ public final class WorldRegenerator {
      *                 whatever the reason
      */
     public void delete(World world, Consumer<Boolean> whenDone) {
+        if (world != null && !isPrimaryWorld(world) && !isServerDimension(world)) {
+            // Before anything else, for the reason SeedHistory exists at all: once the folder is gone
+            // this seed is written nowhere.
+            record(world.getName(), world.getSeed(), SeedHistory.Cause.DELETED);
+        }
+        deleteWithoutRecording(world, whenDone);
+    }
+
+    private void deleteWithoutRecording(World world, Consumer<Boolean> whenDone) {
         if (world == null) {
             whenDone.accept(false);
             return;
         }
         String name = world.getName();
-        if (isPrimaryWorld(world)) {
-            // Not a transient failure worth retrying — Bukkit refuses this unconditionally, forever,
-            // for the one world at index 0 of getWorlds() (Paper's own level-name world). Checked
-            // before evacuating anybody, so a misconfigured caller finds out without moving players
-            // for nothing.
-            log.error("Cannot delete '{}': it is this server's primary world, which Bukkit never "
-                    + "allows to be unloaded.", name);
+        // Not a transient failure worth retrying — Bukkit refuses the primary world unconditionally,
+        // for ever. Checked before evacuating anybody, so a misconfigured caller finds out without
+        // moving players for nothing.
+        if (refused(world)) {
             whenDone.accept(false);
             return;
         }
         Path folder = world.getWorldFolder().toPath();
-        List<Player> occupants = List.copyOf(world.getPlayers());
-        if (occupants.isEmpty()) {
-            finishDelete(world, folder, name, whenDone);
-            return;
-        }
-        List<CompletableFuture<Boolean>> moves = new ArrayList<>(occupants.size());
-        for (Player player : occupants) {
-            Location destination = destinationFor(player, world);
-            if (destination == null) {
-                log.error("Cannot delete '{}': there is nowhere to move {} to.", name, player.getName());
+        evacuateThen(List.of(world), name, evacuated -> {
+            if (!evacuated) {
                 whenDone.accept(false);
                 return;
             }
-            moves.add(player.teleportAsync(destination));
+            finishDelete(world, folder, name, whenDone);
+        });
+    }
+
+    /**
+     * Regenerates worlds that belong together — a run's overworld, nether and end — as one operation.
+     *
+     * <h2>Why one at a time is wrong</h2>
+     * Whoever stands in the second world entered it from the first, so "send them back where they came
+     * from" sends them into a world that was deleted a moment ago. That is the speedrun reset that left
+     * its nether and end untouched whenever somebody was still in them. Here every occupant of every
+     * world is moved somewhere <em>outside</em> the group, all of those moves are waited for, and only
+     * then is anything unloaded.
+     *
+     * <h2>Seeds</h2>
+     * A fixed seed is used for every world, and {@link WorldSeed#same()} gives each world back its own.
+     * A random seed is drawn <em>once</em> and shared, since a nether and an end generated from a
+     * different seed than their overworld are not that overworld's dimensions any more.
+     *
+     * <h2>When some of it fails</h2>
+     * A world that will not unload is left exactly as it was, and the rest still go ahead: the admin
+     * gets a mostly fresh group and a log line naming the one that is not, rather than a group left
+     * half-evacuated and entirely old. The answer is {@code true} only when every world came back.
+     *
+     * @param worlds   loaded, in the order they should be made again — overworld first, so a portal
+     *                 linking lookup during creation finds it
+     * @param whenDone told once, on the main thread
+     */
+    public void regenerateAll(List<World> worlds, WorldSeed seed, Consumer<Boolean> whenDone) {
+        List<World> group = worlds == null ? List.of()
+                : worlds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (group.isEmpty()) {
+            whenDone.accept(false);
+            return;
+        }
+        for (World world : group) {
+            if (refused(world)) {
+                whenDone.accept(false);
+                return;
+            }
+        }
+        WorldSeed chosen = seed == null ? WorldSeed.random() : seed;
+        OptionalLong shared = chosen.kind() == WorldSeed.Kind.RANDOM
+                ? OptionalLong.of(java.util.concurrent.ThreadLocalRandom.current().nextLong())
+                : OptionalLong.empty();
+
+        // Everything that must be read while the worlds still exist.
+        record Doomed(World world, String name, Path folder, long seed, WorldCreator creator,
+                      WorldSnapshot carried) {
+        }
+        List<Doomed> doomed = new ArrayList<>();
+        for (World world : group) {
+            doomed.add(new Doomed(world, world.getName(), world.getWorldFolder().toPath(), world.getSeed(),
+                    new WorldCreator(world.getName()).copy(world).environment(world.getEnvironment()),
+                    WorldSnapshot.of(world)));
+            record(world.getName(), world.getSeed(), SeedHistory.Cause.REPLACED);
+        }
+        String names = String.join(", ", doomed.stream().map(Doomed::name).toList());
+
+        evacuateThen(group, names, evacuated -> {
+            if (!evacuated) {
+                whenDone.accept(false);
+                return;
+            }
+            boolean everyOne = true;
+            List<Doomed> gone = new ArrayList<>();
+            for (Doomed each : doomed) {
+                if (!Bukkit.unloadWorld(each.world(), false)) {
+                    log.error("Could not unload '{}', so it is left as it was.", each.name());
+                    everyOne = false;
+                    continue;
+                }
+                if (!deleteFolder(each.folder(), each.name())) {
+                    log.fatal("'{}' was only partly deleted. Its folder is at {} — remove it by hand.",
+                            each.name(), each.folder());
+                    everyOne = false;
+                    continue;
+                }
+                log.info("World '{}' has been deleted, to be made again.", each.name());
+                gone.add(each);
+            }
+            for (Doomed each : gone) {
+                long seedFor = seedFor(chosen, each.seed(), shared);
+                everyOne &= make(each.name(), each.creator(), OptionalLong.of(seedFor),
+                        SeedHistory.Cause.REGENERATED, each.carried(), seedFor == each.seed());
+            }
+            whenDone.accept(everyOne);
+        });
+    }
+
+    /**
+     * Deletes worlds that belong together, for good — the same one-operation shape as
+     * {@link #regenerateAll}, for the same reason: deleting a run's overworld first and its nether second
+     * sends whoever is in the nether back into an overworld that is already gone.
+     *
+     * @param whenDone told once, with whether every one of them is gone; one that would not unload is
+     *                 left exactly as it was, and named in the log
+     */
+    public void deleteAll(List<World> worlds, Consumer<Boolean> whenDone) {
+        List<World> group = worlds == null ? List.of()
+                : worlds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (group.isEmpty()) {
+            whenDone.accept(false);
+            return;
+        }
+        for (World world : group) {
+            if (refused(world)) {
+                whenDone.accept(false);
+                return;
+            }
+        }
+        record Doomed(World world, String name, Path folder) {
+        }
+        List<Doomed> doomed = new ArrayList<>();
+        for (World world : group) {
+            doomed.add(new Doomed(world, world.getName(), world.getWorldFolder().toPath()));
+            record(world.getName(), world.getSeed(), SeedHistory.Cause.DELETED);
+        }
+        String names = String.join(", ", doomed.stream().map(Doomed::name).toList());
+        evacuateThen(group, names, evacuated -> {
+            if (!evacuated) {
+                whenDone.accept(false);
+                return;
+            }
+            boolean everyOne = true;
+            for (Doomed each : doomed) {
+                if (!Bukkit.unloadWorld(each.world(), false)) {
+                    log.error("Could not unload '{}', so it is left as it was.", each.name());
+                    everyOne = false;
+                } else if (!deleteFolder(each.folder(), each.name())) {
+                    log.fatal("'{}' was only partly deleted. Its folder is at {} — remove it by hand.",
+                            each.name(), each.folder());
+                    everyOne = false;
+                } else {
+                    log.info("World '{}' has been deleted.", each.name());
+                }
+            }
+            whenDone.accept(everyOne);
+        });
+    }
+
+    /**
+     * Moves everybody standing in any of {@code leaving} somewhere outside all of them, waits until every
+     * one of those moves has landed, then answers — the part {@link #delete} and {@link #regenerateAll}
+     * share. Nobody to move is an answer on the same tick.
+     */
+    private void evacuateThen(List<World> leaving, String what, Consumer<Boolean> next) {
+        List<CompletableFuture<Boolean>> moves = new ArrayList<>();
+        for (World world : leaving) {
+            for (Player player : List.copyOf(world.getPlayers())) {
+                Location destination = destinationFor(player, leaving);
+                if (destination == null) {
+                    log.error("Cannot clear '{}': there is nowhere to move {} to.", what, player.getName());
+                    next.accept(false);
+                    return;
+                }
+                moves.add(player.teleportAsync(destination));
+            }
+        }
+        if (moves.isEmpty()) {
+            next.accept(true);
+            return;
         }
         CompletableFuture.allOf(moves.toArray(CompletableFuture[]::new))
-                .thenRun(() -> finishDelete(world, folder, name, whenDone))
+                .thenRun(() -> next.accept(true))
                 .exceptionally(failure -> {
-                    log.error(failure, "Could not move everybody out of '{}', so the deletion was "
-                            + "abandoned.", name);
-                    whenDone.accept(false);
+                    log.error(failure, "Could not move everybody out of '{}', so nothing was deleted.",
+                            what);
+                    next.accept(false);
                     return null;
                 });
     }
@@ -163,9 +396,13 @@ public final class WorldRegenerator {
      * {@link WorldEntryPoints} last saw them before they entered it, if that is still somewhere real
      * and not {@code leaving} itself, or the first loaded world's spawn otherwise.
      */
-    private static Location destinationFor(Player player, World leaving) {
+    private static Location destinationFor(Player player, List<World> leaving) {
         Location remembered = RainsCore.get().worldEntryPoints().before(player.getUniqueId())
-                .filter(at -> at.getWorld() != null && !at.getWorld().equals(leaving))
+                // isWorldLoaded first: a Location in a world that has since been unloaded throws from
+                // getWorld() rather than answering null. That is exactly the case of somebody in a
+                // speedrun's nether whose overworld was regenerated a moment earlier.
+                .filter(at -> at.isWorldLoaded() && at.getWorld() != null
+                        && !leaving.contains(at.getWorld()))
                 .orElse(null);
         return remembered != null ? remembered : safeSpawn();
     }
@@ -191,6 +428,16 @@ public final class WorldRegenerator {
      * @return whether it now exists and is loaded
      */
     public boolean create(String name, World.Environment environment) {
+        return create(name, environment, WorldSeed.random());
+    }
+
+    /**
+     * The same, with the seed chosen. {@link WorldSeed#same()} means nothing for a world that does not
+     * exist yet, so it is a random seed here.
+     *
+     * @return whether it now exists and is loaded
+     */
+    public boolean create(String name, World.Environment environment, WorldSeed seed) {
         if (name == null || name.isBlank()) {
             return false;
         }
@@ -198,15 +445,71 @@ public final class WorldRegenerator {
             log.warn("'{}' is already loaded; not creating it again.", name);
             return false;
         }
-        World created = new WorldCreator(name)
-                .environment(environment == null ? World.Environment.NORMAL : environment)
-                .createWorld();
+        WorldCreator creator = new WorldCreator(name)
+                .environment(environment == null ? World.Environment.NORMAL : environment);
+        return make(name, creator, (seed == null ? WorldSeed.random() : seed).resolve(OptionalLong.empty()),
+                SeedHistory.Cause.CREATED, null, false);
+    }
+
+    /**
+     * Loads a world whose folder is already there — at startup, say, since Paper only loads the primary
+     * level's worlds by itself and every world made at runtime is simply absent after a restart. Nothing
+     * is written into the seed history: a world coming back from disk was not created.
+     *
+     * @return whether it is loaded now
+     */
+    public boolean load(String name, World.Environment environment) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        if (Bukkit.getWorld(name) != null) {
+            return true;
+        }
+        WorldCreator creator = new WorldCreator(name)
+                .environment(environment == null ? World.Environment.NORMAL : environment);
+        return make(name, creator, OptionalLong.empty(), null, null, false);
+    }
+
+    /**
+     * Makes the world, writes down the seed it actually got, and puts back whatever {@code carried} holds.
+     *
+     * @param seed    empty lets the server pick
+     * @param cause   null records nothing — a world loaded from disk was not created
+     * @param sameMap whether the new world is the same map as the one {@code carried} was read from
+     */
+    private boolean make(String name, WorldCreator creator, OptionalLong seed, SeedHistory.Cause cause,
+                         WorldSnapshot carried, boolean sameMap) {
+        if (Bukkit.getWorld(name) != null) {
+            log.warn("'{}' is already loaded; not creating it again.", name);
+            return false;
+        }
+        WorldCreator configured = seed.isPresent() ? creator.seed(seed.getAsLong()) : creator;
+        World created = configured.createWorld();
         if (created == null) {
             log.error("The server would not create the world '{}'.", name);
             return false;
         }
+        // The seed the world actually got, not the one asked for: with none asked for, this is the
+        // only moment the server's own pick can be written down.
+        if (cause != null) {
+            record(name, created.getSeed(), cause);
+        }
+        if (carried != null) {
+            try {
+                carried.applyTo(created, sameMap);
+            } catch (RuntimeException failure) {
+                // The world exists and is usable; losing a game rule is not worth reporting it as gone.
+                log.warn(failure, "'{}' is back, but not every setting it had could be restored.", name);
+            }
+        }
         log.info("World '{}' has been created.", name);
         return true;
+    }
+
+    private void record(String world, long seed, SeedHistory.Cause cause) {
+        if (history != null) {
+            history.record(world, seed, cause);
+        }
     }
 
     /**

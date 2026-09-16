@@ -143,7 +143,22 @@ public final class CoreSchema {
                 name     TEXT PRIMARY KEY,
                 made_at  INTEGER,
                 tried_at INTEGER
-            )""");
+            )""",
+
+            // ------------------------------------------------------------------ world seeds
+            //
+            // Every seed a world was created with, regenerated with, or had when it was thrown away —
+            // see SeedHistory. Only ever appended to: a regenerated world's old seed exists nowhere
+            // else once its folder is gone, so a row here is never rewritten.
+            """
+            CREATE TABLE world_seed (
+                id    INTEGER PRIMARY KEY,
+                world TEXT    NOT NULL,
+                seed  INTEGER NOT NULL,
+                at    INTEGER NOT NULL,
+                cause TEXT    NOT NULL
+            )""",
+            "CREATE INDEX world_seed_by_world ON world_seed (world, at DESC)");
 
     /**
      * What was done.
