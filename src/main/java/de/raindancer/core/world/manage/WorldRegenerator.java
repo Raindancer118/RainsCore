@@ -62,6 +62,7 @@ public final class WorldRegenerator {
     private static final LogChannel log = Log.of("world");
 
     private final SeedHistory history;
+    private final Consumer<Runnable> onGlobal;
 
     /** A regenerator that writes no seed down anywhere. */
     public WorldRegenerator() {
@@ -70,7 +71,44 @@ public final class WorldRegenerator {
 
     /** @param history where every seed created or thrown away is recorded; null records nothing */
     public WorldRegenerator(SeedHistory history) {
+        this(history, Runnable::run);
+    }
+
+    /**
+     * @param history  where every seed created or thrown away is recorded; null records nothing
+     * @param onGlobal how to get onto the thread that may unload, delete and create worlds — Core passes
+     *                 the global region scheduler. Teleports and database writes finish on whatever thread
+     *                 they finish on, and every step after one of them hops through this first. Running
+     *                 in place is right only for a caller already on that thread, such as a test.
+     */
+    public WorldRegenerator(SeedHistory history, Consumer<Runnable> onGlobal) {
         this.history = history;
+        this.onGlobal = onGlobal == null ? Runnable::run : onGlobal;
+    }
+
+    /**
+     * Runs {@code then} once every seed recorded so far is on disk, back on the world thread. A seed
+     * that cannot be written stops the destructive step: afterwards it would exist nowhere.
+     */
+    private void onceSeedsAreWritten(Runnable then, Consumer<Boolean> whenDone) {
+        if (history == null) {
+            then.run();
+            return;
+        }
+        CompletableFuture<Boolean> written = history.flushNow();
+        if (written == null) {
+            then.run();
+            return;
+        }
+        written.whenComplete((ok, failure) -> onGlobal.accept(() -> {
+            if (failure == null && Boolean.TRUE.equals(ok)) {
+                then.run();
+                return;
+            }
+            log.error("The seed history could not be written, so nothing was deleted: the seed of the "
+                    + "world that would have gone exists nowhere else.");
+            whenDone.accept(false);
+        }));
     }
 
     /**
@@ -108,14 +146,14 @@ public final class WorldRegenerator {
         long chosen = seedFor(seed == null ? WorldSeed.random() : seed, outgoing, OptionalLong.empty());
         WorldCreator creator = new WorldCreator(name).copy(world).environment(environment);
         WorldSnapshot carried = WorldSnapshot.of(world);
-        deleteWithoutRecording(world, deleted -> {
+        onceSeedsAreWritten(() -> deleteWithoutRecording(world, deleted -> {
             if (!deleted) {
                 whenDone.accept(false);
                 return;
             }
             whenDone.accept(make(name, creator, OptionalLong.of(chosen), SeedHistory.Cause.REGENERATED,
                     carried, chosen == outgoing));
-        });
+        }), whenDone);
     }
 
     /**
@@ -179,6 +217,9 @@ public final class WorldRegenerator {
             // Before anything else, for the reason SeedHistory exists at all: once the folder is gone
             // this seed is written nowhere.
             record(world.getName(), world.getSeed(), SeedHistory.Cause.DELETED);
+            World doomed = world;
+            onceSeedsAreWritten(() -> deleteWithoutRecording(doomed, whenDone), whenDone);
+            return;
         }
         deleteWithoutRecording(world, whenDone);
     }
@@ -261,7 +302,7 @@ public final class WorldRegenerator {
         }
         String names = String.join(", ", doomed.stream().map(Doomed::name).toList());
 
-        evacuateThen(group, names, evacuated -> {
+        onceSeedsAreWritten(() -> evacuateThen(group, names, evacuated -> {
             if (!evacuated) {
                 whenDone.accept(false);
                 return;
@@ -289,7 +330,7 @@ public final class WorldRegenerator {
                         SeedHistory.Cause.REGENERATED, each.carried(), seedFor == each.seed());
             }
             whenDone.accept(everyOne);
-        });
+        }), whenDone);
     }
 
     /**
@@ -321,7 +362,7 @@ public final class WorldRegenerator {
             record(world.getName(), world.getSeed(), SeedHistory.Cause.DELETED);
         }
         String names = String.join(", ", doomed.stream().map(Doomed::name).toList());
-        evacuateThen(group, names, evacuated -> {
+        onceSeedsAreWritten(() -> evacuateThen(group, names, evacuated -> {
             if (!evacuated) {
                 whenDone.accept(false);
                 return;
@@ -340,7 +381,7 @@ public final class WorldRegenerator {
                 }
             }
             whenDone.accept(everyOne);
-        });
+        }), whenDone);
     }
 
     /**
@@ -366,13 +407,18 @@ public final class WorldRegenerator {
             return;
         }
         CompletableFuture.allOf(moves.toArray(CompletableFuture[]::new))
-                .thenRun(() -> next.accept(true))
-                .exceptionally(failure -> {
-                    log.error(failure, "Could not move everybody out of '{}', so nothing was deleted.",
-                            what);
-                    next.accept(false);
-                    return null;
-                });
+                .whenComplete((ignored, failure) -> onGlobal.accept(() -> {
+                    // "Every future finished" is not "everybody left": Paper answers false for a
+                    // cross-world teleport it would not do — somebody carrying a passenger, for one — and
+                    // unloading then deletes the world around them.
+                    boolean everybodyLeft = failure == null
+                            && moves.stream().allMatch(move -> Boolean.TRUE.equals(move.getNow(false)));
+                    if (!everybodyLeft) {
+                        log.error(failure, "Not everybody could be moved out of '{}', so nothing was "
+                                + "deleted.", what);
+                    }
+                    next.accept(everybodyLeft);
+                }));
     }
 
     private void finishDelete(World world, Path folder, String name, Consumer<Boolean> whenDone) {

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -159,12 +160,17 @@ final class LuckPermsGrantStore implements GrantStore {
 
     @Override
     public boolean grantAll(UUID who, Collection<String> nodes) {
+        return grantAllSaving(who, nodes) != null;
+    }
+
+    /** The same, answering with LuckPerms' own save — null when nothing changed and nothing was saved. */
+    private CompletableFuture<Void> grantAllSaving(UUID who, Collection<String> nodes) {
         if (who == null || nodes == null || nodes.isEmpty()) {
-            return false;
+            return null;
         }
         User user = loadUser(who);
         if (user == null) {
-            return false;
+            return null;
         }
         boolean changed = false;
         Set<String> owned = ownedNodesOf(who);
@@ -179,10 +185,7 @@ final class LuckPermsGrantStore implements GrantStore {
                 }
             }
         }
-        if (changed) {
-            luckPerms.getUserManager().saveUser(user);
-        }
-        return changed;
+        return changed ? luckPerms.getUserManager().saveUser(user) : null;
     }
 
     // ---------------------------------------------------------------------------- the preset (rank groups)
@@ -389,11 +392,26 @@ final class LuckPermsGrantStore implements GrantStore {
         }
         YamlStore oldStore = new YamlStore(oldGrantsFile);
         var imported = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<CompletableFuture<Void>> saves = new java.util.ArrayList<>();
         LocalGrantStore.readInto(oldStore, (who, nodes) -> {
-            if (grantAll(who, nodes)) {
+            CompletableFuture<Void> saved = grantAllSaving(who, nodes);
+            if (saved != null) {
+                saves.add(saved);
                 imported.incrementAndGet();
             }
         });
+        // LuckPerms saves on its own executor. The old file is only put aside once every save is
+        // confirmed: renamed after a save LuckPerms refused, the import never runs again and the
+        // permissions are nowhere. Waited for here because this runs once, at startup.
+        try {
+            CompletableFuture.allOf(saves.toArray(CompletableFuture[]::new))
+                    .get(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception notSaved) {
+            log.error("LuckPerms did not confirm saving the permissions imported from grants.yml ({}). "
+                    + "grants.yml is left where it is and will be imported again on the next start.",
+                    notSaved.toString());
+            return;
+        }
         try {
             Files.move(oldGrantsFile,
                     oldGrantsFile.resolveSibling(oldGrantsFile.getFileName() + ".imported-into-luckperms"),

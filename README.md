@@ -5,7 +5,7 @@
 **One implementation of everything Rain's plugins do to the game.**
 
 [![Build](https://github.com/Raindancer118/RainsCore/actions/workflows/build.yml/badge.svg)](https://github.com/Raindancer118/RainsCore/actions/workflows/build.yml)
-[![Version](https://img.shields.io/badge/version-1.30.0-4c9aff)](https://github.com/Raindancer118/RainsCore/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.36.2-4c9aff)](https://github.com/Raindancer118/RainsCore/releases/latest)
 [![Paper](https://img.shields.io/badge/Paper-26.2-1f6feb)](https://papermc.io/)
 [![Java](https://img.shields.io/badge/Java-25-f89820)](https://adoptium.net/)
 [![Tests](https://img.shields.io/badge/tests-1021%20unit%20%2B%20101%20live-2ea043)](#-working-on-it)
@@ -86,7 +86,7 @@ cd RainsCore && mvn install    # → your local Maven repository
 <dependency>
     <groupId>de.raindancer</groupId>
     <artifactId>RainsCore</artifactId>
-    <version>1.30.0</version>
+    <version>1.36.2</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -96,7 +96,7 @@ cd RainsCore && mvn install    # → your local Maven repository
 
 ```kotlin
 dependencies {
-    compileOnly("de.raindancer:RainsCore:1.30.0")
+    compileOnly("de.raindancer:RainsCore:1.36.2")
 }
 ```
 

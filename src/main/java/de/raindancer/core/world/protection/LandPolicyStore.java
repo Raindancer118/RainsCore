@@ -118,42 +118,43 @@ public final class LandPolicyStore {
             return;
         }
 
-        YamlConfiguration yaml = new YamlConfiguration();
-        yaml.options().setHeader(java.util.List.of(
-                "What this server decided about the land flags.",
-                "",
-                "Only decisions that differ from the built-in behaviour are written here, so a flag that is",
-                "absent is a flag as it ships — and improving a built-in default in a later release reaches",
-                "this server rather than being overruled by a line nobody meant to write.",
-                "",
-                "  policy:  available | forced-on | forced-off | disabled",
-                "  default: what a new claim starts with while the policy is 'available'",
-                "",
-                "Set through /claimadmin flags rather than by hand, unless you prefer a file."));
+        // Through YamlStore: a temporary, then an atomic move. Written in place, a crash or a full disk
+        // mid-write left half a file, and every flag fell back to its built-in on the next start.
+        boolean written = new de.raindancer.core.data.store.YamlStore(file).write(yaml -> {
+            yaml.options().setHeader(java.util.List.of(
+                    "What this server decided about the land flags.",
+                    "",
+                    "Only decisions that differ from the built-in behaviour are written here, so a flag that is",
+                    "absent is a flag as it ships — and improving a built-in default in a later release reaches",
+                    "this server rather than being overruled by a line nobody meant to write.",
+                    "",
+                    "  policy:  available | forced-on | forced-off | disabled",
+                    "  default: what a new claim starts with while the policy is 'available'",
+                    "",
+                    "Set through /claimadmin flags rather than by hand, unless you prefer a file."));
 
-        // Written in the order the flags are declared, grouped as Core groups them, so the file reads in
-        // the same order as the screen an admin just used.
-        // EnumMap's copy constructor refuses an empty map, and exactly one of these two is routinely empty.
-        Map<LandFlag, FlagPolicy> policyChanges = new EnumMap<>(LandFlag.class);
-        policyChanges.putAll(changed.flagPolicies());
-        Map<LandFlag, Boolean> defaultChanges = new EnumMap<>(LandFlag.class);
-        defaultChanges.putAll(changed.flagDefaults());
-        for (LandFlag flag : LandFlag.values()) {
-            FlagPolicy policy = policyChanges.get(flag);
-            Boolean value = defaultChanges.get(flag);
-            if (policy != null) {
-                yaml.set(FLAGS + "." + flag.key() + ".policy", policy.key());
+            // Written in the order the flags are declared, grouped as Core groups them, so the file reads in
+            // the same order as the screen an admin just used.
+            // EnumMap's copy constructor refuses an empty map, and exactly one of these two is routinely empty.
+            Map<LandFlag, FlagPolicy> policyChanges = new EnumMap<>(LandFlag.class);
+            policyChanges.putAll(changed.flagPolicies());
+            Map<LandFlag, Boolean> defaultChanges = new EnumMap<>(LandFlag.class);
+            defaultChanges.putAll(changed.flagDefaults());
+            for (LandFlag flag : LandFlag.values()) {
+                FlagPolicy policy = policyChanges.get(flag);
+                Boolean value = defaultChanges.get(flag);
+                if (policy != null) {
+                    yaml.set(FLAGS + "." + flag.key() + ".policy", policy.key());
+                }
+                if (value != null) {
+                    yaml.set(FLAGS + "." + flag.key() + ".default", value);
+                }
             }
-            if (value != null) {
-                yaml.set(FLAGS + "." + flag.key() + ".default", value);
-            }
-        }
 
-        Path parent = file.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
+        });
+        if (!written) {
+            throw new IOException("could not write " + file + "; it is unchanged");
         }
-        Files.writeString(file, yaml.saveToString());
     }
 
     /** What went wrong reading the file, if anything did. */

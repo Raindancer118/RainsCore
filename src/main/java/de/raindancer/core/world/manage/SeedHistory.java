@@ -166,6 +166,28 @@ public final class SeedHistory {
                 .toList();
     }
 
+    /**
+     * Writes what is queued on the writer this history was given, and answers once it is on disk — what
+     * anything about to delete a world waits for, since the seed it just recorded exists nowhere else.
+     * Without a writer it runs here.
+     *
+     * @return true once everything is written; false when it could not be
+     */
+    public java.util.concurrent.CompletableFuture<Boolean> flushNow() {
+        if (writeSoon == null) {
+            return java.util.concurrent.CompletableFuture.completedFuture(flush());
+        }
+        java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+        writeSoon.accept(() -> {
+            try {
+                done.complete(flush());
+            } catch (RuntimeException failure) {
+                done.completeExceptionally(failure);
+            }
+        });
+        return done;
+    }
+
     /** Whether anything is waiting to be written. */
     public boolean isDirty() {
         return !unwritten.isEmpty();

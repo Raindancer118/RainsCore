@@ -326,7 +326,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                     }
                 });
         seedHistory.load();
-        worldRegenerator = new de.raindancer.core.world.manage.WorldRegenerator(seedHistory);
+        worldRegenerator = new de.raindancer.core.world.manage.WorldRegenerator(seedHistory,
+                task -> Scheduling.global(this, task));
 
         identities = new Identities(databases.core());
         identities.load();

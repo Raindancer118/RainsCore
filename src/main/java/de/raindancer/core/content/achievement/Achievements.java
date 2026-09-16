@@ -305,14 +305,19 @@ public final class Achievements {
         defined.clear();
         earned.clear();
         progress.clear();
+        // Who earned what is loaded whatever happens to the definitions file. It lives in the database,
+        // and a restore or a deploy without achievements.yml used to leave it unloaded — after which
+        // the next flush for anybody who earned something wrote their rows back without the old ones.
         if (!store.exists()) {
             dirty.set(false);
+            loadPlayers();
             return;
         }
         YamlConfiguration yaml = store.read();
         if (!store.problems().isEmpty()) {
-            log.error("Could not read {} ({}); nobody's achievements are known this session.",
-                    file, String.join("; ", store.problems()));
+            log.error("Could not read {} ({}); the achievements defined in it are unknown this session, "
+                    + "but what everybody earned is kept.", file, String.join("; ", store.problems()));
+            loadPlayers();
             return;
         }
         readDefinitions(yaml.getConfigurationSection("achievements"));

@@ -17,6 +17,7 @@ import org.mockito.MockedStatic;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -531,6 +532,11 @@ class WorldRegeneratorTest {
         private final SeedHistory history = mock(SeedHistory.class);
         private final WorldRegenerator recording = new WorldRegenerator(history);
 
+        @BeforeEach
+        void seedsAreWritten() {
+            when(history.flushNow()).thenReturn(CompletableFuture.completedFuture(true));
+        }
+
         private World madeWithSeed(long seed) {
             World made = mock(World.class);
             when(made.getSeed()).thenReturn(seed);
@@ -725,6 +731,7 @@ class WorldRegeneratorTest {
 
         @BeforeEach
         void worlds() throws IOException {
+            when(history.flushNow()).thenReturn(CompletableFuture.completedFuture(true));
             overworld = worldAt("run", World.Environment.NORMAL, 11L);
             nether = worldAt("run_nether", World.Environment.NETHER, 11L);
             end = worldAt("run_the_end", World.Environment.THE_END, 11L);
@@ -937,6 +944,86 @@ class WorldRegeneratorTest {
                 assertThat(creators.constructed()).isEmpty();
                 verify(history).record("run", 11L, SeedHistory.Cause.DELETED);
                 verify(history).record("run_the_end", 11L, SeedHistory.Cause.DELETED);
+            }
+        }
+
+        @Test
+        @DisplayName("a teleport that comes back false stops everything: nothing unloaded, nothing deleted")
+        void aRefusedTeleportIsNotAnEvacuation() {
+            // Paper answers false for a cross-world teleport it would not do — somebody with a passenger,
+            // for one. Treating "the future finished" as "they left" deleted the world around them.
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+                Player stuck = mock(Player.class);
+                when(stuck.getUniqueId()).thenReturn(UUID.randomUUID());
+                when(stuck.teleportAsync(any(Location.class))).thenReturn(CompletableFuture.completedFuture(false));
+                when(nether.getPlayers()).thenReturn(List.of(stuck));
+
+                Boolean regenerated = awaitResult(cb -> recording.regenerateAll(List.of(overworld, nether, end),
+                        WorldSeed.random(), cb));
+                Boolean deleted = awaitResult(cb -> recording.deleteAll(List.of(overworld, nether, end), cb));
+
+                assertThat(regenerated).isFalse();
+                assertThat(deleted).isFalse();
+                bukkit.verify(() -> Bukkit.unloadWorld(any(World.class), org.mockito.ArgumentMatchers.anyBoolean()), never());
+                assertThat(groupDirectory.resolve("run_nether")).exists();
+            }
+        }
+
+        @Test
+        @DisplayName("nothing is unloaded until the outgoing seeds are actually on disk")
+        void seedsFirst() {
+            CompletableFuture<Boolean> written = new CompletableFuture<>();
+            when(history.flushNow()).thenReturn(written);
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                AtomicReference<Boolean> result = new AtomicReference<>();
+                recording.regenerateAll(List.of(overworld, nether), WorldSeed.random(), result::set);
+
+                bukkit.verify(() -> Bukkit.unloadWorld(any(World.class), org.mockito.ArgumentMatchers.anyBoolean()), never());
+                written.complete(true);
+                assertThat(result.get()).isTrue();
+            }
+        }
+
+        @Test
+        @DisplayName("a seed that could not be written stops the deletion — the seed would exist nowhere")
+        void unwrittenSeedStopsIt() {
+            when(history.flushNow()).thenReturn(CompletableFuture.completedFuture(false));
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                Boolean ok = awaitResult(cb -> recording.deleteAll(List.of(overworld), cb));
+
+                assertThat(ok).isFalse();
+                assertThat(groupDirectory.resolve("run")).exists();
+            }
+        }
+
+        @Test
+        @DisplayName("unloading, deleting and creating happen on the thread handed in for world work")
+        void worldWorkOnTheGlobalThread() {
+            List<String> ran = new ArrayList<>();
+            WorldRegenerator onAThread = new WorldRegenerator(history, task -> {
+                ran.add("global");
+                task.run();
+            });
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                 MockedStatic<RainsCore> core = mockStatic(RainsCore.class);
+                 MockedConstruction<WorldCreator> creators = creators()) {
+                stubServer(bukkit, core);
+
+                Boolean ok = awaitResult(cb -> onAThread.regenerateAll(List.of(overworld), WorldSeed.random(), cb));
+
+                assertThat(ok).isTrue();
+                assertThat(ran).isNotEmpty();
             }
         }
 

@@ -47,6 +47,24 @@ class LandPolicyStoreTest {
     }
 
     @Test
+    @DisplayName("the file is replaced whole, never rewritten in place")
+    void replacedWhole() throws IOException {
+        // Written in place, a crash or a full disk mid-write leaves a half file and every flag falls back
+        // to its built-in. Replaced through a temporary, the old file stays whole until the new one is.
+        // An existing file that cannot be written in place tells the two apart.
+        LandPolicies policies = LandPolicies.builtIn();
+        policies.policy(LandFlag.PVP, FlagPolicy.FORCED_OFF);
+        new LandPolicyStore(file()).save(policies);
+        assertThat(file().toFile().setWritable(false)).isTrue();
+
+        policies.policy(LandFlag.PVP, FlagPolicy.DISABLED);
+        new LandPolicyStore(file()).save(policies);
+
+        assertThat(new LandPolicyStore(file()).load().policy(LandFlag.PVP)).isEqualTo(FlagPolicy.DISABLED);
+        assertThat(folder.resolve("land-flags.yml.writing")).doesNotExist();
+    }
+
+    @Test
     @DisplayName("a policy and a default survive a restart")
     void whatWasSetComesBack() throws IOException {
         LandPolicies policies = LandPolicies.builtIn();

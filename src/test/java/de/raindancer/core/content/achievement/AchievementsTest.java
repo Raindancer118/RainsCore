@@ -359,6 +359,33 @@ class AchievementsTest {
         }
 
         @Test
+        @DisplayName("a missing achievements.yml does not cost anybody what they earned")
+        void earnedSurvivesAMissingDefinitionsFile() throws Exception {
+            achievements.define(firstClaim());
+            achievements.award(ALICE, "claims:first-claim");
+            achievements.flush();
+            java.nio.file.Files.delete(directory.resolve("achievements.yml"));
+
+            // A restore, or a deploy that did not carry the file: the definitions are gone, the
+            // database is not. Before, nobody's awards were loaded, and the next flush after one new
+            // award wrote the player's rows back without the old ones.
+            openedDatabase.close();
+            Achievements reopened = new Achievements(directory.resolve("achievements.yml"), database(), clock::get);
+            reopened.load();
+            reopened.define(firstClaim());
+            reopened.define(Achievement.builder("ghasts", "first-flight").title("<aqua>Up").description("Fly").build());
+            assertThat(reopened.hasEarned(ALICE, "claims:first-claim")).isTrue();
+            reopened.award(ALICE, "ghasts:first-flight");
+            reopened.flush();
+
+            openedDatabase.close();
+            Achievements again = new Achievements(directory.resolve("achievements.yml"), database(), clock::get);
+            again.load();
+            assertThat(again.hasEarned(ALICE, "claims:first-claim")).isTrue();
+            assertThat(again.hasEarned(ALICE, "ghasts:first-flight")).isTrue();
+        }
+
+        @Test
         @DisplayName("a missing file is simply nothing earned yet")
         void survivesAMissingFile() {
             Achievements fresh = new Achievements(directory.resolve("nothing.yml"),

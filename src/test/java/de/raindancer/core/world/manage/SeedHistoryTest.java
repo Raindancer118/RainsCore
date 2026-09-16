@@ -126,6 +126,24 @@ class SeedHistoryTest {
     }
 
     @Test
+    @DisplayName("flushNow answers once what was recorded is on disk, on the writer it was handed")
+    void flushNowWaits() {
+        java.util.List<Runnable> asked = new java.util.ArrayList<>();
+        database = Database.open(folder.resolve("core.db"), CoreSchema.CORE, () -> false);
+        SeedHistory history = new SeedHistory(database, clock::get, asked::add);
+        history.load();
+        history.record("farm", 3L, SeedHistory.Cause.REPLACED);
+        asked.clear();
+
+        java.util.concurrent.CompletableFuture<Boolean> done = history.flushNow();
+
+        assertThat(done).isNotDone();
+        asked.forEach(Runnable::run);
+        assertThat(done).isCompletedWithValue(true);
+        assertThat(history.isDirty()).isFalse();
+    }
+
+    @Test
     @DisplayName("nothing to write is not a failure, and a blank world name records nothing")
     void edges() {
         SeedHistory history = open();
