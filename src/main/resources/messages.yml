@@ -157,6 +157,13 @@ combat:
   # A rule that allows this fight with bare fists only. A plugin can say this its own way.
   fists-only: "<red>Only fists here — put down what you are holding."
 
+navigation:
+  # world.visual.Navigator — walking somebody to a point. A plugin can say these its own way.
+  started: "<green>Navigating to <white><target></white>. Follow the trail."
+  distance: "<yellow><target> <gray>— <white><blocks></white> blocks"
+  other-world: "<yellow><target> <gray>is in another world."
+  arrived: "<green>You have reached <white><target></white>."
+
 # ─────────────────────────────────────────────────────────── custom items
 #
 #  Said when a custom item was clicked and did not do its thing. There is no
