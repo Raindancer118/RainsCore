@@ -618,6 +618,62 @@ public final class Messages {
         return bundled != null ? bundled : defined.get(key);
     }
 
+    // ------------------------------------------------------------------ per-plugin overrides
+
+    /** plugin → (key → the key that plugin says it with instead). */
+    private final Map<String, Map<String, String>> overrides = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Makes one plugin say {@code key} with {@code replacementKey} instead — for that plugin only.
+     *
+     * <p>Keys are global, so a module can neither reword a Core line through its own wording (that
+     * arrives as a floor) nor {@link #force} it without rewording it for every plugin on the server.
+     * An override is the narrow version: wherever Core sends {@code key} on behalf of {@code plugin}
+     * (see {@link #prefixedFor}), the replacement is sent. The replacement is an ordinary key — usually
+     * in the plugin's own section — so the owner can still edit it and it carries that plugin's prefix.
+     *
+     * @param plugin a plugin's or module's id, as the caller that sends on its behalf knows it
+     * @return whether it was taken
+     */
+    public boolean overrideFor(String plugin, String key, String replacementKey) {
+        if (plugin == null || plugin.isBlank() || key == null || key.isBlank()
+                || replacementKey == null || replacementKey.isBlank()) {
+            return false;
+        }
+        overrides.computeIfAbsent(plugin, ignored -> new java.util.concurrent.ConcurrentHashMap<>())
+                .put(key, replacementKey);
+        return true;
+    }
+
+    /** Drops every override {@code plugin} made — for a plugin or module unloading. @return how many */
+    public int forgetOverridesFor(String plugin) {
+        Map<String, String> gone = plugin == null ? null : overrides.remove(plugin);
+        return gone == null ? 0 : gone.size();
+    }
+
+    /**
+     * The key {@code plugin} says {@code key} with: its override, or {@code key} itself. An override
+     * whose replacement nobody defined falls back to the original rather than printing a bare key.
+     */
+    public String keyFor(String plugin, String key) {
+        if (plugin == null || key == null) {
+            return key;
+        }
+        Map<String, String> own = overrides.get(plugin);
+        String replacement = own == null ? null : own.get(key);
+        return replacement != null && has(replacement) ? replacement : key;
+    }
+
+    /** {@link #prefixed}, as {@code plugin} says it — see {@link #overrideFor}. */
+    public Component prefixedFor(String plugin, String key, Object... values) {
+        return prefixed(keyFor(plugin, key), values);
+    }
+
+    /** {@link #send}, as {@code plugin} says it — see {@link #overrideFor}. */
+    public void sendFor(String plugin, Audience recipient, String key, Object... values) {
+        send(recipient, keyFor(plugin, key), values);
+    }
+
     /** Whether a key is defined anywhere at all. */
     public boolean has(String key) {
         return lookUp(key) != null;

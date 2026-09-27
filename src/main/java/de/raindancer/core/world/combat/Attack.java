@@ -27,9 +27,31 @@ import java.util.UUID;
  * @param where      the spot the damage lands on — the victim. Null when the caller could not say
  * @param from       the spot it came from — the attacker. Null for the world itself, and for an
  *                   attacker whose position is not knowable
+ * @param means      how it was delivered — a fist, something held, something shot. {@link Means#UNKNOWN}
+ *                   for an attack built without saying, which no rule should read as a fist
  */
 public record Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID victimId,
-                     String world, boolean throughPet, At where, At from) {
+                     String world, boolean throughPet, At where, At from, Means means) {
+
+    /** The shape before {@link #means} existed, kept so plugins built against it still link. */
+    public Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID victimId,
+                  String world, boolean throughPet, At where, At from) {
+        this(attacker, attackerId, victim, victimId, world, throughPet, where, from, Means.UNKNOWN);
+    }
+
+    /** How a hit landed, for a rule that cares whether it was a fist, a sword or an arrow. */
+    public enum Means {
+        /** A player hitting with nothing in their main hand. */
+        BARE_HANDED,
+        /** A player hitting with anything in their main hand — a sword, a block, a compass. */
+        HELD_ITEM,
+        /** Something shot or thrown: an arrow, a trident, a splash potion, a snowball. */
+        RANGED,
+        /** Everything else with somebody behind it: a pet, TNT, a lingering cloud, lightning. */
+        OTHER,
+        /** Not said. */
+        UNKNOWN
+    }
 
     /**
      * A point in the world, without dragging Bukkit into the rules.
@@ -83,6 +105,7 @@ public record Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID vic
 
     public Attack {
         world = world == null ? "" : world;
+        means = means == null ? Means.UNKNOWN : means;
     }
 
     /** Damage from the world itself — falling, drowning, a cactus. */
@@ -113,12 +136,22 @@ public record Attack(Fighter attacker, UUID attackerId, Fighter victim, UUID vic
 
     /** The same attack with the two positions filled in. */
     public Attack at(At where, At from) {
-        return new Attack(attacker, attackerId, victim, victimId, world, throughPet, where, from);
+        return new Attack(attacker, attackerId, victim, victimId, world, throughPet, where, from, means);
+    }
+
+    /** The same attack, delivered by {@code how}. */
+    public Attack withMeans(Means how) {
+        return new Attack(attacker, attackerId, victim, victimId, world, throughPet, where, from, how);
+    }
+
+    /** Whether this was a player's bare fist — the one thing a "fists only" rule lets through. */
+    public boolean isBareHanded() {
+        return means == Means.BARE_HANDED;
     }
 
     /** The same attack, marked as having gone through somebody's pet. */
     public Attack throughAPet() {
-        return new Attack(attacker, attackerId, victim, victimId, world, true, where, from);
+        return new Attack(attacker, attackerId, victim, victimId, world, true, where, from, means);
     }
 
     /**

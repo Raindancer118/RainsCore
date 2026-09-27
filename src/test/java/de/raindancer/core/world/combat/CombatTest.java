@@ -505,4 +505,103 @@ class CombatTest {
         }
     }
 
+    @Nested
+    @DisplayName("how an attack was delivered")
+    class Means {
+
+        @Test
+        @DisplayName("an attack built without saying how is UNKNOWN, never mistaken for a fist")
+        void unknownByDefault() {
+            assertThat(Attack.between(ALICE, BOB, OVERWORLD).means()).isEqualTo(Attack.Means.UNKNOWN);
+            assertThat(Attack.between(ALICE, BOB, OVERWORLD).isBareHanded()).isFalse();
+        }
+
+        @Test
+        @DisplayName("withMeans changes that and nothing else, and survives at() and throughAPet()")
+        void carriedThrough() {
+            Attack punched = Attack.between(ALICE, BOB, OVERWORLD).withMeans(Attack.Means.BARE_HANDED);
+
+            assertThat(punched.isBareHanded()).isTrue();
+            assertThat(punched.attackerId()).isEqualTo(ALICE);
+            assertThat(punched.at(new Attack.At(1, 2, 3), null).means()).isEqualTo(Attack.Means.BARE_HANDED);
+            assertThat(punched.throughAPet().means()).isEqualTo(Attack.Means.BARE_HANDED);
+        }
+
+        @Test
+        @DisplayName("FISTS_ONLY is a refusal with its own sentence, not the vague PROTECTED one")
+        void fistsOnlyVerdict() {
+            assertThat(Verdict.FISTS_ONLY.allowed()).isFalse();
+            assertThat(Verdict.FISTS_ONLY.reasonKey()).isEqualTo("combat.fists-only");
+        }
+
+        @Test
+        @DisplayName("an extra rule can refuse everything but a fist")
+        void fistsOnlyRule() {
+            combat.alsoAsk(attack -> attack.isPlayerVersusPlayer() && !attack.isBareHanded()
+                    ? Verdict.PROTECTED : null);
+
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)
+                    .withMeans(Attack.Means.BARE_HANDED)).allowed()).isTrue();
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)
+                    .withMeans(Attack.Means.HELD_ITEM))).isEqualTo(Verdict.PROTECTED);
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)
+                    .withMeans(Attack.Means.RANGED))).isEqualTo(Verdict.PROTECTED);
+        }
+    }
+
+    @Nested
+    @DisplayName("withdrawing an extra rule")
+    class StopAsking {
+
+        @Test
+        @DisplayName("a rule that was withdrawn is never asked again — a plugin unloading takes its rule with it")
+        void withdrawn() {
+            java.util.function.Function<Attack, Verdict> rule = attack -> Verdict.PROTECTED;
+            combat.alsoAsk(rule);
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD))).isEqualTo(Verdict.PROTECTED);
+
+            assertThat(combat.stopAsking(rule)).isTrue();
+
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)).allowed()).isTrue();
+            assertThat(combat.extraRules()).isZero();
+            assertThat(combat.stopAsking(rule)).as("second time: nothing left to remove").isFalse();
+            assertThat(combat.stopAsking(null)).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("rules that belong to a plugin")
+    class Owned {
+
+        @Test
+        @DisplayName("a refusal says which plugin's rule it was, so that plugin's wording can be used")
+        void rulingNamesThePlugin() {
+            combat.alsoAsk("manhunt", attack -> Verdict.FISTS_ONLY);
+
+            Combat.Ruling ruling = combat.decide(Attack.between(ALICE, BOB, OVERWORLD));
+
+            assertThat(ruling.verdict()).isEqualTo(Verdict.FISTS_ONLY);
+            assertThat(ruling.decidedBy()).isEqualTo("manhunt");
+        }
+
+        @Test
+        @DisplayName("Core's own rules, and anonymous extra rules, name nobody")
+        void coreRulesNameNobody() {
+            combat.pvp(false);
+            assertThat(combat.decide(Attack.between(ALICE, BOB, OVERWORLD)).decidedBy()).isNull();
+
+            combat.alsoAsk(attack -> Verdict.PROTECTED);
+            assertThat(combat.decide(Attack.between(ALICE, BOB, OVERWORLD)).decidedBy()).isNull();
+        }
+
+        @Test
+        @DisplayName("a plugin's rule can be withdrawn by the same reference")
+        void withdrawOwned() {
+            java.util.function.Function<Attack, Verdict> rule = attack -> Verdict.PROTECTED;
+            combat.alsoAsk("manhunt", rule);
+
+            assertThat(combat.stopAsking(rule)).isTrue();
+            assertThat(combat.judge(Attack.between(ALICE, BOB, OVERWORLD)).allowed()).isTrue();
+        }
+    }
 }

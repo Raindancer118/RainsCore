@@ -29,7 +29,15 @@ public enum Verdict {
      * <p>Deliberately vague, because this library does not know why. Whatever answered it says so
      * itself; a message from here would be a guess.
      */
-    PROTECTED("combat.protected");
+    PROTECTED("combat.protected"),
+
+    /**
+     * Only a bare fist is allowed in this fight — a rule like Manhunt's "Hunters only punch each
+     * other". Its own constant so the attacker is told to put the weapon down rather than that
+     * something mysterious is protecting a player they can plainly hit. A plugin wanting its own
+     * sentence for it overrides the key for itself ({@code Messages.overrideFor}).
+     */
+    FISTS_ONLY("combat.fists-only");
 
     private final String reasonKey;
 

@@ -154,6 +154,8 @@ combat:
   # When something else refused — a claim, an arena. Deliberately vague,
   # because Core does not know which plugin said no or why.
   protected: "<red>Something is protecting that."
+  # A rule that allows this fight with bare fists only. A plugin can say this its own way.
+  fists-only: "<red>Only fists here — put down what you are holding."
 
 # ─────────────────────────────────────────────────────────── custom items
 #

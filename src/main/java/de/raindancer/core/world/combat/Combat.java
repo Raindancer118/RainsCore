@@ -60,7 +60,25 @@ public final class Combat {
      * this plugin's cancellation from a listener at a different priority, and then the two fight over
      * one event for ever.
      */
-    private final List<Function<Attack, Verdict>> alsoAsked = new CopyOnWriteArrayList<>();
+    private final List<Asked> alsoAsked = new CopyOnWriteArrayList<>();
+
+    /** An extra rule, and the plugin it belongs to — null for one added without saying. */
+    private record Asked(String plugin, Function<Attack, Verdict> rule) {
+    }
+
+    /**
+     * A verdict and whose rule it was.
+     *
+     * @param decidedBy the plugin whose extra rule answered, or null for Core's own rules and for
+     *                  rules added without a plugin — so a listener can word the refusal the way that
+     *                  plugin wants (see {@code Messages.overrideFor})
+     */
+    public record Ruling(Verdict verdict, String decidedBy) {
+
+        static Ruling core(Verdict verdict) {
+            return new Ruling(verdict, null);
+        }
+    }
 
     /** What one world allows. Null in a field means "not set here". */
     private record Rules(Boolean pvp, Boolean playersOnMobs, Boolean mobsOnPlayers) {
@@ -207,32 +225,37 @@ public final class Combat {
      * explain.
      */
     public Verdict judge(Attack attack) {
+        return decide(attack).verdict();
+    }
+
+    /** {@link #judge}, and which plugin's rule decided it. */
+    public Ruling decide(Attack attack) {
         if (attack == null || !attack.hasSomebodyBehindIt()) {
             // Nobody to hold responsible: the world itself, or a listener that could not work out
             // who did it. Not ours to refuse either way.
-            return Verdict.ALLOWED;
+            return Ruling.core(Verdict.ALLOWED);
         }
         if (attack.isSelfInflicted()) {
             // Never refused, and never handed to anybody else's rule either: whether somebody may
             // hurt themselves is not a rule about other people, and refusing it makes them immortal
             // to their own explosives.
-            return Verdict.ALLOWED;
+            return Ruling.core(Verdict.ALLOWED);
         }
         // Asked before anything else is decided, mob-versus-mob included. That was wrong at first:
         // returning ALLOWED for two mobs before asking meant a claims plugin protecting somebody's
         // livestock never got the chance — a zombie could kill the cows inside a claim and the claim
         // would never hear about it.
-        Verdict fromSomebodyElse = askTheOthers(attack);
+        Ruling fromSomebodyElse = askTheOthers(attack);
         if (fromSomebodyElse != null) {
             return fromSomebodyElse;
         }
         if (attack.isMobVersusMob()) {
             // Nobody else objected, so: the game playing itself. Refusing it here would break farms,
             // iron golems and a dozen things nobody was asking about.
-            return Verdict.ALLOWED;
+            return Ruling.core(Verdict.ALLOWED);
         }
         if (attack.isPlayerVersusPlayer() && !isPvpAllowed(attack.world())) {
-            return Verdict.NO_PVP;
+            return Ruling.core(Verdict.NO_PVP);
         }
         if (attack.isPlayerHurtingMob() && !isPlayerOnMobAllowed(attack.world())) {
             if (attack.throughPet()) {
@@ -240,14 +263,14 @@ public final class Combat {
                 // PvP — a wolf set on a player is that player's doing — but wrong here: refusing it
                 // means a pet cannot defend its owner on a server where players are not meant to
                 // hunt. The animal is doing what animals do.
-                return Verdict.ALLOWED;
+                return Ruling.core(Verdict.ALLOWED);
             }
-            return Verdict.NO_PVE;
+            return Ruling.core(Verdict.NO_PVE);
         }
         if (attack.isMobHurtingPlayer() && !isMobOnPlayerAllowed(attack.world())) {
-            return Verdict.NO_PVE;
+            return Ruling.core(Verdict.NO_PVE);
         }
-        return Verdict.ALLOWED;
+        return Ruling.core(Verdict.ALLOWED);
     }
 
     /**
@@ -260,9 +283,27 @@ public final class Combat {
      * two plugins disagreeing must not give a different answer depending on load order.
      */
     public void alsoAsk(Function<Attack, Verdict> rule) {
+        alsoAsk(null, rule);
+    }
+
+    /**
+     * The same, for a rule that belongs to {@code plugin}: a refusal it answers is reported as that
+     * plugin's in {@link #decide}, so the attacker is told in that plugin's words.
+     */
+    public void alsoAsk(String plugin, Function<Attack, Verdict> rule) {
         if (rule != null) {
-            alsoAsked.add(rule);
+            alsoAsked.add(new Asked(plugin, rule));
         }
+    }
+
+    /**
+     * Withdraws a rule added with {@link #alsoAsk}, by the same reference. A plugin that unloads must
+     * take its rule with it, or the rule keeps answering from a plugin that is gone.
+     *
+     * @return whether it was there to remove
+     */
+    public boolean stopAsking(Function<Attack, Verdict> rule) {
+        return rule != null && alsoAsked.removeIf(asked -> asked.rule() == rule);
     }
 
     /** How many extra rules there are. */
@@ -270,12 +311,12 @@ public final class Combat {
         return alsoAsked.size();
     }
 
-    private Verdict askTheOthers(Attack attack) {
-        for (Function<Attack, Verdict> rule : alsoAsked) {
+    private Ruling askTheOthers(Attack attack) {
+        for (Asked asked : alsoAsked) {
             try {
-                Verdict said = rule.apply(attack);
+                Verdict said = asked.rule().apply(attack);
                 if (said != null) {
-                    return said;
+                    return new Ruling(said, asked.plugin());
                 }
             } catch (RuntimeException failure) {
                 // Ignored rather than taken as a refusal. A broken exemption must not silently switch

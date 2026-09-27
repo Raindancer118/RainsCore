@@ -422,6 +422,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);
         getServer().getPluginManager().registerEvents(environmentProtection, this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.content.items.BoundItemListener(), this);
         movementProtection = new MovementProtectionListener(land, messages);
         // Told about each other after both exist, rather than one taking the other in its constructor: the
         // damage listener has to be registered before this one, and a constructor argument would be a cycle.

@@ -106,7 +106,7 @@ public final class CombatListener implements Listener {
             java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
     /** One decision, waiting to be explained. */
-    private record Pending(Attack attack, Verdict verdict) {
+    private record Pending(Attack attack, Verdict verdict, String decidedBy) {
     }
 
     /**
@@ -150,14 +150,17 @@ public final class CombatListener implements Listener {
     @EventHandler(priority = EventPriority.LOW)
     public void onDamage(EntityDamageByEntityEvent event) {
         Attack attack = read(event.getDamager(), event.getEntity());
-        Verdict verdict = combat.judge(attack);
+        Combat.Ruling ruling = combat.decide(attack);
+        Verdict verdict = ruling.verdict();
         if (!verdict.allowed()) {
             event.setCancelled(true);
         }
         if (!verdict.allowed() || event.isCancelled()) {
             // Remembered for the monitor pass. Something else's refusal is worth explaining too, and
             // PROTECTED is the honest word for it: this does not know whose rule it was.
-            pending.put(event, new Pending(attack, verdict.allowed() ? Verdict.PROTECTED : verdict));
+            pending.put(event, verdict.allowed()
+                    ? new Pending(attack, Verdict.PROTECTED, null)
+                    : new Pending(attack, verdict, ruling.decidedBy()));
         }
     }
 
@@ -172,7 +175,7 @@ public final class CombatListener implements Listener {
     public void onDamageSettled(EntityDamageByEntityEvent event) {
         Pending remembered = pending.remove(event);
         if (remembered != null && event.isCancelled()) {
-            tell(remembered.attack(), remembered.verdict());
+            tell(remembered.attack(), remembered.verdict(), remembered.decidedBy());
         }
     }
 
@@ -197,20 +200,22 @@ public final class CombatListener implements Listener {
             return;
         }
         Verdict worst = Verdict.ALLOWED;
+        String worstBy = null;
         // Copied, because setIntensity may change what getAffectedEntities answers and iterating a
         // collection while changing it is the sort of failure that only happens with a crowd.
         for (LivingEntity hit : java.util.List.copyOf(event.getAffectedEntities())) {
             Attack attack = between(thrower.kind(), thrower.id(),
                     event.getPotion().getLocation(), hit);
-            Verdict verdict = combat.judge(attack);
-            if (!verdict.allowed()) {
+            Combat.Ruling ruling = combat.decide(attack);
+            if (!ruling.verdict().allowed()) {
                 event.setIntensity(hit, 0);
-                worst = verdict;
+                worst = ruling.verdict();
+                worstBy = ruling.decidedBy();
             }
         }
         if (!worst.allowed()) {
             tell(between(thrower.kind(), thrower.id(), event.getPotion().getLocation(),
-                    event.getEntity()), worst);
+                    event.getEntity()), worst, worstBy);
         }
     }
 
@@ -248,7 +253,19 @@ public final class CombatListener implements Listener {
         String world = where != null ? where.getWorld().getName()
                 : from != null ? from.getWorld().getName() : "";
         return new Attack(attacker.kind(), attacker.id(), defender.kind(), defender.id(),
-                world, attacker.throughPet(), at(where), at(from));
+                world, attacker.throughPet(), at(where), at(from), meansOf(damager));
+    }
+
+    /** How the damager delivered it — read off the thing that hit, before the chain is followed. */
+    static Attack.Means meansOf(Entity damager) {
+        if (damager instanceof Player player) {
+            org.bukkit.inventory.ItemStack hand = player.getInventory().getItemInMainHand();
+            return hand == null || hand.isEmpty() ? Attack.Means.BARE_HANDED : Attack.Means.HELD_ITEM;
+        }
+        if (damager instanceof Projectile) {
+            return Attack.Means.RANGED;
+        }
+        return damager == null ? Attack.Means.UNKNOWN : Attack.Means.OTHER;
     }
 
     /**
@@ -280,8 +297,9 @@ public final class CombatListener implements Listener {
         Location where = victim == null ? null : victim.getLocation();
         String world = where != null ? where.getWorld().getName()
                 : from != null ? from.getWorld().getName() : "";
+        // Only a splash potion comes through here: thrown, so ranged.
         return new Attack(attacker, attackerId, defender.kind(), defender.id(), world, false,
-                at(where), at(from));
+                at(where), at(from), Attack.Means.RANGED);
     }
 
     private static Attack.At at(Location location) {
@@ -405,6 +423,11 @@ public final class CombatListener implements Listener {
      * log out to escape.
      */
     private void tell(Attack attack, Verdict verdict) {
+        tell(attack, verdict, null);
+    }
+
+    /** @param decidedBy whose rule refused it, so the attacker is told in that plugin's words */
+    private void tell(Attack attack, Verdict verdict, String decidedBy) {
         if (verdict.reasonKey() == null || messages == null) {
             return;
         }
@@ -425,7 +448,7 @@ public final class CombatListener implements Listener {
         if (attacker == null) {
             return;
         }
-        Component said = messages.prefixed(verdict.reasonKey());
+        Component said = messages.prefixedFor(decidedBy, verdict.reasonKey());
         // On the attacker's own thread, not this one. The damage event fires in the *victim's* region,
         // and on Folia the attacker may be standing in another — shooting across a region boundary is
         // ordinary. Touching them from here would be an IllegalStateException inside a damage event,
