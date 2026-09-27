@@ -23,4 +23,15 @@ public interface ChatChannel {
     default String tagFor(UUID speaker) {
         return "[" + label() + "]";
     }
+
+    /**
+     * Says {@code text} on this channel itself, instead of the chat plugin — for a channel that has its
+     * own format or keeps its own record (staff chat logs to the console). Called on the async chat
+     * thread, after the event is cancelled.
+     *
+     * @return false to leave rendering and delivery to the chat plugin
+     */
+    default boolean deliver(org.bukkit.entity.Player speaker, String text) {
+        return false;
+    }
 }

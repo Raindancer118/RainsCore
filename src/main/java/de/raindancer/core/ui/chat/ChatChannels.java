@@ -27,6 +27,7 @@ public final class ChatChannels {
 
     private static final List<ChatChannel> channels = new CopyOnWriteArrayList<>();
     private static final Map<UUID, String> selected = new ConcurrentHashMap<>();
+    private static final Set<Object> routers = ConcurrentHashMap.newKeySet();
 
     private ChatChannels() {
     }
@@ -87,5 +88,26 @@ public final class ChatChannels {
 
     public static void forget(UUID player) {
         selected.remove(player);
+    }
+
+    /**
+     * Says that {@code router} — a chat plugin — routes channel lines from here on. A module that owns
+     * a channel and can deliver it without a chat plugin (staff chat) stands down while this is true,
+     * so a line is said once and not twice.
+     */
+    public static void claimRouting(Object router) {
+        if (router != null) {
+            routers.add(router);
+        }
+    }
+
+    public static void releaseRouting(Object router) {
+        if (router != null) {
+            routers.remove(router);
+        }
+    }
+
+    public static boolean isRouted() {
+        return !routers.isEmpty();
     }
 }

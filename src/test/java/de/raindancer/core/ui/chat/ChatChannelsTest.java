@@ -35,6 +35,7 @@ class ChatChannelsTest {
 
     @AfterEach
     void clean() {
+        ChatChannels.releaseRouting(this);
         ChatChannels.unregister(team);
         ChatChannels.forget(ANNA);
         ChatChannels.forget(BEN);
@@ -88,5 +89,23 @@ class ChatChannelsTest {
         ChatChannels.unregister(team);
 
         assertThat(ChatChannels.route(ANNA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("nobody routes channel lines until a chat plugin says it does, and stops when it goes")
+    void routingIsClaimed() {
+        assertThat(ChatChannels.isRouted()).isFalse();
+
+        ChatChannels.claimRouting(this);
+        assertThat(ChatChannels.isRouted()).isTrue();
+
+        ChatChannels.releaseRouting(this);
+        assertThat(ChatChannels.isRouted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a channel leaves delivery to the chat plugin unless it says otherwise")
+    void deliveryIsTheChatPluginsByDefault() {
+        assertThat(team.deliver(null, "hello")).isFalse();
     }
 }
