@@ -28,6 +28,7 @@ public final class ChatChannels {
     private static final List<ChatChannel> channels = new CopyOnWriteArrayList<>();
     private static final Map<UUID, String> selected = new ConcurrentHashMap<>();
     private static final Set<Object> routers = ConcurrentHashMap.newKeySet();
+    private static final List<java.util.function.BiConsumer<UUID, String>> watchers = new CopyOnWriteArrayList<>();
 
     private ChatChannels() {
     }
@@ -59,6 +60,7 @@ public final class ChatChannels {
     public static boolean select(UUID player, String id) {
         if (ALL.equalsIgnoreCase(id)) {
             selected.remove(player);
+            chosen(player, ALL);
             return true;
         }
         Optional<ChatChannel> channel = byId(id);
@@ -66,7 +68,29 @@ public final class ChatChannels {
             return false;
         }
         selected.put(player, channel.get().id());
+        chosen(player, channel.get().id());
         return true;
+    }
+
+    /**
+     * Told the channel id (or {@link #ALL}) each time somebody chooses one, on whoever's thread chose
+     * it — so a chat plugin with a mode of its own (a private chat) can step aside and let the latest
+     * choice win, whichever plugin's command made it.
+     */
+    public static void watch(java.util.function.BiConsumer<UUID, String> watcher) {
+        if (watcher != null) {
+            watchers.add(watcher);
+        }
+    }
+
+    public static void unwatch(java.util.function.BiConsumer<UUID, String> watcher) {
+        watchers.remove(watcher);
+    }
+
+    private static void chosen(UUID player, String id) {
+        for (var watcher : watchers) {
+            watcher.accept(player, id);
+        }
     }
 
     public static String selected(UUID player) {

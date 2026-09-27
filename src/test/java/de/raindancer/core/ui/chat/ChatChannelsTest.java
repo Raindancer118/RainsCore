@@ -108,4 +108,23 @@ class ChatChannelsTest {
     void deliveryIsTheChatPluginsByDefault() {
         assertThat(team.deliver(null, "hello")).isFalse();
     }
+
+    @Test
+    @DisplayName("whoever watches is told each choice made — so a private chat can step aside for it")
+    void choicesAreWatched() {
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        java.util.function.BiConsumer<UUID, String> watcher = (who, id) -> seen.add(id);
+        ChatChannels.register(team);
+        ChatChannels.watch(watcher);
+        try {
+            ChatChannels.select(ANNA, "team");
+            ChatChannels.select(ANNA, "nowhere");
+            ChatChannels.select(ANNA, ChatChannels.ALL);
+        } finally {
+            ChatChannels.unwatch(watcher);
+        }
+        ChatChannels.select(ANNA, "team");
+
+        assertThat(seen).containsExactly("team", ChatChannels.ALL);
+    }
 }
