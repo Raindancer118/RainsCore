@@ -116,6 +116,7 @@ public final class LootTables {
     public void load() {
         byKey.clear();
         unread.clear();
+        unreadEntries.clear();
         synchronized (this) {
             problems.clear();
         }
@@ -148,11 +149,20 @@ public final class LootTables {
                                 YamlStore.fromPathPart(key.substring(colon + 1)))
                         .tier(entry.getInt("tier", 1))
                         .fillPercent(entry.getInt("fill-percent", 30));
+                List<Map<?, ?>> kept = new ArrayList<>();
                 for (Map<?, ?> raw : entry.getMapList("entries")) {
-                    readEntry(key, raw).ifPresent(built::entry);
+                    Optional<LootEntry> read = readEntry(key, raw);
+                    if (read.isPresent()) {
+                        built.entry(read.get());
+                    } else {
+                        kept.add(raw);
+                    }
                 }
                 LootTable table = built.build();
                 byKey.put(table.key(), table);
+                if (!kept.isEmpty()) {
+                    unreadEntries.put(table.key(), List.copyOf(kept));
+                }
             } catch (RuntimeException broken) {
                 note("'" + key + "' was skipped (" + broken.getMessage() + ")");
                 unread.put(key, entry);
@@ -208,6 +218,8 @@ public final class LootTables {
 
     /** Tables the file had that this server could not read, kept to be written back untouched. */
     private final Map<String, ConfigurationSection> unread = new ConcurrentHashMap<>();
+    /** Single entries of a table this server could not read, kept to be written back with it. */
+    private final Map<String, List<Map<?, ?>>> unreadEntries = new ConcurrentHashMap<>();
 
     /**
      * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
@@ -225,9 +237,13 @@ public final class LootTables {
                 String path = "tables." + YamlStore.asPathPart(table.key()) + ".";
                 yaml.set(path + "tier", table.tier());
                 yaml.set(path + "fill-percent", table.fillPercent());
-                yaml.set(path + "entries", table.entries().stream()
+                List<Object> entries = new ArrayList<>(table.entries().stream()
                         .map(LootTables::asMap)
-                        .collect(Collectors.toList()));
+                        .toList());
+                // Entries this server could not read go back as they were: a block from a newer
+                // version is not this server's to delete from somebody's loot pool.
+                entries.addAll(unreadEntries.getOrDefault(table.key(), List.of()));
+                yaml.set(path + "entries", entries);
             }
             // Written back as found: skipped on this server is not deleted from the file.
             unread.forEach((key, kept) -> {
