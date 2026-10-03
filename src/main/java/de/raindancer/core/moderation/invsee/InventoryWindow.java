@@ -454,7 +454,7 @@ public final class InventoryWindow implements InventoryHolder {
                 carried = carried.with(section, within, shown);
                 changed++;
                 if (live) {
-                    source.set(owner, section, within, shown);
+                    pushLive(section, within, shown);
                 }
                 if (audit != null) {
                     // One entry per slot rather than one per window. "Took a diamond sword out of
@@ -481,6 +481,24 @@ public final class InventoryWindow implements InventoryHolder {
             log.debug("{} changed {} slot(s) of {}'s inventory.", watcher.getName(), changed,
                     ownerName);
         }
+    }
+
+    /**
+     * One change onto the owner's live inventory, made on the thread that owns them. That is this
+     * thread whenever both stand in one region — always, on Paper — and otherwise the owner's own
+     * scheduler: on Folia, writing into a player another region is ticking races the game's own
+     * changes to the same slots.
+     */
+    private void pushLive(Section section, int within, ItemStack shown) {
+        Player ownerPlayer = Bukkit.getPlayer(owner);
+        if (ownerPlayer == null || Bukkit.isOwnedByCurrentRegion(ownerPlayer)) {
+            source.set(owner, section, within, shown);
+            return;
+        }
+        // A copy: what the window hands out can be a live view of its slot, and by the time this runs
+        // the moderator may have moved on with it.
+        ItemStack copy = shown == null ? null : shown.clone();
+        Scheduling.entity(plugin, ownerPlayer, () -> source.set(owner, section, within, copy));
     }
 
     /**

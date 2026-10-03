@@ -1,6 +1,8 @@
 package de.raindancer.core.moderation.invsee;
 
 import net.kyori.adventure.text.Component;
+import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -8,13 +10,17 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.MockedStatic;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -92,5 +98,42 @@ class InventoryWindowTest {
 
         verify(own, never()).addItem(any(ItemStack[].class));
         verify(own, never()).removeItem(any(ItemStack[].class));
+    }
+
+    @Test
+    @DisplayName("a change to a live inventory is made on the thread that owns its owner")
+    @SuppressWarnings("unchecked")
+    void liveChangesRunOnTheOwnersThread() {
+        UUID ownerId = UUID.randomUUID();
+        ItemStack added = stack();
+        Player watcher = mock(Player.class);
+        when(watcher.getUniqueId()).thenReturn(UUID.randomUUID());
+        Player owner = mock(Player.class);
+        EntityScheduler ownersThread = mock(EntityScheduler.class);
+        List<Consumer<ScheduledTask>> queued = new ArrayList<>();
+        when(owner.getScheduler()).thenReturn(ownersThread);
+        when(ownersThread.run(any(), any(), any())).thenAnswer(call -> {
+            queued.add(call.getArgument(1));
+            return null;
+        });
+        InventorySource source = mock(InventorySource.class);
+        Inventory shown = mock(Inventory.class);
+        when(shown.getItem(Layout.slotFor(Section.STORAGE, 0))).thenReturn(added);
+
+        InventoryWindow window = new InventoryWindow(mock(Plugin.class), watcher, ownerId, "Owner",
+                Access.EDIT, true, source, Carried.empty());
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.createInventory(any(InventoryHolder.class), anyInt(),
+                    any(Component.class))).thenReturn(shown);
+            bukkit.when(() -> Bukkit.getPlayer(ownerId)).thenReturn(owner);
+            // On Folia the owner may stand in another region than the moderator's window.
+            bukkit.when(() -> Bukkit.isOwnedByCurrentRegion(owner)).thenReturn(false);
+            window.getInventory();
+            window.sync();
+
+            verify(source, never()).set(any(), any(), anyInt(), any());
+            queued.forEach(task -> task.accept(null));
+        }
+        verify(source).set(ownerId, Section.STORAGE, 0, added);
     }
 }
