@@ -158,7 +158,43 @@ public final class CoreSchema {
                 at    INTEGER NOT NULL,
                 cause TEXT    NOT NULL
             )""",
-            "CREATE INDEX world_seed_by_world ON world_seed (world, at DESC)");
+            "CREATE INDEX world_seed_by_world ON world_seed (world, at DESC)",
+
+            // ------------------------------------------------------------------ run history
+            //
+            // Every finished run of every game — a speedrun, a hunt, a hunger games round — see
+            // RunHistory. `game` is the plugin's own namespace and `category` its mode and variant, so
+            // one plugin with several modes keeps them apart without a table each. `score` is a time
+            // in milliseconds or a count; `lower_wins` says which way it ranks. Never deleted, only
+            // struck from the rankings: "what was the record before" is a question people ask.
+            """
+            CREATE TABLE run (
+                id         TEXT    PRIMARY KEY,
+                game       TEXT    NOT NULL,
+                category   TEXT    NOT NULL,
+                started_at INTEGER NOT NULL,
+                score      INTEGER NOT NULL,
+                lower_wins INTEGER NOT NULL,
+                ranked     INTEGER NOT NULL DEFAULT 1
+            )""",
+            """
+            CREATE TABLE run_player (
+                run    TEXT NOT NULL REFERENCES run(id) ON DELETE CASCADE,
+                player TEXT NOT NULL,
+                name   TEXT,
+                PRIMARY KEY (run, player)
+            )""",
+            // Splits and anything else a game wants to keep with a run, by kind and name.
+            """
+            CREATE TABLE run_value (
+                run   TEXT NOT NULL REFERENCES run(id) ON DELETE CASCADE,
+                kind  TEXT NOT NULL,
+                name  TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (run, kind, name)
+            )""",
+            "CREATE INDEX run_by_category ON run (game, category, score)",
+            "CREATE INDEX run_player_by_player ON run_player (player)");
 
     /**
      * What was done.

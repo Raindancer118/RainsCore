@@ -51,6 +51,7 @@ import de.raindancer.core.ui.tablist.TablistModel;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.BukkitChunkLoader;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import de.raindancer.core.data.runs.RunHistory;
 import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.BukkitEffectSink;
 import de.raindancer.core.ui.effect.Effects;
@@ -270,6 +271,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Databases databases;
     private Combat combat;
     private StructureLocator structures;
+    private final Map<String, RunHistory> histories = new ConcurrentHashMap<>();
     private CombatListener combatListener;
     private Messages messages;
     /** False while the stores are being read, true once players can be on. */
@@ -642,6 +644,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         savingTask = Scheduling.asyncTimer(this, SAVE_PERIOD_SECONDS, SAVE_PERIOD_SECONDS, task -> {
             places.flush();
             seedHistory.flush();
+            histories.values().forEach(RunHistory::flush);
             identities.flush();
             grants.flush();
             punishments.flush();
@@ -855,6 +858,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         if (seedHistory != null) {
             seedHistory.flush();
         }
+        histories.values().forEach(RunHistory::flush);
         if (identities != null) {
             identities.flush();
         }
@@ -1208,6 +1212,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public StructureLocator structures() {
         return structures;
+    }
+
+    @Override
+    public RunHistory runHistory(String game) {
+        String key = game == null || game.isBlank() ? "default" : game.trim().toLowerCase(Locale.ROOT);
+        return histories.computeIfAbsent(key, name -> {
+            RunHistory history = new RunHistory(databases.core(), name);
+            history.writeSoon(write -> Scheduling.async(this, write));
+            Scheduling.async(this, history::load);
+            return history;
+        });
     }
 
     @Override

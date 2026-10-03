@@ -24,6 +24,7 @@ import de.raindancer.core.data.settings.SettingsNavigation;
 import de.raindancer.core.data.settings.SettingsSchema;
 import de.raindancer.core.data.settings.SettingsStore;
 import de.raindancer.core.ui.tablist.Tablists;
+import de.raindancer.core.data.runs.RunHistory;
 import de.raindancer.core.world.chunk.ChunkHolds;
 import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.Effects;
@@ -327,6 +328,16 @@ public interface RainsCore {
      * between plugins, so the second search over the same ground is instant.
      */
     StructureLocator structures();
+
+    /**
+     * Every finished run of one game — leaderboards, personal bests, records, splits; see
+     * {@link RunHistory}. One per game name, shared and kept in Core's database: asking twice gives the
+     * same history. Read in the background the first time it is asked for ({@link RunHistory#isLoaded()}),
+     * written as each run is added.
+     *
+     * @param game the game's own name, usually the plugin's — {@code "speedrun"}
+     */
+    RunHistory runHistory(String game);
 
     /**
      * A throttled walk over a region, making sure every chunk in it has been generated at least
