@@ -2,7 +2,9 @@ package de.raindancer.core.ui.effect;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
@@ -10,6 +12,7 @@ import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 import java.util.Set;
 import java.util.UUID;
@@ -33,6 +36,37 @@ public final class BukkitEffectSink implements EffectSink {
 
     /** Particle names that turned out not to exist. Complained about once each. */
     private final Set<String> unknown = ConcurrentHashMap.newKeySet();
+    /** Whose schedulers a sound or a burst is run through; null plays on the caller's thread. */
+    private final Plugin plugin;
+
+    /** Plays wherever it is called — right only on the thread that owns the player or the place. */
+    public BukkitEffectSink() {
+        this(null);
+    }
+
+    /**
+     * Plays on the thread that owns the player or the place, wherever the call came from — a menu
+     * click on another region, or a delayed layer of a sound arriving on an async thread.
+     */
+    public BukkitEffectSink(Plugin plugin) {
+        this.plugin = plugin;
+    }
+
+    private void onPlayer(Player online, Runnable what) {
+        if (plugin == null) {
+            what.run();
+        } else {
+            Scheduling.onOwner(plugin, online, what);
+        }
+    }
+
+    private void atRegion(Location where, Runnable what) {
+        if (plugin == null) {
+            what.run();
+        } else {
+            Scheduling.region(plugin, where, what);
+        }
+    }
 
     @Override
     public void toPlayer(UUID player, SoundCue sound) {
@@ -40,7 +74,8 @@ public final class BukkitEffectSink implements EffectSink {
         if (online != null) {
             // By key rather than by Sound: a resource pack's own sound is then no different from a
             // vanilla one, which is the whole point of contributing packs in the first place.
-            online.playSound(online.getLocation(), sound.key(), sound.volume(), sound.pitch());
+            onPlayer(online, () ->
+                    online.playSound(online.getLocation(), sound.key(), sound.volume(), sound.pitch()));
         }
     }
 
@@ -49,12 +84,13 @@ public final class BukkitEffectSink implements EffectSink {
         Player online = Bukkit.getPlayer(player);
         Particle particle = particleOf(particles.particle());
         if (online != null && particle != null) {
-            if (needsData(particle)) {
+            Object data = dataFor(particle, particles);
+            if (data == MISSING) {
                 return;
             }
-            online.spawnParticle(particle, online.getLocation().add(0, 1, 0), particles.count(),
-                    particles.spreadX(), particles.spreadY(), particles.spreadZ(),
-                    particles.speed());
+            onPlayer(online, () -> online.spawnParticle(particle, online.getLocation().add(0, 1, 0),
+                    particles.count(), particles.spreadX(), particles.spreadY(), particles.spreadZ(),
+                    particles.speed(), data));
         }
     }
 
@@ -62,8 +98,8 @@ public final class BukkitEffectSink implements EffectSink {
     public void atPlace(String world, double x, double y, double z, SoundCue sound) {
         World found = Bukkit.getWorld(world);
         if (found != null) {
-            found.playSound(new Location(found, x, y, z), sound.key(), sound.volume(),
-                    sound.pitch());
+            Location where = new Location(found, x, y, z);
+            atRegion(where, () -> found.playSound(where, sound.key(), sound.volume(), sound.pitch()));
         }
     }
 
@@ -72,12 +108,14 @@ public final class BukkitEffectSink implements EffectSink {
         World found = Bukkit.getWorld(world);
         Particle particle = particleOf(particles.particle());
         if (found != null && particle != null) {
-            if (needsData(particle)) {
+            Object data = dataFor(particle, particles);
+            if (data == MISSING) {
                 return;
             }
-            found.spawnParticle(particle, new Location(found, x, y, z), particles.count(),
-                    particles.spreadX(), particles.spreadY(), particles.spreadZ(),
-                    particles.speed());
+            Location where = new Location(found, x, y, z);
+            atRegion(where, () -> found.spawnParticle(particle, where, particles.count(),
+                    particles.spreadX(), particles.spreadY(), particles.spreadZ(), particles.speed(),
+                    data));
         }
     }
 
@@ -85,7 +123,7 @@ public final class BukkitEffectSink implements EffectSink {
     public void stopForPlayer(UUID player, String soundKey) {
         Player online = Bukkit.getPlayer(player);
         if (online != null) {
-            online.stopSound(soundKey);
+            onPlayer(online, () -> online.stopSound(soundKey));
         }
     }
 
@@ -93,7 +131,7 @@ public final class BukkitEffectSink implements EffectSink {
     public void stopAllForPlayer(UUID player) {
         Player online = Bukkit.getPlayer(player);
         if (online != null) {
-            online.stopAllSounds();
+            onPlayer(online, online::stopAllSounds);
         }
     }
 
@@ -132,16 +170,38 @@ public final class BukkitEffectSink implements EffectSink {
      * behalf, which is a cue that works and looks wrong — harder to diagnose than one that says why
      * it did nothing.
      */
-    private static boolean needsData(Particle particle) {
-        if (particle.getDataType() == Void.class) {
-            return false;
+    /** A particle that needs data this cue cannot supply. */
+    static final Object MISSING = new Object();
+
+    private static Object dataFor(Particle particle, ParticleCue cue) {
+        Object data = dataFor(particle.getDataType(), cue.colour());
+        if (data == MISSING && WITHOUT_DATA.add(particle.name())) {
+            log.warn("The particle {} needs extra data a cue cannot carry here (a colour written "
+                    + "#rrggbb works for dust and tinted particles; a block does not). Cues naming it "
+                    + "without that show nothing.", particle.name());
         }
-        if (WITHOUT_DATA.add(particle.name())) {
-            log.warn("The particle {} needs extra data — a colour, or which block — which a cue "
-                    + "cannot carry. Cues naming it will show nothing. Pick a particle that stands "
-                    + "on its own.", particle.name());
+        return data;
+    }
+
+    /**
+     * What to hand the server as a particle's data: nothing for one that takes none, the colour for
+     * one that takes a colour or a dust, and {@link #MISSING} when it needs something this cannot give.
+     */
+    static Object dataFor(Class<?> dataType, Integer colour) {
+        if (dataType == null || dataType == Void.class) {
+            return null;
         }
-        return true;
+        if (colour == null) {
+            return MISSING;
+        }
+        Color rgb = Color.fromRGB(colour);
+        if (dataType == Particle.DustOptions.class) {
+            return new Particle.DustOptions(rgb, 1.0f);
+        }
+        if (dataType == Color.class) {
+            return rgb;
+        }
+        return MISSING;
     }
 
 }

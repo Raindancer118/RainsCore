@@ -79,9 +79,12 @@ class CueEditingTest {
 
             assertThat(typed.bursts()).hasSize(2);
             assertThat(typed.bursts().get(0).count()).isEqualTo(40);
+            assertThat(typed.bursts().get(0).colour()).isEqualTo(0xff2020);
             assertThat(typed.bursts().get(0).speed())
-                    .as("the colour rides in the extra value, which is Minecraft's own arrangement")
-                    .isEqualTo(0xff2020);
+                    .as("handed to the server as the extra value, a colour is a speed of sixteen million "
+                            + "and the particles fly off the screen")
+                    .isZero();
+            assertThat(typed.bursts().get(1).colour()).isNull();
         }
     }
 

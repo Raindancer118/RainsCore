@@ -15,9 +15,11 @@ import java.util.Locale;
  * @param spreadY  the same, vertically
  * @param spreadZ  the same again
  * @param speed    how fast they move; for several particles this is their "extra" value instead
+ * @param colour   {@code 0xRRGGBB} for a particle that takes a colour ({@code DUST}, {@code ENTITY_EFFECT}),
+ *                 or null for none
  */
 public record ParticleCue(String particle, int count, double spreadX, double spreadY,
-                          double spreadZ, double speed) {
+                          double spreadZ, double speed, Integer colour) {
 
     public ParticleCue {
         if (particle == null || particle.isBlank()) {
@@ -28,6 +30,13 @@ public record ParticleCue(String particle, int count, double spreadX, double spr
         // stutter, and the player it happens to has no way of telling which plugin did it.
         count = Math.clamp(count, 0, 500);
         speed = Math.max(0, speed);
+        colour = colour == null ? null : colour & 0xFFFFFF;
+    }
+
+    /** A burst with no colour — the shape every cue had before colours. */
+    public ParticleCue(String particle, int count, double spreadX, double spreadY, double spreadZ,
+                       double speed) {
+        this(particle, count, spreadX, spreadY, spreadZ, speed, null);
     }
 
     /** A simple burst at one spot. */

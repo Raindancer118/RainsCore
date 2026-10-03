@@ -24,9 +24,8 @@ import java.util.List;
  *   LARGE_SMOKE@140~2.2    together
  * </pre>
  *
- * <p>The colour is packed into {@link ParticleCue#speed()}, which is the field the protocol reuses as a
- * particle's "extra" value — that is Minecraft's own arrangement rather than a trick here, and the sink is
- * where it is unpacked. A colour on a particle that has no use for one is harmless and ignored.
+ * <p>The colour is kept in {@link ParticleCue#colour()}, and the sink turns it into the particle's data —
+ * a dust's colour, an effect's tint. A colour on a particle that has no use for one is ignored.
  */
 public record ParticleSequence(List<ParticleCue> bursts) {
 
@@ -104,6 +103,7 @@ public record ParticleSequence(List<ParticleCue> bursts) {
         int count = 1;
         double spread = 0;
         double extra = 0;
+        Integer colour = null;
 
         int cut = text.length();
         for (int i = 0; i < text.length(); i++) {
@@ -129,9 +129,9 @@ public record ParticleSequence(List<ParticleCue> bursts) {
                 switch (marker) {
                     case '@' -> count = Integer.parseInt(value);
                     case '~' -> spread = Double.parseDouble(value);
-                    // Base 16, and packed into the cue's extra value. A colour written with a leading hash
-                    // is how everybody writes one, so the hash is the marker rather than part of the number.
-                    case '#' -> extra = Integer.parseInt(value, 16);
+                    // Base 16. Its own field, not the extra value: handed to the server as "extra",
+                    // 0xff2020 is a speed of sixteen million and the particles fly off the screen.
+                    case '#' -> colour = Integer.parseInt(value, 16);
                     default -> { }
                 }
             } catch (NumberFormatException notANumber) {
@@ -139,6 +139,6 @@ public record ParticleSequence(List<ParticleCue> bursts) {
             }
             at = next;
         }
-        return new ParticleCue(name, count, spread, spread, spread, extra);
+        return new ParticleCue(name, count, spread, spread, spread, extra, colour);
     }
 }

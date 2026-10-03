@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
@@ -136,9 +137,9 @@ public final class Effects {
         bound.put(Cues.HEAL, new Effect(new SoundCue("entity.player.burp", 0.4f, 1.6f),
                 new ParticleCue("HEART", 6, 0.4, 0.5, 0.4, 0.01)));
         bound.put(Cues.HURT, Effect.of(new SoundCue("entity.player.hurt", 0.6f, 1.0f)));
-        bound.put(Cues.SUMMON, new Effect(new SoundCue("entity.illusioner_cast_spell", 0.6f, 1.2f),
+        bound.put(Cues.SUMMON, new Effect(new SoundCue("entity.illusioner.cast_spell", 0.6f, 1.2f),
                 new ParticleCue("CLOUD", 20, 0.4, 0.3, 0.4, 0.03)));
-        bound.put(Cues.VANISH, new Effect(new SoundCue("entity.generic_extinguish_fire", 0.5f, 1.4f),
+        bound.put(Cues.VANISH, new Effect(new SoundCue("entity.generic.extinguish_fire", 0.5f, 1.4f),
                 new ParticleCue("SMOKE", 16, 0.3, 0.3, 0.3, 0.02)));
         bound.put(Cues.MAGIC, new Effect(new SoundCue("block.enchantment_table.use", 0.6f, 1.2f),
                 new ParticleCue("ENCHANT", 30, 0.5, 0.8, 0.5, 0.5)));
@@ -215,12 +216,26 @@ public final class Effects {
         if (effect == null || effect.isSilent() || tooSoon(player, cue)) {
             return;
         }
-        playSounds(effect, step -> sink.toPlayer(player, step));
+        String key = player + "/" + cue.trim();
+        long token = generation(key);
+        long epoch = epochs.getOrDefault(player, 0L);
+        playSounds(effect, step -> sink.toPlayer(player, step),
+                // A layer still waiting when the cue (or everything) was stopped never starts.
+                () -> generation(key) == token && epochs.getOrDefault(player, 0L) == epoch);
         for (ParticleCue burst : effect.bursts().bursts()) {
             if (!burst.isNothing()) {
                 sink.toPlayer(player, burst);
             }
         }
+    }
+
+    /** Bumped by a stop, so a layer scheduled before it can tell it is stale. */
+    private final Map<String, Long> generations = new ConcurrentHashMap<>();
+    /** The same for a player's stopAll. */
+    private final Map<UUID, Long> epochs = new ConcurrentHashMap<>();
+
+    private long generation(String key) {
+        return generations.getOrDefault(key, 0L);
     }
 
     /**
@@ -230,7 +245,7 @@ public final class Effects {
      * a test leaves alone — so a sequence plays fully in a test, on this thread, in order, and nothing has to
      * pretend a scheduler exists to check that a cannon has sixteen sounds in it.
      */
-    private void playSounds(Effect effect, Consumer<SoundCue> play) {
+    private void playSounds(Effect effect, Consumer<SoundCue> play, BooleanSupplier stillWanted) {
         for (SoundSequence.Step step : effect.sounds().steps()) {
             if (step.sound().isSilent()) {
                 continue;
@@ -238,7 +253,11 @@ public final class Effects {
             if (step.delayMillis() <= 0) {
                 play.accept(step.sound());
             } else {
-                delayedPlayback.after(step.delayMillis(), () -> play.accept(step.sound()));
+                delayedPlayback.after(step.delayMillis(), () -> {
+                    if (stillWanted.getAsBoolean()) {
+                        play.accept(step.sound());
+                    }
+                });
             }
         }
     }
@@ -257,7 +276,7 @@ public final class Effects {
         if (effect == null || effect.isSilent()) {
             return;
         }
-        playSounds(effect, step -> sink.atPlace(world, x, y, z, step));
+        playSounds(effect, step -> sink.atPlace(world, x, y, z, step), () -> true);
         for (ParticleCue burst : effect.bursts().bursts()) {
             if (!burst.isNothing()) {
                 sink.atPlace(world, x, y, z, burst);
@@ -290,20 +309,32 @@ public final class Effects {
             return;
         }
         Effect effect = lookUp(cue);
-        if (effect == null || effect.sound() == null || effect.sound().isSilent()) {
+        if (effect == null || effect.sounds().isSilent()) {
             return;
         }
-        sink.stopForPlayer(player, effect.sound().key());
+        String key = player + "/" + cue.trim();
+        generations.merge(key, 1L, Long::sum);
+        // Every layer, not only the first: a cannon is a bang and a rumble, and stopping half of it
+        // leaves the rumble going.
+        effect.sounds().steps().stream()
+                .map(step -> step.sound())
+                .filter(sound -> !sound.isSilent())
+                .map(SoundCue::key)
+                .distinct()
+                .forEach(sound -> sink.stopForPlayer(player, sound));
         // Forgotten rather than left behind, so a plugin that stops a cue and starts it again is
         // not silently refused by the repeat window it just filled.
-        lastPlayed.remove(player + "/" + cue.trim());
+        lastPlayed.remove(key);
     }
 
     /** Stops everything this player is hearing from the server. */
     public void stopAll(UUID player) {
         if (player != null) {
             sink.stopAllForPlayer(player);
-            forget(player);
+            // Every layer this player still has queued goes stale at once.
+            epochs.merge(player, 1L, Long::sum);
+            String prefix = player + "/";
+            lastPlayed.keySet().removeIf(key -> key.startsWith(prefix));
         }
     }
 
@@ -321,6 +352,8 @@ public final class Effects {
         }
         String prefix = player + "/";
         lastPlayed.keySet().removeIf(key -> key.startsWith(prefix));
+        generations.keySet().removeIf(key -> key.startsWith(prefix));
+        epochs.remove(player);
     }
 
     /** How much is being remembered, for a test and for a health check. */

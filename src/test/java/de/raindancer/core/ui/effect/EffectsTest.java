@@ -480,4 +480,70 @@ class EffectsTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("a layered cue")
+    class Layered {
+
+        @Test
+        @DisplayName("stopping it stops every layer, and a layer still waiting to start never does")
+        void stopReachesEveryLayer() {
+            Effects effects = effects();
+            List<Runnable> later = new ArrayList<>();
+            effects.delayedPlaybackVia((millis, what) -> later.add(what));
+            effects.define("test:cannon", Effect.of(SoundSequence.parse(
+                    "entity.generic.explode; entity.lightning_bolt.thunder>1250")));
+
+            effects.play(ALICE, "test:cannon");
+            effects.stop(ALICE, "test:cannon");
+            later.forEach(Runnable::run);
+
+            assertThat(stopped).containsExactlyInAnyOrder(ALICE + "/entity.generic.explode",
+                    ALICE + "/entity.lightning_bolt.thunder");
+            assertThat(played).extracting(each -> each.sound().key())
+                    .as("the thunder was scheduled before the stop and must not boom after it")
+                    .containsExactly("entity.generic.explode");
+        }
+
+        @Test
+        @DisplayName("stopping everything for a player also silences what was still to come")
+        void stopAllReachesTheQueue() {
+            Effects effects = effects();
+            List<Runnable> later = new ArrayList<>();
+            effects.delayedPlaybackVia((millis, what) -> later.add(what));
+            effects.define("test:cannon", Effect.of(SoundSequence.parse(
+                    "entity.generic.explode; entity.lightning_bolt.thunder>1250")));
+
+            effects.play(ALICE, "test:cannon");
+            effects.stopAll(ALICE);
+            later.forEach(Runnable::run);
+
+            assertThat(played).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a delayed layer of a cue that was not stopped still plays")
+        void delayedLayersPlay() {
+            Effects effects = effects();
+            List<Runnable> later = new ArrayList<>();
+            effects.delayedPlaybackVia((millis, what) -> later.add(what));
+            effects.define("test:cannon", Effect.of(SoundSequence.parse(
+                    "entity.generic.explode; entity.lightning_bolt.thunder>1250")));
+
+            effects.play(ALICE, "test:cannon");
+            assertThat(played).hasSize(1);
+            later.forEach(Runnable::run);
+
+            assertThat(played).hasSize(2);
+        }
+    }
+
+    @Test
+    @DisplayName("Core's own cues name sounds that exist: the entity and the sound are separate parts")
+    void defaultsNameRealSounds() {
+        Effects effects = effects();
+
+        assertThat(effects.all().get(Cues.SUMMON).sound().key()).isEqualTo("entity.illusioner.cast_spell");
+        assertThat(effects.all().get(Cues.VANISH).sound().key()).isEqualTo("entity.generic.extinguish_fire");
+    }
 }

@@ -116,6 +116,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Rain's Core, as Paper loads it.
@@ -514,7 +515,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // at all — silently, which is how both commands were dead until a live server was tried.
         new SettingsChatInput(this, navigation, chat, chat.brand(), prompts);
 
-        effects = new Effects(new BukkitEffectSink(), System::currentTimeMillis);
+        effects = new Effects(new BukkitEffectSink(this), System::currentTimeMillis);
+        // Without this every '>delay' of a layered cue played at once. Waited out off-thread; the sink
+        // then plays it on the thread that owns the player or the place.
+        effects.delayedPlaybackVia((millis, what) ->
+                Scheduling.asyncLater(this, millis, TimeUnit.MILLISECONDS, what));
 
         votes = new Votes(System::currentTimeMillis);
         players = new PlayerAdmin(new BukkitPlayerAdminSink(this));
