@@ -88,7 +88,7 @@ public final class ItemsMenu extends PaginatedMenu<CustomItem> {
         lore.add("");
         lore.add("<yellow>Click: what it is crafted from.");
 
-        return Icons.of(item.material(), "<white>" + item.displayName(), lore);
+        return Icons.of(item.material(), "<white>" + item.nameOrId(), lore);
     }
 
     @Override

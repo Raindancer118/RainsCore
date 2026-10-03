@@ -113,13 +113,13 @@ public final class RecipeMenu extends Menu {
 
         // What it will actually be, cropped, beside the grid rather than after saving.
         List<String> cropped = ItemRecipes.crop(asRows());
-        set(16, Icons.of(item.material(), "<white>" + item.displayName(), previewLore(cropped)));
+        set(16, Icons.of(item.material(), "<white>" + item.nameOrId(), previewLore(cropped)));
 
         toolbar(2, Icons.of(Material.LIME_CONCRETE, "<green>Save",
                         cropped.isEmpty()
                                 ? List.of("<gray>This will make the item uncraftable.",
                                         "<dark_gray>Which is a legitimate thing to want.")
-                                : List.of("<gray>Written to the item and registered with the server.",
+                                : List.of("<gray>Written to the item; the server takes it up on its next restart.",
                                         "<dark_gray>Existing recipes are replaced on the next restart.")),
                 click -> saveIt(cropped));
 
