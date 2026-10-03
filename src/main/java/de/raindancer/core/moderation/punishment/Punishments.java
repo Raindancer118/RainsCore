@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -59,10 +60,22 @@ public final class Punishments {
      */
     private final Set<String> changed = ConcurrentHashMap.newKeySet();
 
+    /** Where a write is handed the moment something changes; null leaves it to the saving timer. */
+    private volatile Consumer<Runnable> writeSoon;
+
     /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
     public Punishments(Database database, LongSupplier clock) {
         this.database = database;
         this.clock = clock;
+    }
+
+    /**
+     * Has every change written straight away, through {@code writeSoon} — Core passes its async
+     * scheduler. A ban is rare and must not be lost: left to the saving timer, a crash inside its two
+     * minutes forgot it, and the banned player walked back in.
+     */
+    public void writeSoon(Consumer<Runnable> writeSoon) {
+        this.writeSoon = writeSoon;
     }
 
     private Instant now() {
@@ -325,6 +338,10 @@ public final class Punishments {
     private void mark(Punishment punishment) {
         if (punishment != null) {
             changed.add(punishment.id());
+            Consumer<Runnable> soon = writeSoon;
+            if (soon != null) {
+                soon.accept(this::flush);
+            }
         }
     }
 

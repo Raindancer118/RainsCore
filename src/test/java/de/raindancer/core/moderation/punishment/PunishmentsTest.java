@@ -384,4 +384,22 @@ class PunishmentsTest {
             assertThat(Durations.describe(null)).isEqualTo("for ever");
         }
     }
+
+    @Test
+    @DisplayName("a ban or a lift asks to be written at once, not two minutes later")
+    void writtenSoon() {
+        java.util.List<Runnable> asked = new java.util.ArrayList<>();
+        punishments.writeSoon(asked::add);
+        UUID target = UUID.randomUUID();
+
+        punishments.punish(target, PunishmentKind.BAN, null, "griefing", null);
+        assertThat(asked).as("a crash inside the saving timer's two minutes let a banned player back in")
+                .isNotEmpty();
+        asked.forEach(Runnable::run);
+        assertThat(punishments.waitingToBeWritten()).isZero();
+
+        asked.clear();
+        punishments.lift(target, PunishmentKind.BAN, null, "appeal");
+        assertThat(asked).isNotEmpty();
+    }
 }

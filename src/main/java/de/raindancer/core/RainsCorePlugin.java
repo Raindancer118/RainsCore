@@ -383,6 +383,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishments = new Punishments(databases.core(),
                 System::currentTimeMillis);
         punishments.load();
+        // A disabled plugin may not schedule; the shutdown flush below writes whatever is left then.
+        punishments.writeSoon(write -> {
+            if (isEnabled()) {
+                Scheduling.async(this, write);
+            }
+        });
         punishmentGuard = new PunishmentGuard(punishments, System::currentTimeMillis);
         punishmentGuard.messages(messages);
         banBridge = new VanillaBanBridge(punishments);
