@@ -48,7 +48,12 @@ public final class Times {
             throw new IllegalArgumentException(
                     "'" + raw + "' is not a length. Use 30m, 12h, 7d, 2w — or perm.");
         }
-        return of(Long.parseLong(matcher.group(1)), matcher.group(2).charAt(0));
+        try {
+            return of(Long.parseLong(matcher.group(1)), matcher.group(2).charAt(0));
+        } catch (ArithmeticException tooLong) {
+            // NumberFormatException is already an IllegalArgumentException; an overflow is not.
+            throw new IllegalArgumentException("'" + raw + "' is longer than any length can be.");
+        }
     }
 
     /**
@@ -58,6 +63,15 @@ public final class Times {
      * not an instruction.
      */
     public static Optional<Duration> parseLenient(String raw) {
+        try {
+            return lenient(raw);
+        } catch (NumberFormatException | ArithmeticException tooLong) {
+            // Twenty digits, or ten thousand years: unreadable, which is what this promises to say.
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Duration> lenient(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
         }
@@ -90,7 +104,7 @@ public final class Times {
             case 'm' -> Duration.ofMinutes(amount);
             case 'h' -> Duration.ofHours(amount);
             case 'd' -> Duration.ofDays(amount);
-            case 'w' -> Duration.ofDays(amount * 7);
+            case 'w' -> Duration.ofDays(Math.multiplyExact(amount, 7L));
             // Unreachable through either pattern; a unit added to one regex and not here should shout.
             default -> throw new IllegalArgumentException("Unknown unit '" + unit + "'.");
         };
