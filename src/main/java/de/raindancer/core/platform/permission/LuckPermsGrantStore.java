@@ -97,9 +97,11 @@ final class LuckPermsGrantStore implements GrantStore {
         boolean added = user.data().add(PermissionNode.builder(trimmed).build()).wasSuccessful();
         if (added) {
             luckPerms.getUserManager().saveUser(user);
+            // Ours only if this is what put it there. A node the player already held — set by an
+            // admin, or by a group — is not this store's to take away later.
+            ownedNodesOf(who).add(trimmed);
         }
-        boolean ledgerChanged = ownedNodesOf(who).add(trimmed);
-        return added || ledgerChanged;
+        return added;
     }
 
     @Override
@@ -108,6 +110,11 @@ final class LuckPermsGrantStore implements GrantStore {
             return false;
         }
         String trimmed = node.trim();
+        Set<String> owned = ownedNodes.get(who);
+        if (owned == null || !owned.contains(trimmed)) {
+            // Never granted by this store: somebody else's decision, not ours to undo.
+            return false;
+        }
         User user = loadUser(who);
         boolean removed = false;
         if (user != null) {
@@ -116,8 +123,7 @@ final class LuckPermsGrantStore implements GrantStore {
                 luckPerms.getUserManager().saveUser(user);
             }
         }
-        Set<String> owned = ownedNodes.get(who);
-        boolean ledgerChanged = owned != null && owned.remove(trimmed);
+        boolean ledgerChanged = owned.remove(trimmed);
         forgetOwnedIfEmpty(who);
         return removed || ledgerChanged;
     }
@@ -183,12 +189,14 @@ final class LuckPermsGrantStore implements GrantStore {
                 continue;
             }
             String trimmed = node.trim();
-            if (owned.add(trimmed)) {
-                if (user.data().add(PermissionNode.builder(trimmed).build()).wasSuccessful()) {
-                    changed = true;
-                }
+            if (!owned.contains(trimmed)
+                    && user.data().add(PermissionNode.builder(trimmed).build()).wasSuccessful()) {
+                // Recorded only when this is what added it — see grant().
+                owned.add(trimmed);
+                changed = true;
             }
         }
+        forgetOwnedIfEmpty(who);
         return changed ? luckPerms.getUserManager().saveUser(user) : null;
     }
 
