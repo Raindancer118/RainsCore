@@ -25,6 +25,7 @@ import de.raindancer.core.data.settings.SettingsSchema;
 import de.raindancer.core.data.settings.SettingsStore;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.Effects;
 import de.raindancer.core.data.sql.Databases;
 import de.raindancer.core.world.combat.Combat;
@@ -319,6 +320,13 @@ public interface RainsCore {
      * account for.
      */
     ChunkHolds chunks();
+
+    /**
+     * The nearest structure, found a few cells a tick rather than in one call that holds a region for
+     * seconds — see {@link StructureLocator}. Answers are shared
+     * between plugins, so the second search over the same ground is instant.
+     */
+    StructureLocator structures();
 
     /**
      * A throttled walk over a region, making sure every chunk in it has been generated at least

@@ -51,6 +51,7 @@ import de.raindancer.core.ui.tablist.TablistModel;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.BukkitChunkLoader;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.BukkitEffectSink;
 import de.raindancer.core.ui.effect.Effects;
 import de.raindancer.core.moderation.invsee.Inventories;
@@ -268,6 +269,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Inventories inventories;
     private Databases databases;
     private Combat combat;
+    private StructureLocator structures;
     private CombatListener combatListener;
     private Messages messages;
     /** False while the stores are being read, true once players can be on. */
@@ -574,6 +576,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // which is the difference between a setting somebody uses and one they read about.
         settings.onChange(this::applyNewSettings);
         combat = new Combat();
+        structures = new StructureLocator(this);
         applyCombatSettings();
         // Kept, because it holds one entry per player it has had to refuse and the quit handler has
         // to be able to drop them. A map that only grows is a leak on a server that runs for months.
@@ -1200,6 +1203,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public ChunkHolds chunks() {
         return chunks;
+    }
+
+    @Override
+    public StructureLocator structures() {
+        return structures;
     }
 
     @Override

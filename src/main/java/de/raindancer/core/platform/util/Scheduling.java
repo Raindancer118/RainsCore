@@ -66,6 +66,14 @@ public final class Scheduling {
         Bukkit.getRegionScheduler().execute(plugin, location, task);
     }
 
+    /** Runs on the thread owning {@code location}'s region, a number of ticks from now. */
+    public static void regionLater(Plugin plugin, Location location, long delayTicks, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
+        Bukkit.getRegionScheduler().runDelayed(plugin, location, ignored -> task.run(), Math.max(1L, delayTicks));
+    }
+
     /** Runs on the thread owning {@code entity}; silently drops the task if the entity is removed. */
     public static void entity(Plugin plugin, Entity entity, Runnable task) {
         if (ranInPlace(plugin, task)) {
