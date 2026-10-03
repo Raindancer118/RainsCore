@@ -2,6 +2,7 @@ package de.raindancer.core.ui.tablist;
 
 import de.raindancer.core.ui.identity.Identities;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Nested;
 import de.raindancer.core.data.sql.CoreSchema;
 import de.raindancer.core.data.sql.Database;
@@ -28,9 +29,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("tablist ranking")
 class TablistRankingTest {
 
+    @TempDir
+    Path folder;
+
     private TablistModel model() {
         return new TablistModel(new Identities(Database.open(
-                java.nio.file.Path.of("build", "test-identities.db"), CoreSchema.CORE, () -> false)));
+                folder.resolve("identities.db"), CoreSchema.CORE, () -> false)));
     }
 
     private static TablistEntry player(String name, String world) {
