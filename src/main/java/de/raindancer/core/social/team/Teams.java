@@ -55,6 +55,8 @@ import java.util.function.Supplier;
  * </ul>
  */
 public final class Teams {
+    // Thread safety: every public method is synchronized on this. Commands, joins and sweeps reach the
+    // roster from different region threads on Folia, and it is plain collections underneath.
 
     private static final class MutableTeam {
         String name;
@@ -116,7 +118,7 @@ public final class Teams {
      * check silently applied to staff-driven creation too, which is exactly the caller's job to avoid: the
      * command or menu that reads {@code playersMayCreate} decides whether to call this at all.
      */
-    public CreationResult create(String name, TeamColour colour) {
+    public synchronized CreationResult create(String name, TeamColour colour) {
         if (locked()) {
             return CreationResult.failure(TeamOutcome.FROZEN);
         }
@@ -159,7 +161,7 @@ public final class Teams {
      *
      * @return a snapshot of the deleted team (for an event), or empty if there was no such team
      */
-    public Optional<Team> delete(TeamId id) {
+    public synchronized Optional<Team> delete(TeamId id) {
         if (locked() || !teams.containsKey(id)) {
             return Optional.empty();
         }
@@ -168,7 +170,7 @@ public final class Teams {
         return Optional.of(snapshot);
     }
 
-    public TeamOutcome rename(TeamId id, String newName) {
+    public synchronized TeamOutcome rename(TeamId id, String newName) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -196,7 +198,7 @@ public final class Teams {
      * exactly what the emblem is for. See {@link TeamEmblem} for why that raises the ceiling past sixteen
      * teams rather than only ever refusing the seventeenth.
      */
-    public TeamOutcome setColour(TeamId id, TeamColour colour) {
+    public synchronized TeamOutcome setColour(TeamId id, TeamColour colour) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -223,7 +225,7 @@ public final class Teams {
      * — see {@link Team.Identity} — so a taken pair is refused with the same outcome a taken colour would
      * be, rather than a second refusal vocabulary standing for the same idea.
      */
-    public TeamOutcome setEmblem(TeamId id, TeamEmblem emblem) {
+    public synchronized TeamOutcome setEmblem(TeamId id, TeamEmblem emblem) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -251,7 +253,7 @@ public final class Teams {
      * both fancying a diamond block is not the collision this class exists to prevent, and refusing it here
      * would only stop members holding the item they actually picked.
      */
-    public TeamOutcome setBadge(TeamId id, Material badge) {
+    public synchronized TeamOutcome setBadge(TeamId id, Material badge) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -274,7 +276,7 @@ public final class Teams {
      * refuses a colour this method calls taken, and an empty answer there falls back to the first colour
      * rather than a refusal.
      */
-    public Set<TeamColour> availableColours() {
+    public synchronized Set<TeamColour> availableColours() {
         EnumSet<TeamColour> free = EnumSet.allOf(TeamColour.class);
         for (MutableTeam team : teams.values()) {
             free.remove(team.colour);
@@ -285,7 +287,7 @@ public final class Teams {
     // ==================== membership ====================
 
     /** Puts a player on a team, moving them out of their old one first if they had one. */
-    public MembershipChange join(UUID player, TeamId id) {
+    public synchronized MembershipChange join(UUID player, TeamId id) {
         if (!isEligible.test(player)) {
             return MembershipChange.failure(TeamOutcome.NOT_ELIGIBLE);
         }
@@ -314,8 +316,30 @@ public final class Teams {
         return new MembershipChange(TeamOutcome.SUCCESS, oldTeam);
     }
 
+    /**
+     * Puts a player on a team as a host decides it — refused only while teams are frozen, or for a
+     * team that does not exist. Switching, size and eligibility rules are the player's limits, not the
+     * host's. Moves them out of any old team first, so they are still on exactly one.
+     */
+    public synchronized MembershipChange place(UUID player, TeamId id) {
+        MutableTeam team = teams.get(id);
+        if (player == null || team == null) {
+            return MembershipChange.failure(TeamOutcome.NO_SUCH_TEAM);
+        }
+        if (locked()) {
+            return MembershipChange.failure(TeamOutcome.FROZEN);
+        }
+        if (team.members.contains(player)) {
+            return MembershipChange.failure(TeamOutcome.ALREADY_IN_THAT_TEAM);
+        }
+        Optional<TeamId> oldTeam = teamIdOf(player);
+        oldTeam.ifPresent(old -> removeMember(old, player));
+        team.members.add(player);
+        return new MembershipChange(TeamOutcome.SUCCESS, oldTeam);
+    }
+
     /** Takes a player off their team. */
-    public MembershipChange leave(UUID player) {
+    public synchronized MembershipChange leave(UUID player) {
         Optional<TeamId> oldTeam = teamIdOf(player);
         if (oldTeam.isEmpty()) {
             return MembershipChange.failure(TeamOutcome.NOT_IN_A_TEAM);
@@ -334,7 +358,7 @@ public final class Teams {
      * which has to work even mid-round, when every other mutation is refused. The one route intentionally
      * left open through a locked roster.
      */
-    public Optional<TeamId> forceRemove(UUID player) {
+    public synchronized Optional<TeamId> forceRemove(UUID player) {
         Optional<TeamId> oldTeam = teamIdOf(player);
         oldTeam.ifPresent(old -> removeMember(old, player));
         return oldTeam;
@@ -352,8 +376,13 @@ public final class Teams {
      *
      * @return the team it moved within, or empty if {@code from} was not on one
      */
-    public Optional<TeamId> reassign(UUID from, UUID to) {
+    public synchronized Optional<TeamId> reassign(UUID from, UUID to) {
         Optional<TeamId> current = teamIdOf(from);
+        if (current.isPresent() && !from.equals(to)) {
+            // Somebody is on one team: a stale membership of the real UUID elsewhere goes.
+            teamIdOf(to).filter(other -> !other.equals(current.get()))
+                    .ifPresent(other -> removeMember(other, to));
+        }
         current.ifPresent(id -> {
             MutableTeam team = teams.get(id);
             team.members.remove(from);
@@ -365,7 +394,7 @@ public final class Teams {
         return current;
     }
 
-    public TeamOutcome setCaptain(TeamId id, UUID player) {
+    public synchronized TeamOutcome setCaptain(TeamId id, UUID player) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -380,7 +409,7 @@ public final class Teams {
         return TeamOutcome.SUCCESS;
     }
 
-    public TeamOutcome clearCaptain(TeamId id) {
+    public synchronized TeamOutcome clearCaptain(TeamId id) {
         MutableTeam team = teams.get(id);
         if (team == null) {
             return TeamOutcome.NO_SUCH_TEAM;
@@ -398,7 +427,7 @@ public final class Teams {
      *
      * @return the players assigned, with their new team
      */
-    public Map<UUID, TeamId> assignRandomly(Collection<UUID> candidates, Random random) {
+    public synchronized Map<UUID, TeamId> assignRandomly(Collection<UUID> candidates, Random random) {
         Map<UUID, TeamId> assigned = new LinkedHashMap<>();
         if (locked()) {
             return assigned;
@@ -438,7 +467,7 @@ public final class Teams {
 
     // ==================== queries ====================
 
-    public Optional<TeamId> teamIdOf(UUID player) {
+    public synchronized Optional<TeamId> teamIdOf(UUID player) {
         for (Map.Entry<TeamId, MutableTeam> entry : teams.entrySet()) {
             if (entry.getValue().members.contains(player)) {
                 return Optional.of(entry.getKey());
@@ -447,24 +476,24 @@ public final class Teams {
         return Optional.empty();
     }
 
-    public Optional<Team> team(TeamId id) {
+    public synchronized Optional<Team> team(TeamId id) {
         return teams.containsKey(id) ? Optional.of(snapshot(id)) : Optional.empty();
     }
 
-    public Optional<Team> teamOf(UUID player) {
+    public synchronized Optional<Team> teamOf(UUID player) {
         return teamIdOf(player).map(this::snapshot);
     }
 
     /** Snapshots of every team, in creation order. */
-    public List<Team> all() {
+    public synchronized List<Team> all() {
         return teams.keySet().stream().map(this::snapshot).toList();
     }
 
-    public int count() {
+    public synchronized int count() {
         return teams.size();
     }
 
-    public void clear() {
+    public synchronized void clear() {
         teams.clear();
     }
 
@@ -475,7 +504,7 @@ public final class Teams {
      * snapshot — all of them are just "a list of {@link Team}", and {@link #restore} takes exactly that
      * back.
      */
-    public List<Team> snapshot() {
+    public synchronized List<Team> snapshot() {
         return all();
     }
 
@@ -502,7 +531,7 @@ public final class Teams {
      * field — and never silently corrects one either: every correction is appended to {@link #problems()}
      * for whatever owns the file to log once at startup.
      */
-    public void restore(Collection<Team> saved) {
+    public synchronized void restore(Collection<Team> saved) {
         teams.clear();
         problems.clear();
         TeamPolicy p = policy.get();
@@ -550,7 +579,7 @@ public final class Teams {
      * The caller that owns the file is the one place that knows how to tell somebody, so this only reports;
      * it never logs on its own.
      */
-    public List<String> problems() {
+    public synchronized List<String> problems() {
         return List.copyOf(problems);
     }
 
@@ -577,7 +606,7 @@ public final class Teams {
      * looking at goes hunting for a bug in the roster; told "teams are locked now", they know they have to end
      * the round first. The caller checks this first and says which it was.
      */
-    public boolean isFrozen() {
+    public synchronized boolean isFrozen() {
         return frozen.getAsBoolean();
     }
 
