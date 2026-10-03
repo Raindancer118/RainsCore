@@ -151,11 +151,12 @@ public final class SettingsStore<T> {
      * first rather than writing a fresh one.
      */
     public void save() {
-        T snapshot = current;
         // An update rather than a write: that is what keeps the unknown keys and whatever the owner
         // wrote around them. It is also atomic, so a server killed here has the old config or the
-        // new one and never half of a file it needs to start.
+        // new one and never half of a file it needs to start. The values are read inside it, under
+        // the file's lock, so of two saves racing each other the newer values land last.
         store.update(yaml -> {
+            T snapshot = current;
             for (Setting<?> setting : schema.settings()) {
                 yaml.set(setting.key(), SettingCodec.toYaml(setting.valueIn(snapshot)));
                 yaml.setComments(setting.key(), commentFor(setting));
