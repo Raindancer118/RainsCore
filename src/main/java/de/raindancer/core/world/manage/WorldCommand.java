@@ -1,7 +1,11 @@
 package de.raindancer.core.world.manage;
 
 import de.raindancer.core.RainsCore;
+import de.raindancer.core.platform.util.Closest;
 import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.chat.ChatButton;
+import de.raindancer.core.ui.chat.ChatButtons;
+import de.raindancer.core.ui.text.Text;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.Bukkit;
@@ -10,6 +14,7 @@ import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -37,6 +42,8 @@ public final class WorldCommand implements BasicCommand {
 
     private static final String SWITCH = "rainscore.world.switch";
     private static final String REGEN = "rainscore.world.regen";
+    /** How long the confirm button for a regeneration stays live. */
+    private static final Duration CONFIRM_FOR = Duration.ofSeconds(30);
 
     private final WorldRegenerator regenerator;
 
@@ -75,13 +82,54 @@ public final class WorldCommand implements BasicCommand {
             return;
         }
         if (args.length == 0) {
-            chat().tell(sender, "<gray>/world switch <world>, or /world regen <world> [player]");
+            usage(sender);
             return;
         }
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "switch", "tp" -> doSwitch(sender, args);
             case "regen", "regenerate" -> regen(sender, args);
-            default -> chat().tell(sender, "<gray>/world switch <world>, or /world regen <world> [player]");
+            default -> {
+                // "/world farmworld" — a world's name where the word was expected: go there.
+                if (Bukkit.getWorld(args[0]) != null && sender.hasPermission(SWITCH)) {
+                    doSwitch(sender, new String[]{"switch", args[0]});
+                } else {
+                    usage(sender);
+                }
+            }
+        }
+    }
+
+    private void usage(CommandSender sender) {
+        if (!(sender instanceof Player) || RainsCore.get().buttons() == null) {
+            chat().tell(sender, "<gray>/world switch <world>, or /world regen <world> [player]");
+            return;
+        }
+        ChatButtons buttons = RainsCore.get().buttons();
+        List<ChatButton> shown = new ArrayList<>();
+        if (sender.hasPermission(SWITCH)) {
+            shown.add(buttons.label("<gray>[/world switch <world>]")
+                    .tooltip("<gray>Go to a loaded world's spawn<newline><dark_gray>Click to type it").suggests("/world switch "));
+        }
+        if (sender.hasPermission(REGEN)) {
+            shown.add(buttons.label("<gray>[/world regen <world> [player]]")
+                    .tooltip("<gray>Wipe a world and make it again with a new seed<newline><dark_gray>Click to type it")
+                    .suggests("/world regen "));
+        }
+        chat().raw(sender, buttons.row(shown.toArray(ChatButton[]::new)));
+    }
+
+    /** No world by that name: say which are loaded, the likely one first, each a click away. */
+    private void noSuchWorld(CommandSender sender, String typed, String subcommand) {
+        chat().no(sender, "There is no loaded world called <name>.", Chat.arg("name", typed));
+        List<String> loaded = Bukkit.getWorlds().stream().map(World::getName).toList();
+        List<String> likely = new ArrayList<>(Closest.to(typed, loaded, 3));
+        for (String name : loaded) {
+            if (!likely.contains(name)) {
+                likely.add(name);
+            }
+        }
+        if (!likely.isEmpty()) {
+            noSuchWorldList(sender, likely, subcommand);
         }
     }
 
@@ -89,20 +137,21 @@ public final class WorldCommand implements BasicCommand {
 
     private void doSwitch(CommandSender sender, String[] args) {
         if (!sender.hasPermission(SWITCH)) {
-            chat().no(sender, "That is not yours to use.");
+            chat().no(sender, "Switching worlds needs the permission <perm> — an owner can grant it.",
+                    Chat.arg("perm", SWITCH));
             return;
         }
         if (!(sender instanceof Player player)) {
-            chat().no(sender, "Only a player can switch world.");
+            chat().no(sender, "Only a player can be sent to a world; the console has nowhere to go.");
             return;
         }
         if (args.length < 2) {
-            chat().tell(sender, "<gray>/world switch <world>");
+            noSuchWorldNamed(sender, "switch");
             return;
         }
         World world = Bukkit.getWorld(args[1]);
         if (world == null) {
-            chat().no(sender, "There is no loaded world called <name>.", Chat.arg("name", args[1]));
+            noSuchWorld(sender, args[1], "switch");
             return;
         }
         // Async: the player belongs to the region they are standing in, not the one they are going to,
@@ -123,29 +172,73 @@ public final class WorldCommand implements BasicCommand {
      */
     private void regen(CommandSender sender, String[] args) {
         if (!sender.hasPermission(REGEN)) {
-            chat().no(sender, "That is not yours to change.");
+            chat().no(sender, "Regenerating worlds needs the permission <perm> — an owner can grant it.",
+                    Chat.arg("perm", REGEN));
             return;
         }
         if (args.length < 2) {
-            chat().tell(sender, "<gray>/world regen <world> [player]");
+            noSuchWorldNamed(sender, "regen");
             return;
         }
         String name = args[1];
         World world = Bukkit.getWorld(name);
         if (world == null) {
-            chat().no(sender, "There is no loaded world called <name>.", Chat.arg("name", name));
+            noSuchWorld(sender, name, "regen");
             return;
         }
         OfflinePlayer toReturn = null;
         if (args.length >= 3) {
             toReturn = Bukkit.getPlayerExact(args[2]);
             if (toReturn == null) {
-                chat().no(sender, "<name> is not online.", Chat.arg("name", args[2]));
+                chat().no(sender, "<name> is not online — name somebody who is, or leave it out to send nobody back.",
+                        Chat.arg("name", args[2]));
                 return;
             }
         }
-        chat().tell(sender, "<gray>Regenerating <name> — the server will pause.", Chat.arg("name", name));
         OfflinePlayer finalToReturn = toReturn;
+        if (sender instanceof Player asking && RainsCore.get().buttons() != null && RainsCore.get().buttons().isClickable()) {
+            // Deleting a world is one click too few from a typo: a player confirms, the console does not.
+            chat().warn(sender, "Regenerating <name> deletes it and makes a new one with a fresh seed. Everything built there is gone.",
+                    Chat.arg("name", name));
+            chat().raw(sender, RainsCore.get().buttons().ask(asking.getUniqueId(), CONFIRM_FOR,
+                    yes -> regenerate(sender, name, finalToReturn),
+                    no -> chat().tell(sender, "<gray>Left <name> as it is.", Chat.arg("name", name))));
+            return;
+        }
+        regenerate(sender, name, finalToReturn);
+    }
+
+    private void noSuchWorldNamed(CommandSender sender, String subcommand) {
+        chat().tell(sender, "<gray>Which world? <dark_gray>/world " + subcommand + " <world>"
+                + (subcommand.equals("regen") ? " [player]" : ""));
+        List<String> loaded = Bukkit.getWorlds().stream().map(World::getName).toList();
+        if (!loaded.isEmpty()) {
+            noSuchWorldList(sender, loaded, subcommand);
+        }
+    }
+
+    private void noSuchWorldList(CommandSender sender, List<String> names, String subcommand) {
+        if (sender instanceof Player && RainsCore.get().buttons() != null) {
+            ChatButtons buttons = RainsCore.get().buttons();
+            List<ChatButton> options = new ArrayList<>();
+            for (String world : names.subList(0, Math.min(8, names.size()))) {
+                options.add(buttons.label("<aqua>[" + Text.literal(world) + "]")
+                        .tooltip("<gray>/world " + subcommand + " " + Text.literal(world))
+                        .suggests("/world " + subcommand + " " + world));
+            }
+            chat().raw(sender, Text.render("<gray>Loaded: ").append(buttons.row(options.toArray(ChatButton[]::new))));
+        } else {
+            chat().row(sender, "<gray>Loaded: <names>", Chat.arg("names", String.join(", ", names)));
+        }
+    }
+
+    private void regenerate(CommandSender sender, String name, OfflinePlayer finalToReturn) {
+        World world = Bukkit.getWorld(name);
+        if (world == null) {
+            chat().no(sender, "<name> is not loaded any more, so nothing was regenerated.", Chat.arg("name", name));
+            return;
+        }
+        chat().tell(sender, "<gray>Regenerating <name> — the server will pause.", Chat.arg("name", name));
         regenerator().regenerate(world, ok -> {
             if (!ok) {
                 chat().no(sender, "Something went wrong; the server log has it.");

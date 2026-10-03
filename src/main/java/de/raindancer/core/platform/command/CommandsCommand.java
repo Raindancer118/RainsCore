@@ -2,6 +2,7 @@ package de.raindancer.core.platform.command;
 
 import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.RainsCore;
+import de.raindancer.core.platform.util.Closest;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -9,7 +10,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 
 /**
@@ -42,14 +45,25 @@ public final class CommandsCommand implements BasicCommand {
     @Override
     public void execute(CommandSourceStack source, String[] args) {
         CommandSender sender = source.getSender();
+        if (!RainsCore.isAvailable()) {
+            return;
+        }
         CommandDirectory directory = RainsCore.get().commands();
 
         String wanted = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : null;
-        List<CommandNote> visible = directory.visibleTo(sender::hasPermission).stream()
-                .filter(note -> wanted == null
-                        || note.plugin().toLowerCase(Locale.ROOT).contains(wanted)
-                        || note.command().contains(wanted))
-                .toList();
+        List<CommandNote> mine = directory.visibleTo(sender::hasPermission);
+        List<CommandNote> visible = matching(mine, wanted);
+        if (visible.isEmpty() && wanted != null) {
+            // An empty book teaches nothing: say so, and what was probably meant.
+            sender.sendMessage(MINI.deserialize("<gray>None of your commands mention <white>"
+                    + Text.literal(wanted) + "</white>."));
+            List<String> close = Closest.to(wanted, namesIn(mine), 3);
+            sender.sendMessage(MINI.deserialize(close.isEmpty()
+                    ? "<gray>Try <white>/commands</white> on its own for all of them."
+                    : "<gray>Did you mean <white>" + Text.literal(String.join(", ", close))
+                    + "</white>? Or <white>/commands</white> on its own for all of them."));
+            return;
+        }
 
         if (sender instanceof Player reader) {
             reader.openBook(new CommandBook(visible, title(wanted)).asBook());
@@ -66,19 +80,45 @@ public final class CommandsCommand implements BasicCommand {
         }
     }
 
+    /** The notes whose plugin or command mentions what was asked for; all of them for nothing asked. */
+    static List<CommandNote> matching(List<CommandNote> notes, String wanted) {
+        return notes.stream()
+                .filter(note -> wanted == null
+                        || note.plugin().toLowerCase(Locale.ROOT).contains(wanted)
+                        || note.command().contains(wanted))
+                .toList();
+    }
+
+    /** Plugin names and command names, each once — what can be asked for. */
+    static List<String> namesIn(List<CommandNote> notes) {
+        Set<String> names = new LinkedHashSet<>();
+        for (CommandNote note : notes) {
+            names.add(note.plugin());
+        }
+        for (CommandNote note : notes) {
+            String command = note.command();
+            int space = command.indexOf(' ');
+            names.add(space < 0 ? command : command.substring(0, space));
+        }
+        return List.copyOf(names);
+    }
+
     private static String title(String wanted) {
         return wanted == null ? "Commands" : "Commands: " + wanted;
     }
 
-    /** The plugins that have reported anything, so {@code /commands wa<tab>} finds Warps. */
+    /**
+     * The plugins and commands this sender can use, so {@code /commands wa<tab>} finds Warps and
+     * {@code /commands ho<tab>} finds home.
+     */
     @Override
     public Collection<String> suggest(CommandSourceStack source, String[] args) {
-        if (args.length > 1) {
+        if (args.length > 1 || !RainsCore.isAvailable()) {
             return List.of();
         }
         String typed = args.length == 1 ? args[0].toLowerCase(Locale.ROOT) : "";
-        return RainsCore.get().commands().plugins().stream()
-                .filter(plugin -> plugin.toLowerCase(Locale.ROOT).startsWith(typed))
+        return namesIn(RainsCore.get().commands().visibleTo(source.getSender()::hasPermission)).stream()
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(typed))
                 .toList();
     }
 }
