@@ -99,18 +99,23 @@ public final class ChunkHolds {
             return false;
         }
         String who = owner.trim();
-        boolean[] first = {false};
+        boolean[] added = {false};
         holders.compute(chunk, (at, current) -> {
             Set<String> set = current == null ? new LinkedHashSet<>() : current;
-            first[0] = set.add(who) && set.size() == 1;
+            added[0] = set.add(who);
+            if (added[0] && set.size() == 1) {
+                // Inside the same step as the bookkeeping, so the flag is handed over in the order
+                // the holds changed. Outside it, a release racing this keep could reach the world
+                // first and leave the chunk force-loaded with nobody holding it — for good, since the
+                // flag is saved with the world.
+                loader.keepLoaded(chunk, true);
+            }
             return set;
         });
-        if (first[0]) {
-            loader.keepLoaded(chunk, true);
+        if (added[0]) {
             log.info("{} is keeping {} loaded.", who, chunk);
-            return true;
         }
-        return false;
+        return added[0];
     }
 
     /**
@@ -130,13 +135,13 @@ public final class ChunkHolds {
                 return set;
             }
             last[0] = set.isEmpty();
+            if (last[0]) {
+                // In the same step, for the same reason as keep().
+                loader.keepLoaded(chunk, false);
+            }
             return set.isEmpty() ? null : set;
         });
-        if (last[0]) {
-            loader.keepLoaded(chunk, false);
-            return true;
-        }
-        return false;
+        return last[0];
     }
 
     /**
