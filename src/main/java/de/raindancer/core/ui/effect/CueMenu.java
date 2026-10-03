@@ -193,7 +193,7 @@ public final class CueMenu extends Menu {
                 ? "ENTITY_GENERIC_EXPLODE~0.5; ENTITY_LIGHTNING_BOLT_THUNDER>1250"
                 : "DUST@40~0.5#ff2020; CRIT@30~0.5"));
 
-        prompts.ask(viewer.getUniqueId(), "core-cue-layers", TYPING_WINDOW,
+        boolean asked = prompts.ask(viewer.getUniqueId(), "core-cue-layers", TYPING_WINDOW,
                 typed -> {
                     String written = typed == null ? "" : typed.strip();
                     if (written.isEmpty() || written.equalsIgnoreCase("cancel")) {
@@ -227,6 +227,12 @@ public final class CueMenu extends Menu {
                     tell("<gray>Nothing was typed, so the cue was left alone.");
                     open();
                 });
+        if (!asked) {
+            // Somebody else is already waiting on this player's next line; told to type here, it
+            // would have gone to public chat.
+            tell("<red>You are already being asked something else — answer or cancel that first.");
+            open();
+        }
     }
 
     /**

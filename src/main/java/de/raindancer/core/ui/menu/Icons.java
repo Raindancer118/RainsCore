@@ -156,7 +156,7 @@ public final class Icons {
 
     public static ItemStack close() {
         return of(Material.BARRIER, "<" + Style.bad() + ">" + word("menu.close", "Close"),
-                "<" + Style.itemLore() + ">" + word("menu.close", "Shut this menu"));
+                "<" + Style.itemLore() + ">" + word("menu.close-lore", "Shut this menu"));
     }
 
     public static ItemStack help(List<String> lines) {

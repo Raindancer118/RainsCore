@@ -87,6 +87,14 @@ class CatalogueTest {
         }
 
         @Test
+        @DisplayName("raw ore is not something to eat")
+        void rawOreIsNotFood() {
+            assertThat(Catalogue.categoryOf("RAW_IRON")).isNotEqualTo(Category.FOOD);
+            assertThat(Catalogue.categoryOf("RAW_GOLD_BLOCK")).isNotEqualTo(Category.FOOD);
+            assertThat(Catalogue.categoryOf("BEEF")).isEqualTo(Category.FOOD);
+        }
+
+        @Test
         @DisplayName("things you decorate with")
         void decorations() {
             assertThat(Catalogue.categoryOf("PAINTING")).isEqualTo(Category.DECORATIONS);

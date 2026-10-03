@@ -176,7 +176,8 @@ public final class Catalogue {
     }
 
     private static boolean isFood(String name) {
-        return name.startsWith("COOKED_") || name.startsWith("RAW_")
+        // Not RAW_: since 1.13 raw meat has no prefix (BEEF, COD), and RAW_ is only ever ore.
+        return name.startsWith("COOKED_")
                 || name.equals("APPLE") || name.equals("GOLDEN_APPLE")
                 || name.equals("ENCHANTED_GOLDEN_APPLE") || name.equals("BREAD")
                 || name.equals("CARROT") || name.equals("GOLDEN_CARROT") || name.equals("POTATO")

@@ -136,6 +136,7 @@ menu:
   back-to: "<gray>Back to <where>"
   home: "<gray>Main menu"
   close: "<gray>Close"
+  close-lore: "<gray>Shut this menu"
   help: "<aqua>What is this?"
   # A button somebody may not use is shown greyed with the reason.
   locked: "<dark_gray><reason>"
