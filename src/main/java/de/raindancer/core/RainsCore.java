@@ -25,6 +25,9 @@ import de.raindancer.core.data.settings.SettingsSchema;
 import de.raindancer.core.data.settings.SettingsStore;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.data.runs.RunHistory;
+import de.raindancer.core.ui.checklist.Checklist;
+import de.raindancer.core.ui.checklist.ChecklistChat;
+import de.raindancer.core.ui.checklist.ChecklistMenu;
 import de.raindancer.core.world.chunk.ChunkHolds;
 import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.Effects;
@@ -338,6 +341,13 @@ public interface RainsCore {
      * @param game the game's own name, usually the plugin's — {@code "speedrun"}
      */
     RunHistory runHistory(String game);
+
+    /**
+     * Whether Rain's Core itself is in order here — databases, files, sidebars, resource pack — as a
+     * checklist a plugin can show in its own admin screens ({@link ChecklistMenu}, {@link ChecklistChat}).
+     * Owners are offered it in chat on joining whenever something on it is not green.
+     */
+    Checklist health();
 
     /**
      * A throttled walk over a region, making sure every chunk in it has been generated at least

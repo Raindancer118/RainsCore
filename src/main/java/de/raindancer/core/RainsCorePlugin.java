@@ -51,6 +51,10 @@ import de.raindancer.core.ui.tablist.TablistModel;
 import de.raindancer.core.ui.tablist.Tablists;
 import de.raindancer.core.world.chunk.BukkitChunkLoader;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import de.raindancer.core.platform.health.CoreHealth;
+import de.raindancer.core.ui.checklist.Checklist;
+import de.raindancer.core.ui.checklist.ChecklistChat;
+import de.raindancer.core.data.settings.SettingsMenu;
 import de.raindancer.core.data.runs.RunHistory;
 import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.BukkitEffectSink;
@@ -119,6 +123,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -271,6 +276,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Databases databases;
     private Combat combat;
     private StructureLocator structures;
+    /** Whether this is the first start on this server — no config.yml existed yet. */
+    private boolean firstRun;
+    /** Owners already shown the start-up hint since this start; once each is enough. */
+    private final Set<UUID> hinted = ConcurrentHashMap.newKeySet();
     private final Map<String, RunHistory> histories = new ConcurrentHashMap<>();
     private CombatListener combatListener;
     private Messages messages;
@@ -298,6 +307,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onEnable() {
         long startedAt = System.nanoTime();
         instance = this;
+        firstRun = !Files.exists(getDataFolder().toPath().resolve("config.yml"));
 
         // Settings first: everything after this reads them.
         settings = settingsFor(SettingsSchema.of(CoreConfig.class, CoreConfig.DEFAULTS),
@@ -1210,6 +1220,63 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public Checklist health() {
+        return CoreHealth.checklist(new CoreHealth.Facts(
+                databases.core().isUsable(), databases.audit().isUsable(),
+                settings.problems(), messages.problems(),
+                scoreboards.isAvailable(), packServer != null && packServer.isRunning(),
+                packServer == null || packServer.givesClientsAReachableAddress(),
+                grants.usesLuckPerms(), Scheduling.isFolia()));
+    }
+
+    /**
+     * What an owner is told when they join: a welcome the first time Core runs here, and a line with
+     * a button whenever something about Core needs attention. Once per owner per start — a reminder
+     * on every join is a reminder people learn to ignore.
+     */
+    private void offerOwnerHint(Player player) {
+        if (!player.hasPermission(OWNER_HINT_PERMISSION) || !hinted.add(player.getUniqueId())) {
+            return;
+        }
+        Scheduling.entityLater(this, player, OWNER_HINT_DELAY_TICKS, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            Checklist health = health();
+            int problems = health.problems().size();
+            if (!firstRun && problems == 0) {
+                return;
+            }
+            if (firstRun) {
+                chat.tell(player, "<gray>Rain's Core is running here for the first time. Everything every "
+                        + "plugin on this server can be told to do is in <white>/settings</white>.");
+            }
+            if (problems > 0) {
+                chat.warn(player, "<count> thing<s> about Rain's Core need<v> attention.",
+                        Chat.arg("count", problems), Chat.arg("s", problems == 1 ? "" : "s"),
+                        Chat.arg("v", problems == 1 ? "s" : ""));
+            }
+            if (!buttons.isClickable()) {
+                if (problems > 0) {
+                    ChecklistChat.tell(player, health, null);
+                }
+                return;
+            }
+            UUID id = player.getUniqueId();
+            player.sendMessage(buttons.row(
+                    buttons.label("<green>[Show me]").tooltip("<gray>What is fine and what is not, with fixes")
+                            .forOnly(id).does(clicker -> Scheduling.entity(this, player,
+                                    () -> ChecklistChat.tell(player, health(), buttons))),
+                    buttons.label("<aqua>[Open settings]").tooltip("<gray>Everything there is to set")
+                            .forOnly(id).does(clicker -> Scheduling.entity(this, player,
+                                    () -> SettingsMenu.root(player, chat.brand(), chat, navigation).open()))));
+        });
+    }
+
+    private static final String OWNER_HINT_PERMISSION = "rainscore.settings";
+    private static final long OWNER_HINT_DELAY_TICKS = 40L;
+
+    @Override
     public StructureLocator structures() {
         return structures;
     }
@@ -1369,6 +1436,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      */
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        offerOwnerHint(event.getPlayer());
         if (!settings.current().auditEnabled()) {
             return;
         }
