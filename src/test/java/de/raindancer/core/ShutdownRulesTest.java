@@ -44,4 +44,18 @@ class ShutdownRulesTest {
         assertThat(body.indexOf("chunks.releaseAll()")).isLessThan(body.indexOf("databases.close()"));
         assertThat(body.indexOf("seclusion.revealEverybody()")).isLessThan(body.indexOf("chunks.releaseAll()"));
     }
+
+    @Test
+    @DisplayName("a plugin disabled without tidying up has everything it registered let go")
+    void anotherPluginsLeftoversAreDropped() throws IOException {
+        String plugin = Files.readString(Path.of("src/main/java/de/raindancer/core/RainsCorePlugin.java"));
+        int at = plugin.indexOf("public void onPluginDisable(PluginDisableEvent event)");
+        assertThat(at).as("the handler this is about has moved or gone").isNotNegative();
+        String handler = plugin.substring(at, plugin.indexOf("\n    }\n", at));
+
+        for (String registry : java.util.List.of("worldEntryRules", "registry", "ProfileExtensions",
+                "ChatChannels", "combat", "grants", "achievements", "itemAbilities", "land")) {
+            assertThat(handler).as(registry).contains(registry + ".forgetFrom(loader)");
+        }
+    }
 }

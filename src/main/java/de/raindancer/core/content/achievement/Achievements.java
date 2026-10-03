@@ -1,5 +1,6 @@
 package de.raindancer.core.content.achievement;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.data.sql.Database;
@@ -283,6 +284,18 @@ public final class Achievements {
      * business, and a title, a sound, a broadcast and a firework are all reasonable and none of them
      * belongs in a store.
      */
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = listeners.size();
+        listeners.removeIf(listener -> PluginCode.isFrom(listener, loader));
+        return before - listeners.size();
+    }
+
     public void onEarned(BiConsumer<UUID, Achievement> listener) {
         if (listener != null) {
             listeners.add(listener);

@@ -1,6 +1,7 @@
 package de.raindancer.core.world.manage;
 
 import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
 import org.bukkit.World;
@@ -55,6 +56,18 @@ public final class WorldEntryRules {
     }
 
     /** The first refusal any rule gives, or empty when every rule lets them through. */
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = rules.size();
+        rules.removeIf(registered -> PluginCode.isFrom(registered.rule(), loader));
+        return before - rules.size();
+    }
+
     public Optional<Component> refusal(Player player, World target) {
         if (player == null || target == null) {
             return Optional.empty();

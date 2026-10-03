@@ -1,5 +1,6 @@
 package de.raindancer.core.world.protection;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.ui.messages.Messages;
@@ -121,6 +122,22 @@ public final class Land {
             return false;
         }
         log.info("Land questions are answered by {}.", candidate.name());
+        return true;
+    }
+
+    /**
+     * Stands the provider down if {@code loader}'s code is it — for a plugin disabled without
+     * withdrawing. Left in place, it answers from a plugin that is gone, and refuses the same plugin's
+     * fresh copy when it starts again.
+     *
+     * @return whether it was standing
+     */
+    public boolean forgetFrom(ClassLoader loader) {
+        LandProvider registered = provider.get();
+        if (registered == null || !PluginCode.isFrom(registered, loader)) {
+            return false;
+        }
+        withdraw(registered);
         return true;
     }
 

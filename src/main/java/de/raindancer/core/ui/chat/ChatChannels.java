@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.chat;
 
+import de.raindancer.core.platform.util.PluginCode;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -109,6 +110,20 @@ public final class ChatChannels {
         }
         return byId(id).flatMap(channel -> channel.audienceFor(speaker)
                 .map(audience -> new Route(channel, Set.copyOf(audience), channel.tagFor(speaker))));
+    }
+
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public static int forgetFrom(ClassLoader loader) {
+        int before = channels.size() + routers.size() + watchers.size();
+        channels.removeIf(channel -> PluginCode.isFrom(channel, loader));
+        routers.removeIf(router -> PluginCode.isFrom(router, loader));
+        watchers.removeIf(watcher -> PluginCode.isFrom(watcher, loader));
+        return before - channels.size() - routers.size() - watchers.size();
     }
 
     public static void forget(UUID player) {

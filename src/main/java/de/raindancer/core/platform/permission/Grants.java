@@ -1,5 +1,6 @@
 package de.raindancer.core.platform.permission;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import net.luckperms.api.LuckPerms;
@@ -118,6 +119,18 @@ public final class Grants {
      * <p>Wired to {@code GrantListener.apply} so a promotion or a revocation reaches the player who is
      * standing there, and to vanish's may-see set, which is likewise decided once and then cached.
      */
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = watchers.size();
+        watchers.removeIf(watcher -> PluginCode.isFrom(watcher, loader));
+        return before - watchers.size();
+    }
+
     public void onChange(Consumer<UUID> watcher) {
         if (watcher != null) {
             watchers.add(watcher);

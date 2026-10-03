@@ -1,5 +1,6 @@
 package de.raindancer.core.content.items;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
@@ -53,6 +54,18 @@ public final class ItemAbilities {
         if (ability != null) {
             abilities.put(ability.key(), ability);
         }
+    }
+
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = abilities.size();
+        abilities.values().removeIf(ability -> PluginCode.isFrom(ability.effect(), loader));
+        return before - abilities.size();
     }
 
     public Optional<ItemAbility> byKey(String key) {

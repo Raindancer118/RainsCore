@@ -5,6 +5,8 @@ import de.raindancer.core.content.achievement.Achievements;
 import de.raindancer.core.ui.banner.Banner;
 import de.raindancer.core.ui.bossbar.BossBars;
 import de.raindancer.core.ui.chat.Brand;
+import de.raindancer.core.ui.chat.ChatChannels;
+import de.raindancer.core.ui.profile.ProfileExtensions;
 import de.raindancer.core.ui.chat.Chat;
 import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.ui.chat.ChatButtons;
@@ -89,6 +91,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import de.raindancer.core.content.items.BoundItemListener;
@@ -1334,6 +1337,44 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 .by(player.getUniqueId(), player.getName())
                 .in(player.getWorld().getName())
                 .with("gamemode", event.getNewGameMode().name()));
+    }
+
+    /**
+     * A plugin (or a module hosted in one) is going away: whatever callbacks it handed to Core and did
+     * not take back are dropped here. Left in place they answer from a dead class loader — a land
+     * provider whose database is closed, a combat rule twice over after a reload — and the land
+     * provider would refuse the same plugin's fresh copy when it starts again.
+     */
+    @EventHandler
+    public void onPluginDisable(PluginDisableEvent event) {
+        Plugin gone = event.getPlugin();
+        if (gone == this) {
+            return;
+        }
+        ClassLoader loader = gone.getClass().getClassLoader();
+        int dropped = worldEntryRules.forgetFrom(loader)
+                + registry.forgetFrom(loader)
+                + ProfileExtensions.forgetFrom(loader)
+                + ChatChannels.forgetFrom(loader);
+        if (combat != null) {
+            dropped += combat.forgetFrom(loader);
+        }
+        if (grants != null) {
+            dropped += grants.forgetFrom(loader);
+        }
+        if (achievements != null) {
+            dropped += achievements.forgetFrom(loader);
+        }
+        if (itemAbilities != null) {
+            dropped += itemAbilities.forgetFrom(loader);
+        }
+        if (land != null && land.forgetFrom(loader)) {
+            dropped++;
+        }
+        if (dropped > 0) {
+            log.info("{} stopped with {} thing(s) still registered with Rain's Core; they have been "
+                    + "let go.", gone.getName(), dropped);
+        }
     }
 
     @EventHandler

@@ -1,5 +1,7 @@
 package de.raindancer.core.ui.profile;
 
+import de.raindancer.core.platform.util.PluginCode;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -34,6 +36,18 @@ public final class ProfileExtensions {
     }
 
     /** Every contributor currently registered, in the order they registered. */
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public static int forgetFrom(ClassLoader loader) {
+        int before = extensions.size();
+        extensions.removeIf(extension -> PluginCode.isFrom(extension, loader));
+        return before - extensions.size();
+    }
+
     public static List<ProfileExtension> all() {
         return List.copyOf(extensions);
     }

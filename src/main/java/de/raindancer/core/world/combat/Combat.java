@@ -1,5 +1,6 @@
 package de.raindancer.core.world.combat;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
@@ -305,6 +306,18 @@ public final class Combat {
      */
     public boolean stopAsking(Function<Attack, Verdict> rule) {
         return rule != null && alsoAsked.removeIf(asked -> asked.rule() == rule);
+    }
+
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = alsoAsked.size();
+        alsoAsked.removeIf(asked -> PluginCode.isFrom(asked.rule(), loader));
+        return before - alsoAsked.size();
     }
 
     /** How many extra rules there are. */

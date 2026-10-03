@@ -1,5 +1,6 @@
 package de.raindancer.core.data.settings;
 
+import de.raindancer.core.platform.util.PluginCode;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Material;
@@ -46,6 +47,18 @@ public final class SettingsRegistry {
                             + "that name alone reaches the first; use plugin:key to be sure.",
                     clash.getKey(), String.join(", ", clash.getValue()));
         }
+    }
+
+    /**
+     * Drops whatever {@code loader}'s code registered here — for a plugin disabled without taking its
+     * own back. See {@link PluginCode}.
+     *
+     * @return how many were dropped
+     */
+    public int forgetFrom(ClassLoader loader) {
+        int before = stores.size();
+        stores.removeIf(store -> PluginCode.loaded(store.schema().type(), loader));
+        return before - stores.size();
     }
 
     public List<SettingsStore<?>> stores() {
