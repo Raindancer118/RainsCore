@@ -297,6 +297,18 @@ land:
     item-pickup: {name: "Item pickup", description: "Pick up dropped items"}
     trade: {name: "Villager trading", description: "Trade with villagers"}
 
+
+# ──────────────────────────────────────────────────────── questions typed into chat
+# <problem> is what was wrong with the answer, <left> how many tries remain.
+prompt:
+  how: "<dark_gray>Type your answer in chat — or <white>cancel</white>. <seconds>s to answer."
+  again: "<red><problem> <gray>Try again — <left> <tries> left."
+  gave-up: "<red><problem> That was the last try; nothing was changed."
+  timed-out: "<gray>No answer came, so nothing was changed."
+  cancelled: "<gray>Cancelled — nothing was changed."
+  busy: "<yellow>Something else is already waiting for your answer — answer or cancel that first."
+  suggestions: "<dark_gray>Click one: "
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Nothing else here on purpose.
 #
@@ -310,3 +322,4 @@ land:
 #  a message file listing lines that never appear is worse than a short one,
 #  because somebody translates them and then wonders why nothing changed.
 # ─────────────────────────────────────────────────────────────────────────────
+
