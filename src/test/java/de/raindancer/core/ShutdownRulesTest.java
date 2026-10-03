@@ -67,4 +67,19 @@ class ShutdownRulesTest {
         assertThat(plugin).contains("punishments.writeSoon(").contains("places.writeSoon(")
                 .contains("Scheduling.async(this, grants::flush)");
     }
+
+    @Test
+    @DisplayName("players already online when Core starts get what a join would have given them")
+    void aReloadAdoptsWhoeverIsOn() throws IOException {
+        String plugin = Files.readString(Path.of("src/main/java/de/raindancer/core/RainsCorePlugin.java"));
+        int enable = plugin.indexOf("public void onEnable()");
+        String body = plugin.substring(enable, plugin.indexOf("\n    }\n", enable));
+        int at = plugin.indexOf("private void adoptPlayersAlreadyOnline()");
+        assertThat(at).isNotNegative();
+        String adopt = plugin.substring(at, plugin.indexOf("\n    }\n", at));
+
+        assertThat(body).contains("adoptPlayersAlreadyOnline()");
+        assertThat(adopt).contains("grantListener.apply(").contains("vanish.maySeeVanished(")
+                .contains("Scheduling.entity(");
+    }
 }

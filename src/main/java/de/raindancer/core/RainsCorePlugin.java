@@ -675,6 +675,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         banner.took(Duration.ofNanos(System.nanoTime() - startedAt))
                 .print(getComponentLogger());
+        adoptPlayersAlreadyOnline();
+    }
+
+    /**
+     * What a join would have done, for everybody already on the server when Core starts — a
+     * {@code /reload}, or Core enabled late. No join event comes for them, so without this every
+     * granted permission was missing and every moderator saw nobody vanished until they relogged.
+     */
+    private void adoptPlayersAlreadyOnline() {
+        for (Player online : getServer().getOnlinePlayers()) {
+            Scheduling.entity(this, online, () -> {
+                grantListener.apply(online);
+                vanish.maySeeVanished(online.getUniqueId(), online.hasPermission(SEE_VANISHED));
+            });
+        }
     }
 
     /**
