@@ -184,4 +184,16 @@ class PackServerTest {
             second.stop();
         }
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("the default bind with no public address is flagged as unreachable for clients")
+    void wildcardBindIsNotAnAddress() {
+        java.nio.file.Path folder = java.nio.file.Path.of("unused");
+        assertThat(new PackServer(folder, "0.0.0.0", 8123).givesClientsAReachableAddress()).isFalse();
+        assertThat(new PackServer(folder, "127.0.0.1", 8123).givesClientsAReachableAddress()).isFalse();
+        assertThat(new PackServer(folder, "203.0.113.7", 8123).givesClientsAReachableAddress()).isTrue();
+        PackServer published = new PackServer(folder, "0.0.0.0", 8123);
+        published.publicAddress("https://packs.example.org");
+        assertThat(published.givesClientsAReachableAddress()).isTrue();
+    }
 }

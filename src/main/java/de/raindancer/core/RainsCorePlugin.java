@@ -753,6 +753,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             packServer = new PackServer(getDataFolder().toPath().resolve("packs"),
                     config.packsBind(), config.packsPort());
             packServer.publicAddress(config.packsPublicAddress());
+            if (!packServer.givesClientsAReachableAddress()) {
+                log.warn("The resource pack server is bound to {} and no public address is set, so "
+                        + "players would be told to download from an address only this machine can "
+                        + "reach. Set packs-public-address to how players reach this server.",
+                        config.packsBind());
+            }
             try {
                 packServer.start();
                 resourcePacks.urls(packServer::urlFor);

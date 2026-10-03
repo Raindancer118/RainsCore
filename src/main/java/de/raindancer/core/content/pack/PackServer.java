@@ -138,6 +138,20 @@ public final class PackServer {
         return isRunning() ? actualPort : wantedPort;
     }
 
+    /**
+     * Whether the address clients are told is one they can reach. Not when nothing public is set and
+     * the server is bound to every interface (or only to this machine): clients are then sent
+     * {@code http://0.0.0.0:port/...}, which works on the server's own machine and nowhere else.
+     */
+    public boolean givesClientsAReachableAddress() {
+        if (!publicAddress.isEmpty()) {
+            return true;
+        }
+        String host = bind == null ? "" : bind.trim();
+        return !(host.isEmpty() || host.equals("0.0.0.0") || host.equals("::") || host.equals("[::]")
+                || host.equals("localhost") || host.startsWith("127."));
+    }
+
     /** Where a client should download one built pack from. */
     public String urlFor(String fileName) {
         String host = publicAddress.isEmpty() ? "http://" + bind + ":" + port() : publicAddress;
