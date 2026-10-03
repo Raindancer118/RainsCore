@@ -6,11 +6,14 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 /**
- * Items handed out as buttons — a lobby compass, a tracking compass — which a player may not throw
- * away. Bind the stack before giving it; Core's {@link BoundItemListener} refuses the drop.
+ * Items handed out as buttons — a lobby compass, a tracking compass — which never leave their
+ * holder's own inventory. Bind the stack before giving it; Core's {@link BoundItemListener} refuses
+ * every way out: dropping, putting it in any container (an ender chest too), a bundle, an item frame,
+ * an armour stand or a block, placing it, and dropping it from a full inventory when a window closes.
  *
- * <p>Only dropping is refused. What happens to a bound item on death stays the owning plugin's call:
- * some delete theirs from the drops and hand out a fresh one on respawn, and Core cannot know which.
+ * <p>On death a bound item still in the drops is kept, at {@code HIGH} priority — after a plugin that
+ * deletes its own from the drops at {@code NORMAL} to hand out a fresh one on respawn, which keeps
+ * working as before.
  *
  * <p>The key is Core's own namespace rather than the calling plugin's, so one listener recognises every
  * plugin's bound items and a plugin needs no listener of its own.
