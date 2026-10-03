@@ -281,8 +281,9 @@ public final class Combat {
      * <p>Asked before the world's rules, so an arena inside a peaceful world works without a second
      * listener fighting this one over the same event. Answer null to have no opinion.
      *
-     * <p>Asked in the order they were added, and the first opinion wins — defined on purpose, because
-     * two plugins disagreeing must not give a different answer depending on load order.
+     * <p>Asked in the order they were added, and the first opinion wins. That order is the order plugins
+     * enabled in, so two rules that can disagree about the same attack give a load-order answer: a rule
+     * should only have an opinion about the attacks that are its business (its arena, its game).
      */
     public void alsoAsk(Function<Attack, Verdict> rule) {
         alsoAsk(null, rule);
