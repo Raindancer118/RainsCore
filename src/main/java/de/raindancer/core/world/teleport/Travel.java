@@ -607,7 +607,7 @@ public final class Travel {
                     ? tameable.getOwner().getUniqueId()
                     : null;
             boolean isTame = tamedBy != null;
-            boolean carriesAPlayer = carriesAPlayer(entity);
+            boolean carriesAPlayer = carriesAPlayer(entity, traveller);
 
             byId.put(entity.getUniqueId(), entity);
             if (genuinelyLeashed) {
@@ -625,15 +625,19 @@ public final class Travel {
     }
 
     /**
-     * Whether somebody is sitting in or on this — at any depth.
+     * Whether somebody other than the traveller is sitting in or on this — at any depth.
      *
      * <p>Recursive because a passenger may itself carry one: a player on a donkey in a boat. Paper
      * moves the whole stack with the vehicle, so a check that only looked one level down would let a
      * towed boat teleport a player after all.
      */
-    private static boolean carriesAPlayer(Entity entity) {
+    static boolean carriesAPlayer(Entity entity, UUID traveller) {
         for (Entity passenger : entity.getPassengers()) {
-            if (passenger instanceof Player || carriesAPlayer(passenger)) {
+            // The traveller in their own boat is the one person it may carry: counting them as
+            // "somebody else" meant the vehicle a player sat in never came along.
+            boolean somebodyElse = passenger instanceof Player
+                    && !passenger.getUniqueId().equals(traveller);
+            if (somebodyElse || carriesAPlayer(passenger, traveller)) {
                 return true;
             }
         }
