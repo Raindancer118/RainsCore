@@ -12,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -257,13 +258,15 @@ public final class PackBuilder {
      *
      * @param keep every part of the build now in use; stacked mode has several
      */
-    private void tidy(List<Path> keep) {
+    private synchronized void tidy(List<Path> keep) {
+        // The build before this one survives one more round: a player sent its URL a moment before
+        // the swap is still downloading it, and deleting it now is a 404 in their face.
+        List<Path> spared = new ArrayList<>(keep);
+        spared.addAll(previous);
+        previous = List.copyOf(keep);
         try (var stream = Files.list(workFolder)) {
             for (Path old : stream.toList()) {
-                String name = old.getFileName().toString();
-                boolean ours = name.startsWith(BUILT_PREFIX) || name.startsWith("from-")
-                        || name.startsWith("combined");
-                if (ours && !keep.contains(old)) {
+                if (isOurs(old.getFileName().toString()) && !spared.contains(old)) {
                     Files.deleteIfExists(old);
                 }
             }
@@ -272,6 +275,21 @@ public final class PackBuilder {
             log.warn("Could not tidy up {} ({})", workFolder, failure.getMessage());
         }
     }
+
+    /** What the last build kept, which the next tidy spares too. */
+    private List<Path> previous = List.of();
+
+    /**
+     * Whether a file in the served folder is one this class named — exactly the shapes it writes, so a
+     * {@code pack-event.zip} somebody put there by hand is never mistaken for an old build.
+     */
+    static boolean isOurs(String name) {
+        return OURS.matcher(name).matches();
+    }
+
+    private static final Pattern OURS = Pattern.compile(
+            "pack-[0-9a-f]{12}\\.zip(\\.writing)?|combined-[0-9a-f]{12}\\.zip|combined\\.zip\\.tmp"
+                    + "|from-[a-z0-9-]+\\.zip");
 
     /**
      * Why a file is not a resource pack, or null when it is one.

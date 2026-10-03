@@ -364,15 +364,65 @@ class PackBuilderTest {
                 PackContribution.of("Records", "discs", second)), "Server pack").orElseThrow();
 
         Path changed = zip("c.zip", Map.of("assets/c.txt", "three"));
-        PackBuild latest = builder.build(libraryOf(
+        PackBuild previous = builder.build(libraryOf(
                 PackContribution.of("Claims", "icons", first),
                 PackContribution.of("Records", "discs", changed)), "Server pack").orElseThrow();
+        Path again = zip("d.zip", Map.of("assets/d.txt", "four"));
+        PackBuild latest = builder.build(libraryOf(
+                PackContribution.of("Claims", "icons", first),
+                PackContribution.of("Records", "discs", again)), "Server pack").orElseThrow();
 
+        // The latest build and the one before it, which a player may still be downloading — never
+        // more than those two, however many changes there were.
+        java.util.Set<Path> expected = new java.util.LinkedHashSet<>();
+        latest.parts().forEach(part -> expected.add(part.file()));
+        previous.parts().forEach(part -> expected.add(part.file()));
         try (var stream = Files.list(work())) {
             assertThat(stream.toList())
                     .as("one zip per configuration change would fill a disk quietly")
-                    .containsExactlyInAnyOrderElementsOf(
-                            latest.parts().stream().map(PackPart::file).toList());
+                    .containsExactlyInAnyOrderElementsOf(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("tidying the folder the web server serves")
+    class Tidying {
+
+        @Test
+        @DisplayName("a pack somebody put there by hand survives, whatever it is called")
+        void handPlacedFilesAreNotOurs() throws IOException {
+            Files.createDirectories(work());
+            for (String name : java.util.List.of("pack-event.zip", "combined-lobby.zip", "pack-1.zip")) {
+                Files.writeString(work().resolve(name), "theirs");
+            }
+            Path one = zip("one.zip", Map.of("assets/a.txt", "a"));
+
+            new PackBuilder(work()).build(libraryOf(PackContribution.of("Claims", "icons", one)),
+                    "Server pack").orElseThrow();
+
+            assertThat(work().resolve("pack-event.zip")).exists();
+            assertThat(work().resolve("combined-lobby.zip")).exists();
+            assertThat(work().resolve("pack-1.zip")).exists();
+        }
+
+        @Test
+        @DisplayName("the build before this one is kept for one more round, so a player sent its URL "
+                + "a moment ago still gets it")
+        void thePreviousBuildOutlivesTheSwap() throws IOException {
+            PackBuilder builder = new PackBuilder(work());
+            Path first = builder.build(libraryOf(PackContribution.of("Claims", "icons",
+                    zip("a.zip", Map.of("assets/a.txt", "a")))), "Server pack").orElseThrow()
+                    .parts().get(0).file();
+            Path second = builder.build(libraryOf(PackContribution.of("Claims", "icons",
+                    zip("b.zip", Map.of("assets/b.txt", "b")))), "Server pack").orElseThrow()
+                    .parts().get(0).file();
+
+            assertThat(first).as("still being sent to whoever joined during the rebuild").exists();
+            assertThat(second).exists();
+
+            builder.build(libraryOf(PackContribution.of("Claims", "icons",
+                    zip("c.zip", Map.of("assets/c.txt", "c")))), "Server pack").orElseThrow();
+            assertThat(first).as("two builds ago is gone").doesNotExist();
         }
     }
 }
