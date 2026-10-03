@@ -336,13 +336,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         places.load();
 
         seedHistory = new SeedHistory(databases.core(),
-                System::currentTimeMillis, flush -> {
-                    // Off the world's threads, now: waiting for the saving timer leaves a seed recorded
-                    // just before a stop to be written during onDisable, on the server thread.
-                    if (isEnabled()) {
-                        Scheduling.async(this, flush);
-                    }
-                });
+                // Off the world's threads, now: waiting for the saving timer leaves a seed recorded
+                // just before a stop to be written during onDisable, on the server thread.
+                System::currentTimeMillis, flush -> Scheduling.async(this, flush));
         seedHistory.load();
         worldRegenerator = new WorldRegenerator(seedHistory,
                 task -> Scheduling.global(this, task));
@@ -400,12 +396,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         punishments = new Punishments(databases.core(),
                 System::currentTimeMillis);
         punishments.load();
-        // A disabled plugin may not schedule; the shutdown flush below writes whatever is left then.
-        punishments.writeSoon(write -> {
-            if (isEnabled()) {
-                Scheduling.async(this, write);
-            }
-        });
+        punishments.writeSoon(write -> Scheduling.async(this, write));
         punishmentGuard = new PunishmentGuard(punishments, System::currentTimeMillis);
         punishmentGuard.messages(messages);
         banBridge = new VanillaBanBridge(punishments);
@@ -793,6 +784,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             // behind would stop the next start from binding at all.
             packServer.stop();
             packServer = null;
+        }
+        if (inventoryViews != null) {
+            // Before the flushes, while the listeners are still registered. The server disables
+            // plugins before it kicks anybody, so a window still open here would be closed after
+            // InvseeListener is gone: an offline edit never written, and whatever the moderator had
+            // put into it destroyed with the window. Closed now, each one is written in place.
+            int closed = inventoryViews.closeEverything();
+            if (closed > 0) {
+                log.info("Closed {} inventory window(s) on the way out.", closed);
+            }
         }
         // Before anything is flushed by hand: a timer that fires while this method is closing the
         // databases writes into one that is going away, and loses whatever it was carrying.

@@ -1,5 +1,7 @@
 package de.raindancer.core.platform.util;
 
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -15,8 +17,18 @@ import java.util.function.Consumer;
  * Paper ships {@code RegionScheduler}, {@code AsyncScheduler}, {@code GlobalRegionScheduler} and
  * {@code Entity#getScheduler()} on both vanilla Paper and Folia, so using them exclusively keeps the
  * plugin Folia-safe without any runtime branching. {@code Bukkit.getScheduler()} is never touched.
+ *
+ * <h2>A disabled plugin</h2>
+ * Paper's schedulers refuse every task from a plugin that is not enabled, and {@code onDisable} runs
+ * after the plugin has been marked disabled. So every one-shot method here runs its task <em>in
+ * place</em> for a disabled plugin, with any failure logged rather than thrown: the cleanup a plugin
+ * does on the way out — showing the hidden, releasing chunks, handing items back — is exactly the work
+ * that hops threads, and nothing would ever run it later. Shutdown is the one moment nothing else is
+ * ticking. Timers are not covered: starting one while disabling is a mistake, and still throws.
  */
 public final class Scheduling {
+
+    private static final LogChannel log = Log.of("scheduling");
 
     private static final boolean FOLIA = classPresent("io.papermc.paper.threadedregions.RegionizedServer");
 
@@ -27,13 +39,38 @@ public final class Scheduling {
         return FOLIA;
     }
 
+    /** Whether this plugin may still schedule — false from the moment it starts disabling. */
+    public static boolean isLive(Plugin plugin) {
+        return plugin != null && plugin.isEnabled();
+    }
+
+    /** Runs a task for a disabled plugin where it is, keeping a failure inside it. */
+    private static boolean ranInPlace(Plugin plugin, Runnable task) {
+        if (isLive(plugin)) {
+            return false;
+        }
+        try {
+            task.run();
+        } catch (RuntimeException | LinkageError failure) {
+            log.warn(failure, "A task from {} failed while it was shutting down.",
+                    plugin == null ? "a plugin" : plugin.getName());
+        }
+        return true;
+    }
+
     /** Runs on the thread owning {@code location}'s region, next tick. */
     public static void region(Plugin plugin, Location location, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         Bukkit.getRegionScheduler().execute(plugin, location, task);
     }
 
     /** Runs on the thread owning {@code entity}; silently drops the task if the entity is removed. */
     public static void entity(Plugin plugin, Entity entity, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         entity.getScheduler().run(plugin, ignored -> task.run(), null);
     }
 
@@ -46,6 +83,9 @@ public final class Scheduling {
      * relying on a detail of the scheduler rather than saying what is meant.
      */
     public static void entityLater(Plugin plugin, Entity entity, long delayTicks, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         entity.getScheduler().runDelayed(plugin, ignored -> task.run(), null, Math.max(1L, delayTicks));
     }
 
@@ -78,10 +118,16 @@ public final class Scheduling {
 
     /** Global-region task, for world/server wide state that is not tied to a single location. */
     public static void global(Plugin plugin, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         Bukkit.getGlobalRegionScheduler().execute(plugin, task);
     }
 
     public static void globalLater(Plugin plugin, long delayTicks, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, ignored -> task.run(), Math.max(1L, delayTicks));
     }
 
@@ -93,6 +139,9 @@ public final class Scheduling {
 
     /** Off-thread work: disk I/O, HTTP, anything that must not touch the Bukkit API. */
     public static void async(Plugin plugin, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         Bukkit.getAsyncScheduler().runNow(plugin, ignored -> task.run());
     }
 
@@ -104,6 +153,9 @@ public final class Scheduling {
 
     /** Off-thread, once, after a delay finer than a second — a poll interval, not a wait. */
     public static void asyncLater(Plugin plugin, long delay, TimeUnit unit, Runnable task) {
+        if (ranInPlace(plugin, task)) {
+            return;
+        }
         Bukkit.getAsyncScheduler().runDelayed(plugin, ignored -> task.run(), Math.max(1L, delay), unit);
     }
 

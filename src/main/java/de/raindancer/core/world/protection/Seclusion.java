@@ -128,13 +128,8 @@ public final class Seclusion {
                 if (subject == null) {
                     continue;
                 }
-                if (plugin.isEnabled()) {
-                    Scheduling.entity(plugin, watcher, () -> watcher.showPlayer(plugin, subject));
-                } else {
-                    // onDisable, where a disabled plugin may not schedule anything: without this the
-                    // shutdown reveal would throw, and everybody hidden would stay hidden.
-                    watcher.showPlayer(plugin, subject);
-                }
+                // Runs in place during onDisable — see Scheduling — so nobody stays hidden.
+                Scheduling.entity(plugin, watcher, () -> watcher.showPlayer(plugin, subject));
             }
         });
         hiddenFrom.clear();

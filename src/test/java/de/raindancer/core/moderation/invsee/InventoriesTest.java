@@ -127,7 +127,9 @@ class InventoriesTest {
             PlayerDataInventorySource saved = mock(PlayerDataInventorySource.class);
             Carried<ItemStack> carried = Carried.empty();
             when(saved.write(eq(owner), any())).thenReturn(true);
-            Inventories inventories = new Inventories(mock(Plugin.class),
+            Plugin plugin = mock(Plugin.class);
+            when(plugin.isEnabled()).thenReturn(true);
+            Inventories inventories = new Inventories(plugin,
                     new InventoryViews(name -> { }), edits, null, saved, who -> false);
 
             Player watcher = mock(Player.class);
@@ -171,5 +173,32 @@ class InventoriesTest {
             assertThat(inventories.editorLeft(moderator)).containsExactly(owner);
             assertThat(edits.isBeingEdited(owner)).isFalse();
         }
+    }
+
+    @Test
+    @DisplayName("a window closed while the plugin is shutting down is written there and then")
+    void closedDuringShutdownIsWritten() {
+        UUID owner = UUID.randomUUID();
+        UUID moderator = UUID.randomUUID();
+        OfflineEdits edits = new OfflineEdits(System::currentTimeMillis);
+        edits.begin(owner, moderator);
+        PlayerDataInventorySource saved = mock(PlayerDataInventorySource.class);
+        Carried<ItemStack> carried = Carried.empty();
+        when(saved.write(eq(owner), any())).thenReturn(true);
+        Plugin disabling = mock(Plugin.class);
+        Inventories inventories = new Inventories(disabling, new InventoryViews(name -> { }), edits,
+                null, saved, who -> false);
+        Player watcher = mock(Player.class);
+        when(watcher.getUniqueId()).thenReturn(moderator);
+        InventoryWindow window = mock(InventoryWindow.class);
+        when(window.watcher()).thenReturn(watcher);
+        when(window.owner()).thenReturn(owner);
+        when(window.access()).thenReturn(Access.EDIT);
+        when(window.carried()).thenReturn(carried);
+
+        // No scheduler is mocked at all: a disabled plugin's task runs in place.
+        inventories.closed(window);
+
+        verify(saved).write(owner, carried);
     }
 }

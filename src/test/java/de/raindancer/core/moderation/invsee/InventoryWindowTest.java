@@ -120,7 +120,9 @@ class InventoryWindowTest {
         Inventory shown = mock(Inventory.class);
         when(shown.getItem(Layout.slotFor(Section.STORAGE, 0))).thenReturn(added);
 
-        InventoryWindow window = new InventoryWindow(mock(Plugin.class), watcher, ownerId, "Owner",
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.isEnabled()).thenReturn(true);
+        InventoryWindow window = new InventoryWindow(plugin, watcher, ownerId, "Owner",
                 Access.EDIT, true, source, Carried.empty());
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
             bukkit.when(() -> Bukkit.createInventory(any(InventoryHolder.class), anyInt(),
