@@ -564,6 +564,29 @@ class TeamsTest {
         }
 
         @Test
+        @DisplayName("a round trip keeps each team's emblem, and two teams told apart by it keep their colour")
+        void roundTripKeepsEmblems() {
+            policy = policy.withExclusiveColours(true);
+            TeamId plain = teams.create("Plain", TeamColour.RED).team().orElseThrow().id();
+            TeamId starred = teams.create("Starred", TeamColour.BLUE).team().orElseThrow().id();
+            assertThat(teams.setEmblem(starred, TeamEmblem.DIAMOND)).isEqualTo(TeamOutcome.SUCCESS);
+            assertThat(teams.setColour(starred, TeamColour.RED)).isEqualTo(TeamOutcome.SUCCESS);
+
+            List<Team> saved = teams.snapshot();
+            Teams restored = new Teams(() -> policy, () -> frozen, uuid -> true);
+            restored.restore(saved);
+
+            assertThat(restored.team(starred).orElseThrow().emblem()).isEqualTo(TeamEmblem.DIAMOND);
+            assertThat(restored.team(starred).orElseThrow().colour())
+                    .as("red with an emblem is a different identity from plain red, as create and "
+                            + "setColour already agree")
+                    .isEqualTo(TeamColour.RED);
+            assertThat(restored.all()).containsExactlyElementsOf(saved);
+            assertThat(restored.problems()).isEmpty();
+            assertThat(plain).isNotNull();
+        }
+
+        @Test
         @DisplayName("restore drops an impossible captain rather than carrying it")
         void restoreDropsCaptainWhoIsNotAMember() {
             // Team's compact constructor -- unlike withCaptain -- does not check that the captain is a

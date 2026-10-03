@@ -489,8 +489,8 @@ public final class Teams {
      * while {@link TeamPolicy#exclusiveColours()} was off and then switched on.
      *
      * <ul>
-     * <li>Where colours are exclusive and an incoming team's colour is already held by one loaded earlier
-     * from the same collection, it is given a free colour instead of the one it asked for. Where none is
+     * <li>Where colours are exclusive and an incoming team's colour and emblem are already held by one loaded
+     * earlier from the same collection, it is given a free colour instead of the one it asked for. Where none is
      * free, the clash is left in place rather than the team being dropped — two teams that are hard to tell
      * apart is a smaller failure than a team, and its members, disappearing.</li>
      * <li>Where a captain is not among the team's own members, the captaincy is dropped and the team is
@@ -507,7 +507,8 @@ public final class Teams {
         TeamPolicy p = policy.get();
         for (Team data : saved) {
             TeamColour colour = data.colour();
-            if (p.exclusiveColours() && colourTaken(colour, null)) {
+            // The pair, as create and setColour judge it: red with an emblem is not plain red.
+            if (p.exclusiveColours() && identityTaken(colour, data.emblem(), null)) {
                 Set<TeamColour> free = availableColours();
                 if (free.isEmpty()) {
                     problems.add("team '" + data.id() + "' loaded with colour " + colour
@@ -522,6 +523,12 @@ public final class Teams {
             }
 
             MutableTeam team = new MutableTeam(data.name(), colour);
+            team.emblem = data.emblem();
+            // Only a badge somebody chose: Team fills in a fallback for one that was never chosen, and
+            // keeping that as a choice would stop it following a later emblem or colour change.
+            Material fallback = new Team(data.id(), data.name(), data.colour(), data.emblem(), null,
+                    Set.of(), Optional.empty()).badge();
+            team.badge = data.badge() == fallback ? null : data.badge();
             team.members.addAll(data.members());
             UUID captain = data.captain().orElse(null);
             if (captain != null && !team.members.contains(captain)) {
@@ -604,15 +611,6 @@ public final class Teams {
             }
             MutableTeam other = entry.getValue();
             if (other.colour == colour && other.emblem == emblem) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean colourTaken(TeamColour colour, TeamId exclude) {
-        for (Map.Entry<TeamId, MutableTeam> entry : teams.entrySet()) {
-            if (!entry.getKey().equals(exclude) && entry.getValue().colour == colour) {
                 return true;
             }
         }
