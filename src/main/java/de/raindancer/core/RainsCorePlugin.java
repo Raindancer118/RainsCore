@@ -773,9 +773,17 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             if (resourcePacks.contributions().isEmpty()) {
                 return;
             }
-            resourcePacks.rebuild().ifPresent(built -> log.info(
-                    "Resource pack ready: {} from {} contribution(s), {}",
-                    built.digest().substring(0, 12), built.contributions(), built.readableSize()));
+            resourcePacks.rebuild().ifPresent(built -> {
+                log.info("Resource pack ready: {} from {} contribution(s), {}",
+                        built.digest().substring(0, 12), built.contributions(), built.readableSize());
+                // Whoever joined before it was ready — or was online across a reload — was sent
+                // nothing, and is not going to join again to be asked. sendTo skips anybody who
+                // already has exactly this.
+                if (settings.current().packsOnJoin()) {
+                    resourcePacks.sendToAll(getServer().getOnlinePlayers().stream()
+                            .map(Player::getUniqueId).toList());
+                }
+            });
         }));
     }
 

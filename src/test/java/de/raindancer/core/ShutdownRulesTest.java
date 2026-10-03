@@ -82,4 +82,14 @@ class ShutdownRulesTest {
         assertThat(adopt).contains("grantListener.apply(").contains("vanish.maySeeVanished(")
                 .contains("Scheduling.entity(");
     }
+
+    @Test
+    @DisplayName("a pack built after people joined is offered to them, not only to whoever joins next")
+    void aLatePackReachesTheOnline() throws IOException {
+        String plugin = Files.readString(Path.of("src/main/java/de/raindancer/core/RainsCorePlugin.java"));
+        int at = plugin.indexOf("resourcePacks.rebuild().ifPresent(");
+        assertThat(at).isNotNegative();
+
+        assertThat(plugin.substring(at, at + 900)).contains("resourcePacks.sendToAll(");
+    }
 }

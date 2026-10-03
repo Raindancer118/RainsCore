@@ -52,6 +52,8 @@ public final class BukkitPackSink implements PackSink {
             if (first.prompt() != null) {
                 request.prompt(first.prompt());
             }
+            // Sent from the thread it is called on — a rebuild finishes off the server's threads, and
+            // sending is a packet, which Paper queues safely from any of them.
             online.sendResourcePacks(request.build());
         } catch (IllegalArgumentException badUrl) {
             // A URL a server owner typed. Saying which one is the difference between a fixable
