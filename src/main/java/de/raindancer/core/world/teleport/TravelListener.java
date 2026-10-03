@@ -1,5 +1,6 @@
 package de.raindancer.core.world.teleport;
 
+import de.raindancer.core.world.movement.Moves;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -90,10 +91,7 @@ public final class TravelListener implements Listener {
         if (!travel.isTravelling(player.getUniqueId())) {
             return;
         }
-        if (event.getTo().getBlockX() == event.getFrom().getBlockX()
-                && event.getTo().getBlockY() == event.getFrom().getBlockY()
-                && event.getTo().getBlockZ() == event.getFrom().getBlockZ()
-                && event.getTo().getWorld() == event.getFrom().getWorld()) {
+        if (!Moves.changedBlock(event)) {
             return;   // turning on the spot, or breathing
         }
         if (!moveCancels.getAsBoolean()) {

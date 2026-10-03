@@ -1,6 +1,7 @@
 package de.raindancer.core.world.protection;
 
 import de.raindancer.core.ui.messages.Messages;
+import de.raindancer.core.world.movement.Moves;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -56,7 +57,7 @@ public final class MovementProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!event.hasChangedBlock()) {
+        if (!Moves.changedBlock(event)) {
             return;
         }
         if (refusedAt(event.getPlayer(), event.getFrom(), event.getTo())) {
