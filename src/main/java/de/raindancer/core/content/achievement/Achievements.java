@@ -406,8 +406,8 @@ public final class Achievements {
                 continue;
             }
             try {
-                Achievement.Builder built = Achievement.builder(key.substring(0, colon),
-                                key.substring(colon + 1))
+                Achievement.Builder built = Achievement.builder(YamlStore.fromPathPart(key.substring(0, colon)),
+                                YamlStore.fromPathPart(key.substring(colon + 1)))
                         .title(entry.getString("title"))
                         .description(entry.getString("description"))
                         .points(entry.getInt("points"))
@@ -466,7 +466,7 @@ public final class Achievements {
         List<Achievement> snapshot = List.copyOf(defined.values());
         boolean written = store.write(yaml -> {
             for (Achievement achievement : snapshot) {
-                String path = "achievements." + achievement.key() + ".";
+                String path = "achievements." + YamlStore.asPathPart(achievement.key()) + ".";
                 yaml.set(path + "title", achievement.title());
                 if (!achievement.description().isEmpty()) {
                     yaml.set(path + "description", achievement.description());
@@ -482,7 +482,7 @@ public final class Achievements {
             }
             // Written back as found: skipped on this server is not deleted from the file.
             unread.forEach((key, kept) -> {
-                if (!defined.containsKey(key.toLowerCase(Locale.ROOT))) {
+                if (!defined.containsKey(YamlStore.fromPathPart(key).toLowerCase(Locale.ROOT))) {
                     yaml.set("achievements." + key, kept);
                 }
             });
@@ -540,20 +540,5 @@ public final class Achievements {
         if (!written) {
             Marks.restore(changedPlayers, writing);
         }
-    }
-
-    /**
-     * A key, safe to use as a YAML path.
-     *
-     * <p>{@code claims:first-claim} is fine as a section name but a dot in one would nest, and a
-     * plugin id is not guaranteed to be free of them. The colon is swapped for a character that
-     * cannot appear in either half.
-     */
-    private static String escape(String key) {
-        return key.replace('.', '·');
-    }
-
-    private static String unescape(String key) {
-        return key.replace('·', '.');
     }
 }

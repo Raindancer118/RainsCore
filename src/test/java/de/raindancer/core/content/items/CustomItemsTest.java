@@ -324,4 +324,20 @@ class CustomItemsTest {
                 .isEqualTo("BLOCK_FROM_A_NEWER_VERSION");
         assertThat(saved.getString("items.claims:selection-stick.material")).isEqualTo("STICK");
     }
+
+    @Test
+    @DisplayName("an id or a tag name with a dot in it comes back exactly as it went in — and an item "
+            + "with no name can be saved at all")
+    void dotsSurviveTheFile() {
+        items.define(CustomItem.builder("claims", "wand.v2").material(Material.STICK)
+                .tag("made.by", "Steve").build());
+        items.flush();
+
+        CustomItems reopened = new CustomItems(directory.resolve("items.yml"));
+        reopened.load();
+
+        assertThat(reopened.problems()).isEmpty();
+        assertThat(reopened.byKey("claims:wand.v2")).hasValueSatisfying(item ->
+                assertThat(item.tag("made.by")).contains("Steve"));
+    }
 }

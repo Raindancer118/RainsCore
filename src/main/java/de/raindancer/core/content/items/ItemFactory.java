@@ -68,9 +68,9 @@ public final class ItemFactory {
         if (meta == null) {
             return Optional.of(stack);
         }
-        if (!definition.displayName().isEmpty()) {
+        if (!definition.name().isEmpty()) {
             // Italics off explicitly: Minecraft draws a custom name slanted unless told otherwise.
-            meta.displayName(MINI.deserialize(definition.displayName())
+            meta.displayName(MINI.deserialize(definition.name())
                     .decoration(TextDecoration.ITALIC, false));
         }
         if (!definition.lore().isEmpty()) {

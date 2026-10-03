@@ -443,4 +443,19 @@ class AchievementsTest {
         assertThat(achievements.revoke(nobody, "claims:first")).isFalse();
         assertThat(achievements.pointsOf(nobody)).isZero();
     }
+
+    @Test
+    @DisplayName("an id with a dot in it comes back from the file as it went in")
+    void dottedIdsSurvive() {
+        Achievement dotted = Achievement.builder("claims", "season.2").title("<gold>Season two")
+                .icon(Material.GRASS_BLOCK).build();
+        achievements.define(dotted);
+        achievements.flush();
+
+        Achievements reopened = new Achievements(directory.resolve("achievements.yml"), database(),
+                clock::get);
+        reopened.load();
+
+        assertThat(reopened.byKey("claims:season.2")).contains(dotted);
+    }
 }

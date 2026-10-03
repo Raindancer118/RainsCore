@@ -171,7 +171,7 @@ public final class CustomItems {
                 continue;
             }
             try {
-                CustomItem item = read(key, entry);
+                CustomItem item = read(YamlStore.fromPathPart(key), entry);
                 byKey.put(item.key(), item);
             } catch (RuntimeException broken) {
                 // A block a newer server knows about, or one renamed between versions, is one item
@@ -223,7 +223,7 @@ public final class CustomItems {
         ConfigurationSection tagged = entry.getConfigurationSection("tags");
         if (tagged != null) {
             for (String tag : tagged.getKeys(false)) {
-                built.tag(tag, String.valueOf(tagged.get(tag)));
+                built.tag(YamlStore.fromPathPart(tag), String.valueOf(tagged.get(tag)));
             }
         }
         return built.build();
@@ -252,10 +252,10 @@ public final class CustomItems {
         List<CustomItem> snapshot = List.copyOf(byKey.values());
         boolean written = store.write(yaml -> {
             for (CustomItem item : snapshot) {
-                String path = "items." + item.key() + ".";
+                String path = "items." + YamlStore.asPathPart(item.key()) + ".";
                 yaml.set(path + "material", item.material().name());
-                if (!item.displayName().isEmpty()) {
-                    yaml.set(path + "name", item.displayName());
+                if (!item.name().isEmpty()) {
+                    yaml.set(path + "name", item.name());
                 }
                 if (!item.lore().isEmpty()) {
                     yaml.set(path + "lore", item.lore());
@@ -268,12 +268,12 @@ public final class CustomItems {
                 if (item.isCraftable()) {
                     yaml.set(path + "recipe", item.recipe());
                 }
-                item.tags().forEach((tag, value) -> yaml.set(path + "tags." + tag, value));
+                item.tags().forEach((tag, value) -> yaml.set(path + "tags." + YamlStore.asPathPart(tag), value));
             }
             // Written back as they were found. Skipped is not deleted: an item made on a newer server
             // reads again there, and saving the rest must not take it out of the file.
             unread.forEach((key, kept) -> {
-                if (!byKey.containsKey(normalise(key))) {
+                if (!byKey.containsKey(normalise(YamlStore.fromPathPart(key)))) {
                     yaml.set("items." + key, kept);
                 }
             });

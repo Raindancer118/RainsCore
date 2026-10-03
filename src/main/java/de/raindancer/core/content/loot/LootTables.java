@@ -144,8 +144,8 @@ public final class LootTables {
                 continue;
             }
             try {
-                LootTable.Builder built = LootTable.builder(key.substring(0, colon),
-                                key.substring(colon + 1))
+                LootTable.Builder built = LootTable.builder(YamlStore.fromPathPart(key.substring(0, colon)),
+                                YamlStore.fromPathPart(key.substring(colon + 1)))
                         .tier(entry.getInt("tier", 1))
                         .fillPercent(entry.getInt("fill-percent", 30));
                 for (Map<?, ?> raw : entry.getMapList("entries")) {
@@ -222,7 +222,7 @@ public final class LootTables {
         List<LootTable> snapshot = List.copyOf(byKey.values());
         boolean written = store.write(yaml -> {
             for (LootTable table : snapshot) {
-                String path = "tables." + table.key() + ".";
+                String path = "tables." + YamlStore.asPathPart(table.key()) + ".";
                 yaml.set(path + "tier", table.tier());
                 yaml.set(path + "fill-percent", table.fillPercent());
                 yaml.set(path + "entries", table.entries().stream()
@@ -231,7 +231,7 @@ public final class LootTables {
             }
             // Written back as found: skipped on this server is not deleted from the file.
             unread.forEach((key, kept) -> {
-                if (!byKey.containsKey(key.toLowerCase(Locale.ROOT))) {
+                if (!byKey.containsKey(YamlStore.fromPathPart(key).toLowerCase(Locale.ROOT))) {
                     yaml.set("tables." + key, kept);
                 }
             });

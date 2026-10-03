@@ -198,6 +198,21 @@ public final class YamlStore {
     }
 
     /**
+     * A key made safe to be one part of a YAML path. A dot inside a section name would nest it — a
+     * plugin's {@code wand.v2} written as {@code items.claims:wand.v2.material} reads back as an item
+     * {@code claims:wand} with a child section {@code v2} — so dots are written as {@code ·}, which no
+     * key uses. {@link #fromPathPart} undoes it.
+     */
+    public static String asPathPart(String key) {
+        return key == null ? null : key.replace('.', '·');
+    }
+
+    /** The key a {@link #asPathPart} section name was written from. */
+    public static String fromPathPart(String part) {
+        return part == null ? null : part.replace('·', '.');
+    }
+
+    /**
      * Moves a file that could not be read out of the way, keeping it.
      *
      * <p>For a store that would otherwise write over it on the next save: the data in a corrupt file
