@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -235,12 +236,21 @@ public final class OfflineEdits {
      * @return the players they were editing, so a log line can name them
      */
     public Set<UUID> editorLeft(UUID moderator) {
+        return editorLeft(moderator, owner -> false);
+    }
+
+    /**
+     * The same, keeping the holds on owners {@code keep} names — one whose write is already on its
+     * way and will let the hold go itself.
+     */
+    public Set<UUID> editorLeft(UUID moderator, Predicate<UUID> keep) {
         if (moderator == null) {
             return Set.of();
         }
         Set<UUID> theirs = held.entrySet().stream()
                 .filter(entry -> entry.getValue().moderator().equals(moderator))
                 .map(Map.Entry::getKey)
+                .filter(owner -> keep == null || !keep.test(owner))
                 .collect(Collectors.toUnmodifiableSet());
         theirs.forEach(owner -> finish(owner, moderator));
         return theirs;

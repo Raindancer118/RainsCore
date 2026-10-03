@@ -1,12 +1,29 @@
 package de.raindancer.core.moderation.invsee;
 
+import io.papermc.paper.threadedregions.scheduler.AsyncScheduler;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * The four settings the "Looking Inside" config page has had for as long as it has existed, none of
@@ -91,6 +108,68 @@ class InventoriesTest {
             inventories.allowEquipment(false);
 
             assertThat(inventories.capToSettings(Access.EDIT_EVERYTHING)).isEqualTo(Access.READ_ONLY);
+        }
+    }
+
+    @Nested
+    @DisplayName("a moderator who disconnects with an offline window open")
+    class EditorDisconnects {
+
+        @Test
+        @DisplayName("still has their edit written: the close comes before the quit, and the quit must "
+                + "not let go of a hold whose write is already on its way")
+        @SuppressWarnings("unchecked")
+        void theClosingWriteSurvivesTheQuit() {
+            UUID owner = UUID.randomUUID();
+            UUID moderator = UUID.randomUUID();
+            OfflineEdits edits = new OfflineEdits(System::currentTimeMillis);
+            assertThat(edits.begin(owner, moderator)).isTrue();
+            PlayerDataInventorySource saved = mock(PlayerDataInventorySource.class);
+            Carried<ItemStack> carried = Carried.empty();
+            when(saved.write(eq(owner), any())).thenReturn(true);
+            Inventories inventories = new Inventories(mock(Plugin.class),
+                    new InventoryViews(name -> { }), edits, null, saved, who -> false);
+
+            Player watcher = mock(Player.class);
+            when(watcher.getUniqueId()).thenReturn(moderator);
+            InventoryWindow window = mock(InventoryWindow.class);
+            when(window.watcher()).thenReturn(watcher);
+            when(window.owner()).thenReturn(owner);
+            when(window.isLive()).thenReturn(false);
+            when(window.access()).thenReturn(Access.EDIT);
+            when(window.carried()).thenReturn(carried);
+
+            List<Consumer<ScheduledTask>> queued = new ArrayList<>();
+            AsyncScheduler async = mock(AsyncScheduler.class);
+            when(async.runNow(any(), any())).thenAnswer(call -> {
+                queued.add(call.getArgument(1));
+                return null;
+            });
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+                bukkit.when(Bukkit::getAsyncScheduler).thenReturn(async);
+
+                // Paper's order on a disconnect: the open window is closed, then PlayerQuitEvent.
+                inventories.closed(window);
+                inventories.editorLeft(moderator);
+                queued.forEach(task -> task.accept(null));
+            }
+
+            verify(saved).write(owner, carried);
+            assertThat(edits.isBeingEdited(owner)).as("the write let the hold go").isFalse();
+        }
+
+        @Test
+        @DisplayName("a hold with no window closing behind it is still let go")
+        void anIdleHoldIsReleased() {
+            UUID owner = UUID.randomUUID();
+            UUID moderator = UUID.randomUUID();
+            OfflineEdits edits = new OfflineEdits(System::currentTimeMillis);
+            edits.begin(owner, moderator);
+            Inventories inventories = new Inventories(null, new InventoryViews(name -> { }), edits,
+                    null, null, who -> false);
+
+            assertThat(inventories.editorLeft(moderator)).containsExactly(owner);
+            assertThat(edits.isBeingEdited(owner)).isFalse();
         }
     }
 }

@@ -160,7 +160,7 @@ public final class InvseeListener implements Listener {
                     event.getPlayer().getName(), watchers.size());
         }
         inventories.views().watcherLeft(who);
-        inventories.offlineEdits().editorLeft(who);
+        inventories.editorLeft(who);
     }
 
     private static InventoryWindow windowOf(Inventory inventory) {

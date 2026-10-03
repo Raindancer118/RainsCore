@@ -193,6 +193,38 @@ public final class InventoryWindow implements InventoryHolder {
         return given;
     }
 
+    /**
+     * Undoes, on the moderator's side, an edit that was not written: gives back what they added
+     * ({@link #giveBackAdditions}) and then takes back what they took out. The file still holds what
+     * they took, so leaving it with them as well is a copy of every item they moved out.
+     *
+     * <p>Giving back comes first: a stack the moderator only partly emptied gives the rest back, and
+     * the whole original is then taken, which leaves them with exactly what they had before.
+     *
+     * @return how many stacks could not be taken back — moved somewhere this cannot reach, dropped
+     */
+    public int undoUnwritten() {
+        giveBackAdditions();
+        int missing = 0;
+        for (Section section : Section.values()) {
+            for (int within = 0; within < section.size(); within++) {
+                ItemStack was = asFound.at(section, within);
+                if (was == null || was.equals(carried.at(section, within))) {
+                    continue;
+                }
+                if (!watcher.getInventory().removeItem(was.clone()).isEmpty()) {
+                    missing++;
+                }
+            }
+        }
+        if (missing > 0) {
+            log.warn("{} kept {} stack(s) taken out of {}'s saved inventory although the change was "
+                    + "not written — they are no longer in the moderator's inventory to take back.",
+                    watcher.getName(), missing, ownerName);
+        }
+        return missing;
+    }
+
     // ----------------------------------------------------------------------------- painting
 
     /** Draws the page the window is on. */

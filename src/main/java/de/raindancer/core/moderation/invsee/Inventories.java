@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -100,6 +101,8 @@ public final class Inventories {
     private final PlayerDataInventorySource saved;
     /** Whether somebody is on the server — a seam, so the decision is not a static call. */
     private final Predicate<UUID> isOnline;
+    /** Owners whose window has closed and whose file is being written right now. */
+    private final Set<UUID> writing = ConcurrentHashMap.newKeySet();
 
     /**
      * Where every look and every change is written down.
@@ -348,31 +351,50 @@ public final class Inventories {
             offlineEdits.begin(window.owner(), watcher);
         }
         Carried<ItemStack> toWrite = window.carried();
+        writing.add(window.owner());
         Scheduling.async(plugin, () -> {
             // Asked and done in one atomic step. The other thing that can happen at this instant is
             // the owner logging in, and "check, then write" as two steps is a write that lands
             // after the server has already read that file — thrown away at best. The file write is
             // inside that step on purpose; it is a few kilobytes of gzip, and the alternative is a
             // window in which a login can be missed.
-            boolean written = offlineEdits.writeAndFinish(window.owner(), watcher,
-                    () -> saved.write(window.owner(), toWrite));
+            boolean written;
+            try {
+                written = offlineEdits.writeAndFinish(window.owner(), watcher,
+                        () -> saved.write(window.owner(), toWrite));
+            } finally {
+                writing.remove(window.owner());
+            }
             if (written) {
                 return;
             }
             Scheduling.entity(plugin, window.watcher(), () -> {
                 // Closing a window destroys what is in it, so anything the moderator added that is
-                // not now the owner's has to go back to them. Without this, "the change was not
-                // written" quietly means "the items are gone".
-                window.giveBackAdditions();
+                // not now the owner's has to go back to them — and what they took out is still in
+                // the file, so it comes back off them. Without the first, "the change was not
+                // written" means "the items are gone"; without the second, it means "copied".
+                window.undoUnwritten();
                 told(watcher, say("invsee.not-saved"));
                 told(watcher, Component.text("Their inventory was not saved — nothing was changed, "
                                 + "and what you added is back with you.")
                         .color(NamedTextColor.RED));
             });
             log.info("{}'s changes to {} were not written. Their file is untouched and the items "
-                    + "are back with the moderator.", window.watcher().getName(),
+                    + "are undone on the moderator's side.", window.watcher().getName(),
                     window.ownerName());
         });
+    }
+
+    /**
+     * A moderator has gone: every hold they still have is let go — except one whose window has
+     * already closed and whose write is on its way. Paper closes a disconnecting player's window
+     * before it fires their quit, so releasing that hold here would make the write refuse, drop the
+     * edit and leave what they added in a window nobody can be given it back from.
+     *
+     * @return the players whose holds were let go
+     */
+    public Set<UUID> editorLeft(UUID moderator) {
+        return offlineEdits.editorLeft(moderator, writing::contains);
     }
 
     /** Says the moderator is still there, so an offline hold does not expire under them. */
