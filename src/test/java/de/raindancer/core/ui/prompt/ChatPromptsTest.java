@@ -197,6 +197,11 @@ class ChatPromptsTest {
 
             assertThat(prompts.isWaiting(ALICE)).isFalse();
             assertThat(prompts.offer(ALICE, "too late")).isEqualTo(PromptResult.NOT_WAITING);
+            prompts.sweep();
+            assertThat(cancelled)
+                    .as("found expired by a read rather than by the sweep, it was dropped without a "
+                            + "word — and the sweep then had nothing left to tell anybody about")
+                    .containsExactly("claims");
         }
 
         @Test

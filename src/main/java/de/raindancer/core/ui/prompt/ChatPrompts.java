@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
@@ -52,7 +53,6 @@ public final class ChatPrompts {
     private final LongSupplier clock;
     private final Map<UUID, Question> waiting = new ConcurrentHashMap<>();
 
-    /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
     /**
      * Where a plugin's callback is run.
      *
@@ -65,7 +65,7 @@ public final class ChatPrompts {
      * it runs the callback inline by default, which is what a test wants, and the plugin replaces it
      * with one that schedules onto the thread that owns the player.
      */
-    private volatile java.util.function.BiPredicate<UUID, Runnable> dispatcher =
+    private volatile BiPredicate<UUID, Runnable> dispatcher =
             (who, task) -> {
                 task.run();
                 return true;
@@ -78,12 +78,13 @@ public final class ChatPrompts {
      *                   a scheduler that is shutting down — is what makes {@link PromptResult#FAILED}
      *                   mean something once the callback no longer runs inline
      */
-    public void runCallbacksOn(java.util.function.BiPredicate<UUID, Runnable> dispatcher) {
+    public void runCallbacksOn(BiPredicate<UUID, Runnable> dispatcher) {
         if (dispatcher != null) {
             this.dispatcher = dispatcher;
         }
     }
 
+    /** @param clock milliseconds; injected so expiry can be tested without waiting for it */
     public ChatPrompts(LongSupplier clock) {
         this.clock = clock;
     }
@@ -233,16 +234,15 @@ public final class ChatPrompts {
     }
 
     /**
-     * Drops this player's question if its time is up.
-     *
-     * <p>Quietly: {@link #sweep} is what tells the asker. This only stops an expired question
-     * standing in the way of a new one, which it does on every read so a slow sweep cannot leave
-     * somebody blocked.
+     * Drops this player's question if its time is up, telling whoever asked — exactly as
+     * {@link #sweep} would have. Done on every read so a slow sweep cannot leave somebody blocked, and
+     * the sweep never sees a question taken out here, so this is the only chance to say so.
      */
     private void expireIfDue(UUID player) {
         Question question = waiting.get(player);
-        if (question != null && clock.getAsLong() >= question.expiresAt()) {
-            waiting.remove(player, question);
+        if (question != null && clock.getAsLong() >= question.expiresAt()
+                && waiting.remove(player, question)) {
+            dispatcher.test(player, () -> run(question.onCancelled(), question.owner()));
         }
     }
 
