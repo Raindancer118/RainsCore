@@ -5,6 +5,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.entity.Player;
@@ -15,8 +16,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -163,7 +166,7 @@ public final class WorldRegenerator {
     private static long seedFor(WorldSeed seed, long outgoing, OptionalLong shared) {
         if (seed.kind() == WorldSeed.Kind.RANDOM) {
             return shared.isPresent() ? shared.getAsLong()
-                    : java.util.concurrent.ThreadLocalRandom.current().nextLong();
+                    : ThreadLocalRandom.current().nextLong();
         }
         return seed.resolve(OptionalLong.of(outgoing)).orElse(outgoing);
     }
@@ -193,8 +196,8 @@ public final class WorldRegenerator {
      * {@code world_nether} is a different level with its own key, and is not one of these.
      */
     public static boolean isServerDimension(World world) {
-        org.bukkit.NamespacedKey key = world == null ? null : world.getKey();
-        return key != null && key.getNamespace().equals(org.bukkit.NamespacedKey.MINECRAFT)
+        NamespacedKey key = world == null ? null : world.getKey();
+        return key != null && key.getNamespace().equals(NamespacedKey.MINECRAFT)
                 && (key.getKey().equals("overworld") || key.getKey().equals("the_nether")
                 || key.getKey().equals("the_end"));
     }
@@ -243,7 +246,7 @@ public final class WorldRegenerator {
                 whenDone.accept(false);
                 return;
             }
-            finishDelete(world, folder, name, whenDone);
+            whenDone.accept(unloadAndDelete(world, folder, name, ""));
         });
     }
 
@@ -272,21 +275,14 @@ public final class WorldRegenerator {
      * @param whenDone told once, on the main thread
      */
     public void regenerateAll(List<World> worlds, WorldSeed seed, Consumer<Boolean> whenDone) {
-        List<World> group = worlds == null ? List.of()
-                : worlds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        List<World> group = groupOf(worlds);
         if (group.isEmpty()) {
             whenDone.accept(false);
             return;
         }
-        for (World world : group) {
-            if (refused(world)) {
-                whenDone.accept(false);
-                return;
-            }
-        }
         WorldSeed chosen = seed == null ? WorldSeed.random() : seed;
         OptionalLong shared = chosen.kind() == WorldSeed.Kind.RANDOM
-                ? OptionalLong.of(java.util.concurrent.ThreadLocalRandom.current().nextLong())
+                ? OptionalLong.of(ThreadLocalRandom.current().nextLong())
                 : OptionalLong.empty();
 
         // Everything that must be read while the worlds still exist.
@@ -310,19 +306,11 @@ public final class WorldRegenerator {
             boolean everyOne = true;
             List<Doomed> gone = new ArrayList<>();
             for (Doomed each : doomed) {
-                if (!Bukkit.unloadWorld(each.world(), false)) {
-                    log.error("Could not unload '{}', so it is left as it was.", each.name());
+                if (unloadAndDelete(each.world(), each.folder(), each.name(), ", to be made again")) {
+                    gone.add(each);
+                } else {
                     everyOne = false;
-                    continue;
                 }
-                if (!deleteFolder(each.folder(), each.name())) {
-                    log.fatal("'{}' was only partly deleted. Its folder is at {} — remove it by hand.",
-                            each.name(), each.folder());
-                    everyOne = false;
-                    continue;
-                }
-                log.info("World '{}' has been deleted, to be made again.", each.name());
-                gone.add(each);
             }
             for (Doomed each : gone) {
                 long seedFor = seedFor(chosen, each.seed(), shared);
@@ -342,17 +330,10 @@ public final class WorldRegenerator {
      *                 left exactly as it was, and named in the log
      */
     public void deleteAll(List<World> worlds, Consumer<Boolean> whenDone) {
-        List<World> group = worlds == null ? List.of()
-                : worlds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        List<World> group = groupOf(worlds);
         if (group.isEmpty()) {
             whenDone.accept(false);
             return;
-        }
-        for (World world : group) {
-            if (refused(world)) {
-                whenDone.accept(false);
-                return;
-            }
         }
         record Doomed(World world, String name, Path folder) {
         }
@@ -369,16 +350,7 @@ public final class WorldRegenerator {
             }
             boolean everyOne = true;
             for (Doomed each : doomed) {
-                if (!Bukkit.unloadWorld(each.world(), false)) {
-                    log.error("Could not unload '{}', so it is left as it was.", each.name());
-                    everyOne = false;
-                } else if (!deleteFolder(each.folder(), each.name())) {
-                    log.fatal("'{}' was only partly deleted. Its folder is at {} — remove it by hand.",
-                            each.name(), each.folder());
-                    everyOne = false;
-                } else {
-                    log.info("World '{}' has been deleted.", each.name());
-                }
+                everyOne &= unloadAndDelete(each.world(), each.folder(), each.name(), "");
             }
             whenDone.accept(everyOne);
         }), whenDone);
@@ -421,20 +393,32 @@ public final class WorldRegenerator {
                 }));
     }
 
-    private void finishDelete(World world, Path folder, String name, Consumer<Boolean> whenDone) {
+    /**
+     * The non-null, distinct worlds of a group — empty, which every caller answers "no" to, when there
+     * are none or when any one of them may not be deleted at all.
+     */
+    private static List<World> groupOf(List<World> worlds) {
+        List<World> group = worlds == null ? List.of()
+                : worlds.stream().filter(Objects::nonNull).distinct().toList();
+        return group.stream().anyMatch(WorldRegenerator::refused) ? List.of() : group;
+    }
+
+    /**
+     * Unloads without saving, then deletes the folder. A world that will not unload is left exactly as
+     * it was; one only partly deleted is said loudly, since somebody has to finish it by hand.
+     */
+    private static boolean unloadAndDelete(World world, Path folder, String name, String purpose) {
         if (!Bukkit.unloadWorld(world, false)) {
-            log.error("Could not unload '{}', so the deletion was abandoned.", name);
-            whenDone.accept(false);
-            return;
+            log.error("Could not unload '{}', so it is left as it was.", name);
+            return false;
         }
         if (!deleteFolder(folder, name)) {
             log.fatal("'{}' was only partly deleted. Its folder is at {} — remove it by hand.",
                     name, folder);
-            whenDone.accept(false);
-            return;
+            return false;
         }
-        log.info("World '{}' has been deleted.", name);
-        whenDone.accept(true);
+        log.info("World '{}' has been deleted{}.", name, purpose);
+        return true;
     }
 
     /**
