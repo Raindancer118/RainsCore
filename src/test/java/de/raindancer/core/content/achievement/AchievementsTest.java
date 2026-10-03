@@ -432,4 +432,15 @@ class AchievementsTest {
                 .isEqualTo(1);
         assertThat(announced).hasSize(1);
     }
+
+    @Test
+    @DisplayName("looking somebody up, or revoking what they never earned, leaves nothing behind")
+    void readingCreatesNothing() {
+        UUID nobody = UUID.randomUUID();
+
+        assertThat(achievements.earnedBy(nobody)).isEmpty();
+        assertThat(achievements.hasEarned(nobody, "claims:first")).isFalse();
+        assertThat(achievements.revoke(nobody, "claims:first")).isFalse();
+        assertThat(achievements.pointsOf(nobody)).isZero();
+    }
 }

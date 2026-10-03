@@ -159,7 +159,7 @@ public final class ItemAbilities {
             return Optional.empty();
         }
         ItemAbility ability = abilities.get(normalise(key));
-        Standing standing = forPlayer(player).get(normalise(key));
+        Standing standing = standings.getOrDefault(player, Map.of()).get(normalise(key));
         if (ability == null || standing == null || ability.cooldownMillis() == null) {
             return Optional.empty();
         }
@@ -176,7 +176,7 @@ public final class ItemAbilities {
         if (ability == null || ability.maxCharges() == null) {
             return Optional.empty();
         }
-        Standing standing = forPlayer(player).get(normalise(key));
+        Standing standing = standings.getOrDefault(player, Map.of()).get(normalise(key));
         return Optional.of(Math.max(0,
                 ability.maxCharges() - (standing == null ? 0 : standing.used())));
     }

@@ -164,7 +164,7 @@ public final class Achievements {
             return false;
         }
         // One atomic step. Checking and then writing is where "announced twice" comes from.
-        Instant already = earnedBy(player).putIfAbsent(achievement.key(),
+        Instant already = earnedMap(player).putIfAbsent(achievement.key(),
                 Instant.ofEpochMilli(clock.getAsLong()));
         if (already != null) {
             return false;
@@ -176,7 +176,8 @@ public final class Achievements {
 
     /** Takes one back, for a mistake. */
     public boolean revoke(UUID player, String key) {
-        if (player == null || key == null || earnedBy(player).remove(normalise(key)) == null) {
+        Map<String, Instant> theirs = player == null ? null : earned.get(player);
+        if (theirs == null || key == null || theirs.remove(normalise(key)) == null) {
             return false;
         }
         changedPlayers.add(player);
@@ -195,11 +196,19 @@ public final class Achievements {
         return Optional.ofNullable(earnedBy(player).get(normalise(key)));
     }
 
-    /** Everything this player has earned. */
+    /**
+     * Everything this player has earned. Asking about somebody who has earned nothing creates nothing:
+     * a leaderboard or a profile page looking players up must not leave an entry for each of them.
+     */
     public Map<String, Instant> earnedBy(UUID player) {
         if (player == null) {
             return Map.of();
         }
+        Map<String, Instant> theirs = earned.get(player);
+        return theirs == null ? Map.of() : theirs;
+    }
+
+    private Map<String, Instant> earnedMap(UUID player) {
         return earned.computeIfAbsent(player, key -> new ConcurrentHashMap<>());
     }
 
@@ -350,7 +359,7 @@ public final class Achievements {
                 while (rows.next()) {
                     UUID player = playerOf(rows.getString("player"));
                     if (player != null) {
-                        earnedBy(player).put(rows.getString("achievement"),
+                        earnedMap(player).put(rows.getString("achievement"),
                                 Instant.ofEpochMilli(rows.getLong("earned_at")));
                     }
                 }
