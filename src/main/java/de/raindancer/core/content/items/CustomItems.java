@@ -147,6 +147,7 @@ public final class CustomItems {
 
     public void load() {
         byKey.clear();
+        unread.clear();
         synchronized (this) {
             problems.clear();
         }
@@ -176,6 +177,7 @@ public final class CustomItems {
                 // A block a newer server knows about, or one renamed between versions, is one item
                 // lost rather than a file that will not load.
                 note("'" + key + "' was skipped (" + broken.getMessage() + ")");
+                unread.put(key, entry);
             }
         }
         dirty.set(false);
@@ -234,6 +236,9 @@ public final class CustomItems {
         }
     }
 
+    /** Entries the file had that this server could not read, kept to be written back untouched. */
+    private final Map<String, ConfigurationSection> unread = new ConcurrentHashMap<>();
+
     /**
      * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
      * two at once either land out of order or answer "written" while the other still holds the rows.
@@ -265,6 +270,13 @@ public final class CustomItems {
                 }
                 item.tags().forEach((tag, value) -> yaml.set(path + "tags." + tag, value));
             }
+            // Written back as they were found. Skipped is not deleted: an item made on a newer server
+            // reads again there, and saving the rest must not take it out of the file.
+            unread.forEach((key, kept) -> {
+                if (!byKey.containsKey(normalise(key))) {
+                    yaml.set("items." + key, kept);
+                }
+            });
         });
         if (!written) {
             dirty.set(true);

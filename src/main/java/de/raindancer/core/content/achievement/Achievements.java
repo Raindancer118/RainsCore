@@ -303,6 +303,7 @@ public final class Achievements {
 
     public void load() {
         defined.clear();
+        unread.clear();
         earned.clear();
         progress.clear();
         // Who earned what is loaded whatever happens to the definitions file. It lives in the database,
@@ -389,6 +390,9 @@ public final class Achievements {
             ConfigurationSection entry = section.getConfigurationSection(key);
             int colon = key.indexOf(':');
             if (entry == null || colon <= 0) {
+                if (entry != null) {
+                    unread.put(key, entry);
+                }
                 continue;
             }
             try {
@@ -410,6 +414,7 @@ public final class Achievements {
             } catch (RuntimeException broken) {
                 log.warn("{}: achievement '{}' was skipped ({})",
                         file.getFileName(), key, broken.getMessage());
+                unread.put(key, entry);
             }
         }
     }
@@ -429,6 +434,9 @@ public final class Achievements {
             writeChanges();
         }
     }
+
+    /** Definitions the file had that this server could not read, kept to be written back untouched. */
+    private final Map<String, ConfigurationSection> unread = new ConcurrentHashMap<>();
 
     /**
      * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
@@ -462,6 +470,12 @@ public final class Achievements {
                     yaml.set(path + "hidden", true);
                 }
             }
+            // Written back as found: skipped on this server is not deleted from the file.
+            unread.forEach((key, kept) -> {
+                if (!defined.containsKey(key.toLowerCase(Locale.ROOT))) {
+                    yaml.set("achievements." + key, kept);
+                }
+            });
         });
         if (!written) {
             dirty.set(true);

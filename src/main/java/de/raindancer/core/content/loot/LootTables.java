@@ -114,6 +114,7 @@ public final class LootTables {
 
     public void load() {
         byKey.clear();
+        unread.clear();
         synchronized (this) {
             problems.clear();
         }
@@ -136,6 +137,9 @@ public final class LootTables {
             int colon = key.indexOf(':');
             if (entry == null || colon <= 0) {
                 note("'" + key + "' is not plugin:id");
+                if (entry != null) {
+                    unread.put(key, entry);
+                }
                 continue;
             }
             try {
@@ -150,6 +154,7 @@ public final class LootTables {
                 byKey.put(table.key(), table);
             } catch (RuntimeException broken) {
                 note("'" + key + "' was skipped (" + broken.getMessage() + ")");
+                unread.put(key, entry);
             }
         }
         dirty.set(false);
@@ -200,6 +205,9 @@ public final class LootTables {
         }
     }
 
+    /** Tables the file had that this server could not read, kept to be written back untouched. */
+    private final Map<String, ConfigurationSection> unread = new ConcurrentHashMap<>();
+
     /**
      * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
      * two at once either land out of order or answer "written" while the other still holds the rows.
@@ -220,6 +228,12 @@ public final class LootTables {
                         .map(LootTables::asMap)
                         .collect(Collectors.toList()));
             }
+            // Written back as found: skipped on this server is not deleted from the file.
+            unread.forEach((key, kept) -> {
+                if (!byKey.containsKey(key.toLowerCase(Locale.ROOT))) {
+                    yaml.set("tables." + key, kept);
+                }
+            });
         });
         if (!written) {
             dirty.set(true);

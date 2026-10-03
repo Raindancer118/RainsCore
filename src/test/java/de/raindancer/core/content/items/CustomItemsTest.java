@@ -299,4 +299,29 @@ class CustomItemsTest {
         assertThat(items.byKey(null)).isEmpty();
         assertThat(items.ofPlugin(null)).isEmpty();
     }
+
+    @Test
+    @DisplayName("an item this server could not read is kept in the file when the others are saved")
+    void anUnreadableItemSurvivesTheNextSave() throws java.io.IOException {
+        java.nio.file.Files.writeString(directory.resolve("items.yml"), """
+                items:
+                  claims:future:
+                    material: BLOCK_FROM_A_NEWER_VERSION
+                    name: Kept
+                """);
+        items.load();
+        assertThat(items.byKey("claims:future")).isEmpty();
+
+        items.define(stick());
+        items.flush();
+
+        org.bukkit.configuration.file.YamlConfiguration saved =
+                org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(
+                        directory.resolve("items.yml").toFile());
+        assertThat(saved.getString("items.claims:future.material"))
+                .as("skipped on an older server is not the same as deleted — it is somebody's item "
+                        + "that will read again on the server it was made for")
+                .isEqualTo("BLOCK_FROM_A_NEWER_VERSION");
+        assertThat(saved.getString("items.claims:selection-stick.material")).isEqualTo("STICK");
+    }
 }
