@@ -6,7 +6,8 @@ import java.util.UUID;
  * Makes a {@link Board} for a player — the one place the packet layer is reached.
  *
  * <p>May throw, and does on any server whose internals the copied-in FastBoard does not recognise.
- * {@link Scoreboards} treats that as "this server has no sidebars" and stops asking.
+ * {@link Scoreboards} treats that as "this server has no sidebars" and stops asking. Answers null for
+ * a player who is no longer there, which costs only that player's sidebar.
  */
 @FunctionalInterface
 public interface BoardFactory {

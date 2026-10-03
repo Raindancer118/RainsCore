@@ -323,6 +323,23 @@ class ScoreboardsTest {
         }
 
         @Test
+        @DisplayName("a player who left before their board could be made costs only their own sidebar")
+        void anOfflinePlayerIsNotABrokenServer() {
+            BoardFactory oneGone = player -> player.equals(ALICE) ? null : boards.create(player);
+            Scoreboards scoreboards = new Scoreboards(oneGone);
+
+            scoreboards.show(ALICE, "claims", sidebar("Alice"), ScoreboardPriority.NORMAL);
+            scoreboards.show(BOB, "claims", sidebar("Bob"), ScoreboardPriority.NORMAL);
+
+            assertThat(scoreboards.isAvailable())
+                    .as("one late show() after a quit used to switch sidebars off for everybody until "
+                            + "a restart")
+                    .isTrue();
+            assertThat(boards.open).containsOnlyKeys(BOB);
+            assertThat(scoreboards.trackedPlayers()).containsExactly(BOB);
+        }
+
+        @Test
         @DisplayName("a server where scoreboards do not work at all is reported once, not per call")
         void reportsBeingUnavailableOnce() {
             boards.failOnCreate = true;

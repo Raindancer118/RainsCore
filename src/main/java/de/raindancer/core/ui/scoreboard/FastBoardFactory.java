@@ -36,9 +36,10 @@ public final class FastBoardFactory implements BoardFactory {
     public Board create(UUID player) {
         Player online = Bukkit.getPlayer(player);
         if (online == null) {
-            // Gone between the decision and the packet. Normal, not exceptional — but there is no
-            // board to give back, so this counts as a failure and the claim is dropped.
-            throw new IllegalStateException("player " + player + " is not online");
+            // Gone between the decision and the packet. Normal, not exceptional: null drops this
+            // player's claim. Thrown, it read as "this server cannot draw sidebars" and switched them
+            // off for everybody.
+            return null;
         }
         return new FastBoardAdapter(new FastBoard(online));
     }

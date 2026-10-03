@@ -250,6 +250,11 @@ public final class Scoreboards {
         }
         try {
             slot.board = factory.create(player);
+            if (slot.board == null) {
+                // They are not there any more; nothing about the server is wrong.
+                slot.byOwner.clear();
+                slots.remove(player, slot);
+            }
             return slot.board;
         } catch (RuntimeException | LinkageError failure) {
             // LinkageError as well as RuntimeException on purpose: FastBoard fails in a static
