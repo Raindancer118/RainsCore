@@ -450,6 +450,9 @@ public final class Database implements AutoCloseable {
         // back the rows, which is normally milliseconds. Worth a short, bounded wait rather than the
         // warning this class exists to explain but not to avoid.
         awaitReadsFinished();
+        // Again: a read that checked closed() a moment before it was set has put its connection
+        // back into the pool since the first sweep, and it would stay open for good.
+        closeReaders();
         writing.lock();
         try {
             if (writer != null) {
