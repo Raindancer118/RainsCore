@@ -338,6 +338,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         places = new PoiStore(databases.core());
         places.load();
+        places.writeSoon(write -> Scheduling.async(this, write));
 
         seedHistory = new SeedHistory(databases.core(),
                 // Off the world's threads, now: waiting for the saving timer leaves a seed recorded
@@ -374,6 +375,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // is the sharp one: somebody stripped of their powers kept them for the rest of the session.
         // Registered here rather than left to each caller, because every caller forgot.
         grants.onChange(who -> {
+            // Written now rather than by the saving timer: a revocation lost to a crash is somebody
+            // keeping powers that were taken away.
+            Scheduling.async(this, grants::flush);
             Player affected = getServer().getPlayer(who);
             if (affected == null) {
                 return;     // they get it all on join anyway

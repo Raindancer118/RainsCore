@@ -58,4 +58,13 @@ class ShutdownRulesTest {
             assertThat(handler).as(registry).contains(registry + ".forgetFrom(loader)");
         }
     }
+
+    @Test
+    @DisplayName("what a crash must not undo is written as it changes, not two minutes later")
+    void durableAtOnce() throws IOException {
+        String plugin = Files.readString(Path.of("src/main/java/de/raindancer/core/RainsCorePlugin.java"));
+
+        assertThat(plugin).contains("punishments.writeSoon(").contains("places.writeSoon(")
+                .contains("Scheduling.async(this, grants::flush)");
+    }
 }

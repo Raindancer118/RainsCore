@@ -637,4 +637,20 @@ class PoiStoreTest {
             assertThat(second.get(10, TimeUnit.SECONDS)).isTrue();
         }
     }
+
+    @Test
+    @DisplayName("a place saved or deleted asks to be written at once, not at the next saving timer")
+    void writtenSoon() {
+        java.util.List<Runnable> asked = new java.util.ArrayList<>();
+        store.writeSoon(asked::add);
+
+        store.save(home("base"));
+        assertThat(asked).isNotEmpty();
+        asked.forEach(Runnable::run);
+        assertThat(store.isDirty()).isFalse();
+
+        asked.clear();
+        store.delete(store.all().getFirst().id());
+        assertThat(asked).isNotEmpty();
+    }
 }

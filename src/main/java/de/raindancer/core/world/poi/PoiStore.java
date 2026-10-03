@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.sql.Connection;
@@ -70,6 +71,26 @@ public final class PoiStore {
         places.put(place.id(), place);
         changed.add(place.id());
         deleted.remove(place.id());
+        soon();
+    }
+
+    /** Where a write is handed the moment something changes; null leaves it to the saving timer. */
+    private volatile Consumer<Runnable> writeSoon;
+
+    /**
+     * Has every change written straight away through {@code writeSoon} — Core passes its async
+     * scheduler. Left to the two-minute saving timer, a home set or a warp deleted just before a crash
+     * was simply undone.
+     */
+    public void writeSoon(Consumer<Runnable> writeSoon) {
+        this.writeSoon = writeSoon;
+    }
+
+    private void soon() {
+        Consumer<Runnable> soon = writeSoon;
+        if (soon != null) {
+            soon.accept(this::flush);
+        }
     }
 
     /** Forgets one. Answers whether there was anything to forget. */
@@ -105,6 +126,7 @@ public final class PoiStore {
     private void forget(String id) {
         changed.remove(id);
         deleted.add(id);
+        soon();
     }
 
     // ---------------------------------------------------------------------------- reading
