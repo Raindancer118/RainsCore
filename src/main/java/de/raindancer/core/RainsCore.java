@@ -68,16 +68,18 @@ public interface RainsCore {
     /**
      * The running instance.
      *
-     * @throws IllegalStateException when RainsCore is not enabled — which for a plugin that declares
-     *                               {@code depend: [RainsCore]} cannot happen, and for one that
-     *                               forgot to is the clearest possible way to find out
+     * @throws IllegalStateException when RainsCore is not enabled — which for a plugin that declares it
+     *                               under {@code dependencies.server} in its paper-plugin.yml cannot
+     *                               happen, and for one that forgot to is the clearest way to find out
      */
     static RainsCore get() {
         RainsCore running = RainsCorePlugin.instance();
         if (running == null) {
             throw new IllegalStateException(
                     "RainsCore is not enabled. A plugin using it must declare it in its "
-                            + "paper-plugin.yml: depend: [RainsCore]");
+                            + "paper-plugin.yml under dependencies.server (and dependencies.bootstrap "
+                            + "if its bootstrapper uses it): RainsCore: { load: BEFORE, required: true, "
+                            + "join-classpath: true }. 'depend:' is plugin.yml syntax and is ignored there.");
         }
         return running;
     }
