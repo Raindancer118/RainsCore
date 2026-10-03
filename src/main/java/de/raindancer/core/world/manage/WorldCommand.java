@@ -1,7 +1,6 @@
 package de.raindancer.core.world.manage;
 
 import de.raindancer.core.RainsCore;
-import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.ui.chat.Chat;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -10,8 +9,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -60,10 +59,6 @@ public final class WorldCommand implements BasicCommand {
         return regenerator != null ? regenerator : RainsCore.get().worldRegenerator();
     }
 
-    private Plugin plugin() {
-        return Bukkit.getPluginManager().getPlugin("RainsCore");
-    }
-
     private Chat chat() {
         return RainsCore.get().chatFor("Worlds");
     }
@@ -110,10 +105,12 @@ public final class WorldCommand implements BasicCommand {
             chat().no(sender, "There is no loaded world called <name>.", Chat.arg("name", args[1]));
             return;
         }
-        var target = world.getSpawnLocation();
-        Scheduling.region(plugin(), target, () -> {
-            player.teleport(target);
-            chat().ok(player, "Off to <name>.", Chat.arg("name", world.getName()));
+        // Async: the player belongs to the region they are standing in, not the one they are going to,
+        // and on Folia a synchronous teleport from either side of that throws.
+        player.teleportAsync(world.getSpawnLocation()).thenAccept(moved -> {
+            if (moved) {
+                chat().ok(player, "Off to <name>.", Chat.arg("name", world.getName()));
+            }
         });
     }
 
@@ -158,8 +155,7 @@ public final class WorldCommand implements BasicCommand {
             if (finalToReturn instanceof Player player) {
                 World fresh = Bukkit.getWorld(name);
                 if (fresh != null) {
-                    var target = fresh.getSpawnLocation();
-                    Scheduling.region(plugin(), target, () -> player.teleport(target));
+                    player.teleportAsync(fresh.getSpawnLocation());
                 }
             }
         });
@@ -175,7 +171,7 @@ public final class WorldCommand implements BasicCommand {
         CommandSender sender = source.getSender();
         if (args.length <= 1) {
             String typed = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
-            List<String> options = new java.util.ArrayList<>();
+            List<String> options = new ArrayList<>();
             if (sender.hasPermission(SWITCH)) {
                 options.add("switch");
             }

@@ -86,6 +86,23 @@ class ThreadingRulesTest {
         }
 
         @Test
+        @DisplayName("nobody is moved with a synchronous teleport")
+        void everyTeleportIsAsync() throws IOException {
+            List<String> offenders = new ArrayList<>();
+            for (Path file : javaFilesIn("")) {
+                String relative = SOURCE.relativize(file).toString();
+                if (code(relative).contains(".teleport(")) {
+                    offenders.add(relative);
+                }
+            }
+            assertThat(offenders)
+                    .as("on Folia a synchronous teleport throws unless it runs on the thread that owns "
+                            + "the player, and across regions there is no such thread — teleportAsync is "
+                            + "the only call that is right on both servers")
+                    .isEmpty();
+        }
+
+        @Test
         @DisplayName("changes to a live inventory are pushed from the window, not from a listener")
         void liveChangesGoThroughTheSource() throws IOException {
             String listener = code("moderation/invsee/InvseeListener.java");
