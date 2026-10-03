@@ -58,6 +58,15 @@ public final class VanishListener implements Listener {
                     viewer.hidePlayer(plugin, joining);
                 }
             }
+        } else {
+            // Somebody revealed while they were logged out could not be shown to anybody then, and
+            // every viewer still online kept the hide this plugin put on them. Showing someone who
+            // was never hidden costs nothing.
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                if (!viewer.equals(joining)) {
+                    viewer.showPlayer(plugin, joining);
+                }
+            }
         }
     }
 

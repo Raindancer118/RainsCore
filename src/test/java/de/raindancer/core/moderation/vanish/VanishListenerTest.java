@@ -65,4 +65,25 @@ class VanishListenerTest {
             verify(event, never()).message(org.mockito.ArgumentMatchers.any());
         }
     }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("somebody revealed while offline is shown to everybody when they come back")
+    void revealedOfflineIsShownOnReturn() {
+        Plugin plugin = mock(Plugin.class);
+        Vanish vanish = vanishHiding(MOD);
+        vanish.reveal(MOD);          // while they were logged out: nobody could be shown them then
+        Player joining = playerWithId(MOD);
+        Player viewer = playerWithId(UUID.randomUUID());
+        when(joining.hasPermission(org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
+        org.bukkit.event.player.PlayerJoinEvent event =
+                new org.bukkit.event.player.PlayerJoinEvent(joining, (net.kyori.adventure.text.Component) null);
+
+        try (org.mockito.MockedStatic<org.bukkit.Bukkit> bukkit = org.mockito.Mockito.mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(org.bukkit.Bukkit::getOnlinePlayers).thenAnswer(call -> java.util.List.of(joining, viewer));
+            new VanishListener(plugin, vanish, "rainscore.vanish.see").onJoin(event);
+        }
+
+        // Each viewer still online kept the hide this plugin put on them; only a show takes it off.
+        verify(viewer).showPlayer(plugin, joining);
+    }
 }
