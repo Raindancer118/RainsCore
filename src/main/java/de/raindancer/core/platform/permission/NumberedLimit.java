@@ -79,8 +79,9 @@ public final class NumberedLimit {
     /** The same, with a node that means no limit at all. */
     public static NumberedLimit reading(String prefix, Set<String> granted, String unlimitedNode) {
         Set<String> held = granted == null ? Set.of() : granted;
+        // Bukkit lower-cases every permission it hands out, so both sides are compared that way.
         boolean isUnlimited = unlimitedNode != null && !unlimitedNode.isBlank()
-                && held.contains(unlimitedNode);
+                && held.stream().anyMatch(node -> node != null && node.equalsIgnoreCase(unlimitedNode));
         return new NumberedLimit(highestIn(prefix, held), isUnlimited);
     }
 
@@ -95,12 +96,13 @@ public final class NumberedLimit {
         if (prefix == null || prefix.isBlank()) {
             return Optional.empty();
         }
+        String wanted = prefix.toLowerCase(Locale.ROOT);
         Integer highest = null;
         for (String node : granted) {
-            if (node == null || !node.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+            if (node == null || !node.toLowerCase(Locale.ROOT).startsWith(wanted)) {
                 continue;
             }
-            String tail = node.substring(prefix.length());
+            String tail = node.substring(wanted.length());
             try {
                 int number = Integer.parseInt(tail);
                 // Negative is not a number of things anybody may have.

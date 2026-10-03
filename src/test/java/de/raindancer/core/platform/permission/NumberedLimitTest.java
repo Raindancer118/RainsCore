@@ -213,4 +213,13 @@ class NumberedLimitTest {
             assertThat(reading().isRoomFor(0, 0)).isFalse();
         }
     }
+
+    @Test
+    @DisplayName("a prefix or an unlimited node written with capitals still matches")
+    void caseDoesNotMatter() {
+        assertThat(NumberedLimit.reading("Homes.Limit.", Set.of("homes.limit.7")).highestOf(3))
+                .isEqualTo(7);
+        assertThat(NumberedLimit.reading("homes.limit.", Set.of("homes.unlimited"), "Homes.Unlimited")
+                .isUnlimited()).isTrue();
+    }
 }
