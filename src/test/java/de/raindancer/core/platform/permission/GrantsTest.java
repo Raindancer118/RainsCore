@@ -411,4 +411,22 @@ class GrantsTest {
             throw new AssertionError("a concurrent read of the grants threw", broke.get());
         }
     }
+
+    @Test
+    @DisplayName("an idle server does not rewrite grants.yml on every save")
+    void nothingChangedWritesNothing(@TempDir Path folder) throws java.io.IOException {
+        Grants grants = new Grants(folder);
+        grants.grant(UUID.randomUUID(), "claims.admin");
+        assertThat(grants.flush()).isTrue();
+        Path file = folder.resolve("grants.yml");
+        java.nio.file.attribute.FileTime written = java.nio.file.Files.getLastModifiedTime(file);
+        java.nio.file.Files.setLastModifiedTime(file,
+                java.nio.file.attribute.FileTime.fromMillis(written.toMillis() - 60_000));
+
+        assertThat(grants.flush()).isTrue();
+
+        assertThat(java.nio.file.Files.getLastModifiedTime(file).toMillis())
+                .as("the saving timer runs every two minutes; with nothing changed it has nothing to say")
+                .isEqualTo(written.toMillis() - 60_000);
+    }
 }

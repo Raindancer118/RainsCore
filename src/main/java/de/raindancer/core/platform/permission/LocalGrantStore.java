@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The store a server without a permissions plugin needs: a list of nodes granted to a named person,
@@ -27,6 +28,8 @@ final class LocalGrantStore implements GrantStore {
 
     private final ConcurrentHashMap<UUID, Set<String>> granted = new ConcurrentHashMap<>();
     private final YamlStore store;
+    /** Whether anything changed since the last write — an idle server writes nothing. */
+    private final AtomicBoolean dirty = new AtomicBoolean();
 
     LocalGrantStore(Path folder) {
         this.store = new YamlStore(folder.resolve("grants.yml"));
@@ -42,7 +45,7 @@ final class LocalGrantStore implements GrantStore {
         if (who == null || node == null || node.isBlank()) {
             return false;
         }
-        return nodesOf(who).add(node.trim());
+        return changed(grantEach(who, List.of(node)));
     }
 
     @Override
@@ -50,12 +53,14 @@ final class LocalGrantStore implements GrantStore {
         if (who == null || node == null || node.isBlank()) {
             return false;
         }
-        Set<String> theirs = granted.get(who);
-        if (theirs == null || !theirs.remove(node.trim())) {
-            return false;
-        }
-        forgetIfEmpty(who, theirs);
-        return true;
+        AtomicBoolean removed = new AtomicBoolean();
+        // One step: taken out and, if that emptied it, dropped together. Two steps let a grant
+        // arriving in between land in a set that was then thrown away.
+        granted.computeIfPresent(who, (key, theirs) -> {
+            removed.set(theirs.remove(node.trim()));
+            return theirs.isEmpty() ? null : theirs;
+        });
+        return changed(removed.get());
     }
 
     @Override
@@ -63,20 +68,12 @@ final class LocalGrantStore implements GrantStore {
         if (who == null) {
             return false;
         }
-        if (nodes == null || nodes.isEmpty()) {
-            return granted.remove(who) != null;
-        }
-        Set<String> fresh = ConcurrentHashMap.newKeySet();
-        for (String node : nodes) {
-            if (node != null && !node.isBlank()) {
-                fresh.add(node.trim());
-            }
-        }
+        Set<String> fresh = cleaned(nodes == null ? List.of() : nodes);
         if (fresh.isEmpty()) {
-            return granted.remove(who) != null;
+            return changed(granted.remove(who) != null);
         }
         Set<String> before = granted.put(who, fresh);
-        return before == null || !before.equals(fresh);
+        return changed(before == null || !before.equals(fresh));
     }
 
     @Override
@@ -90,23 +87,43 @@ final class LocalGrantStore implements GrantStore {
         if (who == null || nodes == null || nodes.isEmpty()) {
             return false;
         }
-        Set<String> theirs = nodesOf(who);
-        boolean changed = false;
-        for (String node : nodes) {
-            if (node != null && !node.isBlank() && theirs.add(node.trim())) {
-                changed = true;
-            }
-        }
-        return changed;
+        return changed(grantEach(who, nodes));
     }
 
-    private void replaceQuietly(UUID who, Collection<String> nodes) {
+    /** Adds the nodes in one step with anything taking them away. @return whether any was new */
+    private boolean grantEach(UUID who, Collection<String> nodes) {
+        AtomicBoolean added = new AtomicBoolean();
+        granted.compute(who, (key, theirs) -> {
+            Set<String> into = theirs == null ? ConcurrentHashMap.newKeySet() : theirs;
+            for (String node : nodes) {
+                if (node != null && !node.isBlank() && into.add(node.trim())) {
+                    added.set(true);
+                }
+            }
+            return into.isEmpty() ? null : into;
+        });
+        return added.get();
+    }
+
+    private static Set<String> cleaned(Collection<String> nodes) {
         Set<String> fresh = ConcurrentHashMap.newKeySet();
         for (String node : nodes) {
             if (node != null && !node.isBlank()) {
                 fresh.add(node.trim());
             }
         }
+        return fresh;
+    }
+
+    private boolean changed(boolean did) {
+        if (did) {
+            dirty.set(true);
+        }
+        return did;
+    }
+
+    private void replaceQuietly(UUID who, Collection<String> nodes) {
+        Set<String> fresh = cleaned(nodes);
         if (fresh.isEmpty()) {
             granted.remove(who);
         } else {
@@ -116,7 +133,7 @@ final class LocalGrantStore implements GrantStore {
 
     @Override
     public boolean clear(UUID who) {
-        return who != null && granted.remove(who) != null;
+        return who != null && changed(granted.remove(who) != null);
     }
 
     @Override
@@ -152,22 +169,20 @@ final class LocalGrantStore implements GrantStore {
     public void load() {
         granted.clear();
         readInto(store, this::replaceQuietly);
+        dirty.set(false);
     }
 
     @Override
     public boolean flush() {
-        return store.write(yaml -> granted.forEach((who, nodes) ->
-                yaml.set("granted." + who, new ArrayList<>(nodes))));
-    }
-
-    private Set<String> nodesOf(UUID who) {
-        return granted.computeIfAbsent(who, id -> ConcurrentHashMap.newKeySet());
-    }
-
-    private void forgetIfEmpty(UUID who, Set<String> theirs) {
-        if (theirs.isEmpty()) {
-            granted.remove(who, theirs);
+        if (!dirty.getAndSet(false)) {
+            return true;
         }
+        boolean written = store.write(yaml -> granted.forEach((who, nodes) ->
+                yaml.set("granted." + who, new ArrayList<>(nodes))));
+        if (!written) {
+            dirty.set(true);
+        }
+        return written;
     }
 
     // ---------------------------------------------------------------------------- shared file format
