@@ -5,6 +5,8 @@ import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.world.chunk.ChunkAt;
 import de.raindancer.core.world.chunk.ChunkHolds;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
@@ -96,7 +98,7 @@ public final class Safety {
         }
         warnIfOnTheServerThread();
         return chunks.forAMoment(chunksAround(around, radius))
-                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world())
+                .thenCompose(ignored -> onTheOwningThread(around, () -> in(around.world())
                         .flatMap(spots -> spots.nearestSafe(around, radius))));
     }
 
@@ -123,7 +125,7 @@ public final class Safety {
         }
         warnIfOnTheServerThread();
         return chunks.forAMoment(chunksAround(around, radius))
-                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world()).flatMap(spots -> {
+                .thenCompose(ignored -> onTheOwningThread(around, () -> in(around.world()).flatMap(spots -> {
                     if (setUp != null) {
                         setUp.accept(spots);
                     }
@@ -139,7 +141,7 @@ public final class Safety {
         }
         warnIfOnTheServerThread();
         return chunks.forAMoment(chunksAround(around, radius))
-                .thenCompose(ignored -> onTheOwningThread(() -> in(around.world()).flatMap(spots -> {
+                .thenCompose(ignored -> onTheOwningThread(around, () -> in(around.world()).flatMap(spots -> {
                     if (setUp != null) {
                         setUp.accept(spots);
                     }
@@ -158,12 +160,16 @@ public final class Safety {
      * runs next reads blocks, and blocks may only be read on the thread that owns them — so this hops
      * there first rather than trusting whichever thread the future happened to continue on.
      */
-    private <T> CompletableFuture<T> onTheOwningThread(Supplier<T> lookup) {
-        if (Bukkit.isPrimaryThread()) {
+    private <T> CompletableFuture<T> onTheOwningThread(Spot around, Supplier<T> lookup) {
+        World world = Bukkit.getWorld(around.world());
+        // The region that owns the search's centre, not the global one: on Folia the global region
+        // owns no chunks at all, and reading a block there throws. (On Paper both are the main
+        // thread, as before.) A search wider than a region can still reach past it; radii are small.
+        if (world == null || Bukkit.isOwnedByCurrentRegion(world, around.x() >> 4, around.z() >> 4)) {
             return CompletableFuture.completedFuture(lookup.get());
         }
         CompletableFuture<T> future = new CompletableFuture<>();
-        Scheduling.global(plugin, () -> {
+        Scheduling.region(plugin, new Location(world, around.x(), around.y(), around.z()), () -> {
             try {
                 future.complete(lookup.get());
             } catch (RuntimeException failure) {
