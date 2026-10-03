@@ -99,6 +99,13 @@ public final class BukkitChunkLoader implements ChunkLoader {
         if (world == null) {
             return;
         }
+        if (!plugin.isEnabled()) {
+            // onDisable: a disabled plugin may not schedule anything, and the flag outlives the
+            // process — a release that never runs is a chunk ticking for ever. Shutdown is on the
+            // server thread, so it is done here.
+            world.setChunkForceLoaded(chunk.x(), chunk.z(), keep);
+            return;
+        }
         Scheduling.global(plugin, () -> {
             World still = Bukkit.getWorld(chunk.world());
             if (still != null) {

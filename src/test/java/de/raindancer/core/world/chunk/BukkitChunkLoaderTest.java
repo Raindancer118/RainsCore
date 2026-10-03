@@ -106,4 +106,16 @@ class BukkitChunkLoaderTest {
 
         verify(world, never()).addPluginChunkTicket(anyInt(), anyInt(), any());
     }
+
+    @Test
+    @DisplayName("on the way out the force-load flag is cleared there and then, not handed to a scheduler "
+            + "that no longer takes tasks from a disabled plugin")
+    void releasedWhileDisabling() {
+        when(plugin.isEnabled()).thenReturn(false);
+
+        new BukkitChunkLoader(plugin).keepLoaded(new ChunkAt("farm", 4, 5), false);
+
+        verify(world).setChunkForceLoaded(4, 5, false);
+        bukkit.verify(Bukkit::getGlobalRegionScheduler, never());
+    }
 }

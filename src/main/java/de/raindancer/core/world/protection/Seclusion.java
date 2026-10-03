@@ -125,8 +125,15 @@ public final class Seclusion {
             }
             for (UUID id : hidden) {
                 Player subject = plugin.getServer().getPlayer(id);
-                if (subject != null) {
+                if (subject == null) {
+                    continue;
+                }
+                if (plugin.isEnabled()) {
                     Scheduling.entity(plugin, watcher, () -> watcher.showPlayer(plugin, subject));
+                } else {
+                    // onDisable, where a disabled plugin may not schedule anything: without this the
+                    // shutdown reveal would throw, and everybody hidden would stay hidden.
+                    watcher.showPlayer(plugin, subject);
                 }
             }
         });
