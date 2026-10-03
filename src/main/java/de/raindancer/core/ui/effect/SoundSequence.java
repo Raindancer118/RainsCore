@@ -1,8 +1,14 @@
 package de.raindancer.core.ui.effect;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Keyed;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.UnaryOperator;
 
 /**
  * Several sounds that together make one noise, written the way a server owner would type it.
@@ -263,7 +269,30 @@ public record SoundSequence(List<Step> steps) {
         if (trimmed.indexOf('.') >= 0 || trimmed.indexOf(':') >= 0) {
             return trimmed.toLowerCase(Locale.ROOT);
         }
-        return trimmed.toLowerCase(Locale.ROOT).replace('_', '.');
+        // Asked of the server first: underscores inside a word are kept in the key
+        // (ENTITY_LIGHTNING_BOLT_THUNDER is entity.lightning_bolt.thunder), so swapping every one for a
+        // dot names a sound nobody has and plays silence.
+        String known = vanillaKeys.apply(trimmed.toUpperCase(Locale.ROOT));
+        return known != null ? known : trimmed.toLowerCase(Locale.ROOT).replace('_', '.');
+    }
+
+    /** Bukkit constant name to the key the server gives that sound, or null. A seam for tests. */
+    static UnaryOperator<String> vanillaKeys = SoundSequence::vanillaKeyOf;
+
+    private static String vanillaKeyOf(String constant) {
+        if (Bukkit.getServer() == null) {
+            // No registry to ask — and touching Sound without one fails its initialiser for good.
+            return null;
+        }
+        try {
+            if (Sound.class.getField(constant).get(null) instanceof Keyed keyed) {
+                NamespacedKey key = keyed.getKey();
+                return NamespacedKey.MINECRAFT.equals(key.getNamespace()) ? key.getKey() : key.toString();
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unknown) {
+            // Not a constant this server has; the guess below is all there is.
+        }
+        return null;
     }
 
     /** The notation this sequence would be written as — for a settings screen showing what is bound. */
