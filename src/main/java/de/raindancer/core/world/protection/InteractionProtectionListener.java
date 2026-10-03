@@ -36,7 +36,10 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Protects interaction: containers, doors, redstone, entities and PvP. */
 public final class InteractionProtectionListener implements Listener {
@@ -44,8 +47,8 @@ public final class InteractionProtectionListener implements Listener {
     private final Land land;
 
     /** Throttles every flag refusal this listener sends, per player — see refuse. */
-    private final java.util.Map<java.util.UUID, Long> lastPotionRefusal =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastPotionRefusal =
+            new ConcurrentHashMap<>();
     private final de.raindancer.core.ui.messages.Messages messages;
     private final Audit audit;
 
@@ -532,6 +535,13 @@ public final class InteractionProtectionListener implements Listener {
                     .in(where.getWorld() == null ? null : where.getWorld().getName())
                     .saying("refused in " + area.name()));
         });
+    }
+
+    /** Forgets a player's refusal throttle when they leave. */
+    public void forget(UUID player) {
+        if (player != null) {
+            lastPotionRefusal.remove(player);
+        }
     }
 
     /** One throttled line on the action bar. Shared by the flag refusals, which are all the same shape. */

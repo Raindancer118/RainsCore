@@ -233,6 +233,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private LandPolicies landPolicies;
     private LandPolicyStore landPolicyStore;
     private MovementProtectionListener movementProtection;
+    private InteractionProtectionListener interactionProtection;
     private Seclusion seclusion;
     private ResourcePacks resourcePacks;
     private ChunkHolds chunks;
@@ -417,8 +418,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         landPolicyStore.problem().ifPresent(trouble -> log.warn("land-flags.yml: {}", trouble));
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
-        getServer().getPluginManager().registerEvents(
-                new InteractionProtectionListener(land, messages, audit), this);
+        interactionProtection = new InteractionProtectionListener(land, messages, audit);
+        getServer().getPluginManager().registerEvents(interactionProtection, this);
         EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);
         getServer().getPluginManager().registerEvents(environmentProtection, this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
@@ -1319,6 +1320,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects.forget(player.getUniqueId());
         land.forget(player.getUniqueId());
         movementProtection.forget(player.getUniqueId());
+        interactionProtection.forget(player.getUniqueId());
         seclusion.forget(player.getUniqueId());
         worldEntryPoints.forget(player.getUniqueId());
         if (combatListener != null) {
