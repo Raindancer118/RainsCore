@@ -80,7 +80,7 @@ public final class Inventories {
         }
 
         /** What to tell the moderator, in whatever words this server uses. */
-        public Component saying(de.raindancer.core.ui.messages.Messages words) {
+        public Component saying(Messages words) {
             return words == null ? Component.text(builtIn) : words.prefixed(key);
         }
 

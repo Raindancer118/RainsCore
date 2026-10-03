@@ -7,8 +7,13 @@ import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import de.raindancer.core.RainsCore;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
@@ -41,16 +46,16 @@ public final class SettingsCommand implements BasicCommand {
      * <p>Core itself, because these settings are Core's and the work is a file write rather than
      * anything belonging to whoever typed the command.
      */
-    private static org.bukkit.plugin.Plugin corePlugin() {
-        return org.bukkit.Bukkit.getPluginManager().getPlugin("RainsCore");
+    private static Plugin corePlugin() {
+        return Bukkit.getPluginManager().getPlugin("RainsCore");
     }
 
     private SettingsNavigation navigation() {
-        return de.raindancer.core.RainsCore.get().settingsNavigation();
+        return RainsCore.get().settingsNavigation();
     }
 
     private Chat chat() {
-        return de.raindancer.core.RainsCore.get().chatFor("Core");
+        return RainsCore.get().chatFor("Core");
     }
 
     private Brand brand() {
@@ -65,7 +70,7 @@ public final class SettingsCommand implements BasicCommand {
     @Override
     public void execute(CommandSourceStack source, String[] args) {
         CommandSender sender = source.getSender();
-        if (!de.raindancer.core.RainsCore.isAvailable()) {
+        if (!RainsCore.isAvailable()) {
             return;
         }
         if (args.length == 0) {
@@ -124,7 +129,7 @@ public final class SettingsCommand implements BasicCommand {
             return;
         }
         // Everything after the key, so a value with spaces in it works.
-        String value = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
+        String value = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
         if (navigation().registry().setting(args[1]).isEmpty()) {
             unknown(sender, args[1]);
             return;
@@ -186,8 +191,8 @@ public final class SettingsCommand implements BasicCommand {
      * between a command somebody uses and one they look up first.
      */
     @Override
-    public java.util.Collection<String> suggest(CommandSourceStack source, String[] args) {
-        if (!de.raindancer.core.RainsCore.isAvailable()) {
+    public Collection<String> suggest(CommandSourceStack source, String[] args) {
+        if (!RainsCore.isAvailable()) {
             return List.of();
         }
         if (args.length <= 1) {

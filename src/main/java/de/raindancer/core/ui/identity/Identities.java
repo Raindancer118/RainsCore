@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 
 /**
  * Who a player is, as everybody else sees them.
@@ -443,8 +444,8 @@ public final class Identities {
     }
 
     /** Something shaped like a tag, left over after parsing — i.e. one nothing recognised. */
-    private static final java.util.regex.Pattern UNPARSED_TAG =
-            java.util.regex.Pattern.compile("<[a-zA-Z_][a-zA-Z0-9_:#-]*>");
+    private static final Pattern UNPARSED_TAG =
+            Pattern.compile("<[a-zA-Z_][a-zA-Z0-9_:#-]*>");
 
     private static boolean isColour(String colour) {
         String cleaned = colour.trim().toLowerCase(Locale.ROOT);

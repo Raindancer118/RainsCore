@@ -1,5 +1,7 @@
 package de.raindancer.core.ui.effect;
 
+import java.util.Locale;
+
 /**
  * A puff of particles.
  *
@@ -21,7 +23,7 @@ public record ParticleCue(String particle, int count, double spreadX, double spr
         if (particle == null || particle.isBlank()) {
             throw new IllegalArgumentException("a particle effect needs a particle");
         }
-        particle = particle.trim().toUpperCase(java.util.Locale.ROOT);
+        particle = particle.trim().toUpperCase(Locale.ROOT);
         // Capped rather than trusted. A thousand particles is a plugin's typo and a client's
         // stutter, and the player it happens to has no way of telling which plugin did it.
         count = Math.clamp(count, 0, 500);

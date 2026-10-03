@@ -4,25 +4,38 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.ui.messages.Messages;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.AreaEffectCloud;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EvokerFangs;
+import org.bukkit.entity.LightningStrike;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
+import org.bukkit.entity.ThrownPotion;
+import org.bukkit.entity.Vex;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PotionSplashEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -103,7 +116,7 @@ public final class CombatListener implements Listener {
      * — a listener between the two that throws — is collected rather than kept for ever.
      */
     private final Map<EntityDamageByEntityEvent, Pending> pending =
-            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     /** One decision, waiting to be explained. */
     private record Pending(Attack attack, Verdict verdict, String decidedBy) {
@@ -116,7 +129,7 @@ public final class CombatListener implements Listener {
      * another — so the message cannot simply be sent from here. Runs inline by default, which is what
      * a test wants; the plugin replaces it with one that schedules against the player.
      */
-    private volatile java.util.function.BiConsumer<Player, Runnable> tellOn =
+    private volatile BiConsumer<Player, Runnable> tellOn =
             (player, task) -> task.run();
 
     public CombatListener(Combat combat, LongSupplier clock, Messages messages) {
@@ -126,7 +139,7 @@ public final class CombatListener implements Listener {
     }
 
     /** Tells this where a message to a player should be sent from. */
-    public void tellOn(java.util.function.BiConsumer<Player, Runnable> tellOn) {
+    public void tellOn(BiConsumer<Player, Runnable> tellOn) {
         if (tellOn != null) {
             this.tellOn = tellOn;
         }
@@ -203,7 +216,7 @@ public final class CombatListener implements Listener {
         String worstBy = null;
         // Copied, because setIntensity may change what getAffectedEntities answers and iterating a
         // collection while changing it is the sort of failure that only happens with a crowd.
-        for (LivingEntity hit : java.util.List.copyOf(event.getAffectedEntities())) {
+        for (LivingEntity hit : List.copyOf(event.getAffectedEntities())) {
             Attack attack = between(thrower.kind(), thrower.id(),
                     event.getPotion().getLocation(), hit);
             Combat.Ruling ruling = combat.decide(attack);
@@ -225,10 +238,10 @@ public final class CombatListener implements Listener {
      * <p>Read off the effects rather than a list of names: {@code PotionEffectType} says whether it is
      * bad for you, and a list would need editing every time a version adds one.
      */
-    private static boolean doesHarm(org.bukkit.entity.ThrownPotion potion) {
-        for (org.bukkit.potion.PotionEffect effect : potion.getEffects()) {
+    private static boolean doesHarm(ThrownPotion potion) {
+        for (PotionEffect effect : potion.getEffects()) {
             if (effect.getType().getEffectCategory()
-                    == org.bukkit.potion.PotionEffectType.Category.HARMFUL) {
+                    == PotionEffectType.Category.HARMFUL) {
                 return true;
             }
         }
@@ -259,7 +272,7 @@ public final class CombatListener implements Listener {
     /** How the damager delivered it — read off the thing that hit, before the chain is followed. */
     static Attack.Means meansOf(Entity damager) {
         if (damager instanceof Player player) {
-            org.bukkit.inventory.ItemStack hand = player.getInventory().getItemInMainHand();
+            ItemStack hand = player.getInventory().getItemInMainHand();
             return hand == null || hand.isEmpty() ? Attack.Means.BARE_HANDED : Attack.Means.HELD_ITEM;
         }
         if (damager instanceof Projectile) {
@@ -331,7 +344,7 @@ public final class CombatListener implements Listener {
         if (thing instanceof Player player) {
             return Responsible.player(player.getUniqueId());
         }
-        if (thing instanceof org.bukkit.OfflinePlayer offline) {
+        if (thing instanceof OfflinePlayer offline) {
             // What Tameable.getOwner() answers for an owner who is not online. AnimalTamer is the
             // declared type and OfflinePlayer is what it is in practice; a tamer that is neither
             // falls through to the mob case below rather than being lost.
@@ -352,7 +365,7 @@ public final class CombatListener implements Listener {
             // a UUID is still who did it.
             return orElse(whoIsBehind(tnt.getSource(), depth + 1), thing);
         }
-        if (thing instanceof org.bukkit.entity.LightningStrike bolt) {
+        if (thing instanceof LightningStrike bolt) {
             // A channelling trident in the rain, or a lightning rod somebody aimed. Not a projectile
             // and not alive, so without this it is weather — and weather is nobody's doing, which
             // makes a trident the cleanest way round a PvP rule in the game.
@@ -360,12 +373,12 @@ public final class CombatListener implements Listener {
             return person.kind() != Attack.Fighter.NOBODY ? person
                     : whoIsBehind(bolt.getCausingEntity(), depth + 1);
         }
-        if (thing instanceof org.bukkit.entity.EvokerFangs fangs) {
+        if (thing instanceof EvokerFangs fangs) {
             // Summoned, and the summoner is who did it. An evoker's, normally — but a plugin can
             // give a player one, and then it is a player attacking.
             return orElse(whoIsBehind(fangs.getOwner(), depth + 1), thing);
         }
-        if (thing instanceof org.bukkit.entity.Vex vex) {
+        if (thing instanceof Vex vex) {
             // Summoned by an evoker. A mob either way in vanilla, but a plugin can summon one, and
             // then the vex is that player attacking.
             return orElse(whoIsBehind(vex.getOwner(), depth + 1), thing);
@@ -444,7 +457,7 @@ public final class CombatListener implements Listener {
             // victims can be judged at the same instant. Either way, one message.
             return;
         }
-        Player attacker = org.bukkit.Bukkit.getPlayer(who);
+        Player attacker = Bukkit.getPlayer(who);
         if (attacker == null) {
             return;
         }

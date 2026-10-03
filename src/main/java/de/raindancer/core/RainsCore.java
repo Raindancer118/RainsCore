@@ -40,8 +40,18 @@ import de.raindancer.core.content.pack.ResourcePacks;
 import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.world.protection.Land;
 import org.bukkit.plugin.Plugin;
+import de.raindancer.core.platform.command.CommandDirectory;
+import de.raindancer.core.world.chunk.ChunkAt;
+import de.raindancer.core.world.chunk.ChunkPregen;
+import de.raindancer.core.world.manage.SeedHistory;
+import de.raindancer.core.world.manage.WorldEntryPoints;
+import de.raindancer.core.world.manage.WorldEntryRules;
+import de.raindancer.core.world.manage.WorldRegenerator;
+import de.raindancer.core.world.protection.LandPolicies;
+import org.bukkit.entity.Player;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * What a plugin gets from Rain's Core.
@@ -121,27 +131,27 @@ public interface RainsCore {
      * {@link de.raindancer.core.world.manage.WorldRegenerator} sends somebody back to when the world
      * they are standing in is deleted out from under them, in place of a generic spawn.
      */
-    de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints();
+    WorldEntryPoints worldEntryPoints();
 
     /**
      * Every seed a world has had — written by {@link #worldRegenerator()} whenever a world is created
      * or regenerated through it, and the only record of a regenerated world's old seed once its folder
      * is gone.
      */
-    de.raindancer.core.world.manage.SeedHistory seedHistory();
+    SeedHistory seedHistory();
 
     /**
      * Creating, deleting and regenerating worlds, with every seed involved written into
      * {@link #seedHistory()}. Use this one rather than {@code new WorldRegenerator()}, which records
      * nothing.
      */
-    de.raindancer.core.world.manage.WorldRegenerator worldRegenerator();
+    WorldRegenerator worldRegenerator();
 
     /**
      * Whether a player may go into a world right now. Whatever teleports people asks; whatever locks
      * worlds registers a rule. See {@link de.raindancer.core.world.manage.WorldEntryRules}.
      */
-    de.raindancer.core.world.manage.WorldEntryRules worldEntryRules();
+    WorldEntryRules worldEntryRules();
 
     /**
      * Every place any plugin has asked to remember: homes, stops on a ghast line, where somebody
@@ -176,7 +186,7 @@ public interface RainsCore {
      * <p>What a promotion needs: a moderator told they are a moderator, whose commands then all refuse
      * them until they relog, is a moderator who reports the promotion as broken.
      */
-    void reapplyGrants(org.bukkit.entity.Player player);
+    void reapplyGrants(Player player);
 
     /**
      * Bans, mutes, freezes and the record of who did what — for any plugin that needs to refuse
@@ -280,7 +290,7 @@ public interface RainsCore {
      *
      * <p>Changes are kept in memory. Call {@link #saveLandPolicies()} to put them on disk.
      */
-    de.raindancer.core.world.protection.LandPolicies landPolicies();
+    LandPolicies landPolicies();
 
     /**
      * Writes the flag decisions out.
@@ -320,8 +330,8 @@ public interface RainsCore {
      * {@link de.raindancer.core.world.chunk.ChunkPregen}'s own note on that — so a caller that also
      * wants the result to stay in memory still asks {@link #chunks()} for a hold, separately.
      */
-    de.raindancer.core.world.chunk.ChunkPregen pregeneration(
-            java.util.List<de.raindancer.core.world.chunk.ChunkAt> region);
+    ChunkPregen pregeneration(
+            List<ChunkAt> region);
 
     /**
      * Every sound and every particle any plugin makes.
@@ -421,7 +431,7 @@ public interface RainsCore {
      *
      * <p>Reporting is optional and one line; not reporting means being absent from the book.
      */
-    de.raindancer.core.platform.command.CommandDirectory commands();
+    CommandDirectory commands();
 
     Audit audit();
 

@@ -8,6 +8,7 @@ import de.raindancer.core.world.manage.WorldCommand;
 import io.papermc.paper.command.brigadier.Commands;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Ready-made commands for the things Core knows about — none of which Core registers.
@@ -94,8 +95,8 @@ public final class CoreCommands {
     }
 
     /** Whether {@code /commands} has already been taken this run. See {@link #commandList}. */
-    private static final java.util.concurrent.atomic.AtomicBoolean DIRECTORY_TAKEN =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private static final AtomicBoolean DIRECTORY_TAKEN =
+            new AtomicBoolean();
 
     /**
      * The directory of every command on this server, as a book.

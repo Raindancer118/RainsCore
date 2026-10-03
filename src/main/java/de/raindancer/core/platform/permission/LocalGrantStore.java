@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 /**
  * The store a server without a permissions plugin needs: a list of nodes granted to a named person,
@@ -194,7 +195,7 @@ final class LocalGrantStore implements GrantStore {
      * <p>Package-private and static so {@link LuckPermsGrantStore} can read a server's pre-LuckPerms
      * {@code grants.yml} the exact same way this class does, for the one-time import.
      */
-    static void readInto(YamlStore fromStore, java.util.function.BiConsumer<UUID, Collection<String>> sink) {
+    static void readInto(YamlStore fromStore, BiConsumer<UUID, Collection<String>> sink) {
         ConfigurationSection root = fromStore.read().getConfigurationSection("granted");
         if (root == null) {
             return;

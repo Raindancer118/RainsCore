@@ -17,6 +17,7 @@ import org.bukkit.inventory.ItemStack;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -148,7 +149,7 @@ public final class PlayerChooser extends PaginatedMenu<PlayerEntry> {
         lore.add(person.online()
                 ? "<green>online now"
                 : "<gray>" + person.lastSeenDescribed(System.currentTimeMillis()));
-        lore.add("<dark_gray>" + presence.title().toLowerCase(java.util.Locale.ROOT));
+        lore.add("<dark_gray>" + presence.title().toLowerCase(Locale.ROOT));
         lore.add("");
         lore.add("<dark_gray>click to choose");
         return Icons.head(person.id(), (person.online() ? "<white>" : "<gray>") + person.name(), lore);

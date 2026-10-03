@@ -3,6 +3,7 @@ package de.raindancer.core.data.sql;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -166,7 +167,7 @@ public final class Database implements AutoCloseable {
                 usable.set(false);
                 closeConnections();
             }
-        } catch (SQLException | java.io.IOException | RuntimeException unopenable) {
+        } catch (SQLException | IOException | RuntimeException unopenable) {
             log.error(unopenable, "The database {} could not be opened.", file);
             usable.set(false);
             closeConnections();

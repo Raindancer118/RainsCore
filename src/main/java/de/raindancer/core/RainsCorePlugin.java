@@ -91,13 +91,30 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import de.raindancer.core.content.items.BoundItemListener;
+import de.raindancer.core.platform.command.CommandDirectory;
+import de.raindancer.core.platform.command.CommandNote;
+import de.raindancer.core.ui.chat.ChatButton;
+import de.raindancer.core.world.chunk.ChunkAt;
+import de.raindancer.core.world.chunk.ChunkPregen;
+import de.raindancer.core.world.manage.SeedHistory;
+import de.raindancer.core.world.manage.WorldEntryPoints;
+import de.raindancer.core.world.manage.WorldEntryRules;
+import de.raindancer.core.world.manage.WorldRegenerator;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import org.bukkit.World;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionDefault;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -128,7 +145,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * left on, not the next time somebody happens to notice their own claim has stopped protecting
      * them.
      */
-    private static final java.time.Duration BYPASS_REMINDER_AFTER = java.time.Duration.ofMinutes(10);
+    private static final Duration BYPASS_REMINDER_AFTER = Duration.ofMinutes(10);
 
     /** How often saved places are written out, if anything changed. */
     /**
@@ -192,13 +209,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChatButtons buttons;
     private Scoreboards scoreboards;
     private BossBars bossBars;
-    private final de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints =
-            new de.raindancer.core.world.manage.WorldEntryPoints();
+    private final WorldEntryPoints worldEntryPoints =
+            new WorldEntryPoints();
     private PoiStore places;
-    private de.raindancer.core.world.manage.SeedHistory seedHistory;
-    private de.raindancer.core.world.manage.WorldRegenerator worldRegenerator;
-    private final de.raindancer.core.world.manage.WorldEntryRules worldEntryRules =
-            new de.raindancer.core.world.manage.WorldEntryRules();
+    private SeedHistory seedHistory;
+    private WorldRegenerator worldRegenerator;
+    private final WorldEntryRules worldEntryRules =
+            new WorldEntryRules();
     private Identities identities;
     private Grants grants;
     /**
@@ -260,8 +277,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * entries it was carrying are then lost, quietly, exactly when a shutdown is the last chance to
      * write them.
      */
-    private io.papermc.paper.threadedregions.scheduler.ScheduledTask auditFlushTask;
-    private io.papermc.paper.threadedregions.scheduler.ScheduledTask savingTask;
+    private ScheduledTask auditFlushTask;
+    private ScheduledTask savingTask;
     private Audit audit;
     private PackServer packServer;
 
@@ -318,7 +335,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         places = new PoiStore(databases.core());
         places.load();
 
-        seedHistory = new de.raindancer.core.world.manage.SeedHistory(databases.core(),
+        seedHistory = new SeedHistory(databases.core(),
                 System::currentTimeMillis, flush -> {
                     // Off the world's threads, now: waiting for the saving timer leaves a seed recorded
                     // just before a stop to be written during onDisable, on the server thread.
@@ -327,7 +344,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                     }
                 });
         seedHistory.load();
-        worldRegenerator = new de.raindancer.core.world.manage.WorldRegenerator(seedHistory,
+        worldRegenerator = new WorldRegenerator(seedHistory,
                 task -> Scheduling.global(this, task));
 
         identities = new Identities(databases.core());
@@ -340,9 +357,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Registered before anything asks. An unregistered node answers with the operator default,
         // which for this one means every operator sees through vanish — see SEE_VANISHED.
         if (getServer().getPluginManager().getPermission(SEE_VANISHED) == null) {
-            getServer().getPluginManager().addPermission(new org.bukkit.permissions.Permission(
+            getServer().getPluginManager().addPermission(new Permission(
                     SEE_VANISHED, "See players who have vanished",
-                    org.bukkit.permissions.PermissionDefault.FALSE));
+                    PermissionDefault.FALSE));
         }
 
         grants = new Grants(getDataFolder().toPath(), this);
@@ -439,7 +456,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(environmentProtection, this);
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
         getServer().getPluginManager().registerEvents(
-                new de.raindancer.core.content.items.BoundItemListener(), this);
+                new BoundItemListener(), this);
         movementProtection = new MovementProtectionListener(land, messages);
         // Told about each other after both exist, rather than one taking the other in its constructor: the
         // damage listener has to be registered before this one, and a constructor argument would be a cycle.
@@ -470,19 +487,19 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Core's own commands, in the directory /commands reads. Reported rather than assumed: a
         // server registers whichever of CoreCommands' handlers it wants, so this is what Core offers
         // and the book is honest about a server that took none of them.
-        commandDirectory.declareAll(java.util.List.of(
-                de.raindancer.core.platform.command.CommandNote
+        commandDirectory.declareAll(List.of(
+                CommandNote
                         .of("Core", "commands", "This book.",
                                 "[plugin] — only that plugin's"),
-                de.raindancer.core.platform.command.CommandNote
+                CommandNote
                         .of("Core", "settings", "Read and change what every plugin on this server does.")
                         .needing("rainscore.settings"),
-                de.raindancer.core.platform.command.CommandNote
+                CommandNote
                         .of("Core", "warp", "Go to a named place.",
                                 "<name> — go there",
                                 "list — every warp you may use")
                         .needing("rainscore.warp.use"),
-                de.raindancer.core.platform.command.CommandNote
+                CommandNote
                         .of("Core", "farmworld", "Go to a farm world, where digging is meant to happen.",
                                 "<name> — go to that one",
                                 "regen <name> confirm — rebuild it, which deletes it first")
@@ -495,7 +512,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // A chat answer arrives on a Netty thread, and a plugin's callback almost always touches the
         // player. Dispatched onto the thread that owns them, so no plugin using this has to know.
         prompts.runCallbacksOn((who, task) -> {
-            org.bukkit.entity.Player answering = getServer().getPlayer(who);
+            Player answering = getServer().getPlayer(who);
             if (answering == null) {
                 // They left between typing and this running. Answering "no" rather than dropping it
                 // silently, so the line is reported as undelivered instead of as answered.
@@ -529,8 +546,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // one place anybody looks to see who is about.
         tablists.hiddenPlayers(vanish::everybodyVanished);
         inventoryViews = new InventoryViews(watcher -> {
-            org.bukkit.entity.Player looking =
-                    getServer().getPlayer(java.util.UUID.fromString(watcher));
+            Player looking =
+                    getServer().getPlayer(UUID.fromString(watcher));
             if (looking != null) {
                 // On their own thread. A window is closed from wherever the reason arrived — a
                 // login on the connection thread, a quit on somebody else's region thread — and on
@@ -612,7 +629,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 AUDIT_FLUSH_PERIOD_SECONDS, task -> audit.flush());
         Scheduling.asyncTimer(this, AUDIT_PRUNE_PERIOD_SECONDS, AUDIT_PRUNE_PERIOD_SECONDS,
                 task -> audit.forgetOlderThan(
-                        java.time.Duration.ofDays(settings.current().auditRetentionDays())));
+                        Duration.ofDays(settings.current().auditRetentionDays())));
         // On the ASYNC timer, not the global one. That was wrong until a review pointed it out: every
         // one of these writes a file or a database, and the global timer runs on the thread that ticks
         // the world. Two minutes between freezes is still a freeze.
@@ -657,7 +674,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             log.warn("config.yml: {}", problem);
             banner.warning("config.yml: " + problem);
         }
-        banner.took(java.time.Duration.ofNanos(System.nanoTime() - startedAt))
+        banner.took(Duration.ofNanos(System.nanoTime() - startedAt))
                 .print(getComponentLogger());
     }
 
@@ -675,13 +692,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             applyCombatSettings();
         }
         effects.enabled(config.effectsEnabled());
-        effects.minimumGap(java.time.Duration.ofMillis(config.effectsRepeatGapMillis()));
+        effects.minimumGap(Duration.ofMillis(config.effectsRepeatGapMillis()));
         vanish.flightWhileVanished(config.vanishFlight());
         if (tablists != null) {
             tablists.model().showPing(config.tablistShowPing());
             tablists.model().title(config.tablistTitle());
             tablists.model().logo("auto".equalsIgnoreCase(config.tablistLogo().trim())
-                    ? de.raindancer.core.ui.tablist.TablistModel.logoFor(getServer().getMotd())
+                    ? TablistModel.logoFor(getServer().getMotd())
                     : framesOf(config.tablistLogo()));
             tablists.headerFrames(framesOf(config.tablistHeaderFrames()), config.tablistFrameTicks());
             tablists.footerFrames(framesOf(config.tablistFooterFrames()), config.tablistFrameTicks());
@@ -694,11 +711,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * <p>A list in a flat settings file has to be a string, and a bar is the one separator that does
      * not appear in MiniMessage or in anything anybody would put in a header.
      */
-    private static java.util.List<String> framesOf(String written) {
+    private static List<String> framesOf(String written) {
         if (written == null || written.isBlank()) {
-            return java.util.List.of();
+            return List.of();
         }
-        return java.util.Arrays.stream(written.split("\\|"))
+        return Arrays.stream(written.split("\\|"))
                 .map(String::trim)
                 .filter(frame -> !frame.isEmpty())
                 .toList();
@@ -725,7 +742,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             try {
                 packServer.start();
                 resourcePacks.urls(packServer::urlFor);
-            } catch (java.io.IOException failure) {
+            } catch (IOException failure) {
                 // Said plainly rather than thrown: the rest of the server is fine, and an owner
                 // whose port 8123 is taken needs to read that sentence, not a stack trace.
                 log.error("The resource pack server could not start on {}:{} ({}). Plugin assets "
@@ -862,7 +879,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * server not yet on 26.1 — still has only the old one. Checked once, here, rather than trusting
      * the running version: a world can be older than the server reading it.
      */
-    private Path playerDataDirOf(org.bukkit.World world) {
+    private Path playerDataDirOf(World world) {
         Path root = world.getWorldFolder().toPath();
         Path modern = root.resolve("players").resolve("data");
         return Files.isDirectory(modern) ? modern : root.resolve("playerdata");
@@ -919,8 +936,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * that it must never again be a thing somebody discovers by accident three days later.
      */
     private void checkBypassReminders() {
-        for (java.util.UUID id : land.dueForBypassReminder(BYPASS_REMINDER_AFTER)) {
-            org.bukkit.entity.Player player = getServer().getPlayer(id);
+        for (UUID id : land.dueForBypassReminder(BYPASS_REMINDER_AFTER)) {
+            Player player = getServer().getPlayer(id);
             if (player == null) {
                 continue;
             }
@@ -928,14 +945,14 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             // rather than every minute until they do.
             land.postponeBypassReminder(id);
 
-            de.raindancer.core.ui.chat.ChatButton stillWorking = buttons.label("<green>[Still working]</green>")
+            ChatButton stillWorking = buttons.label("<green>[Still working]</green>")
                     .tooltip("<gray>Keep the bypass on — ask again in ten minutes")
                     .forOnly(id).expiringIn(BYPASS_REMINDER_AFTER)
                     .does(clicker -> {
                         land.postponeBypassReminder(clicker);
                         messages.send(player, "land.bypass-reminder-extended");
                     });
-            de.raindancer.core.ui.chat.ChatButton stopAsking = buttons.label("<gray>[Stop asking]</gray>")
+            ChatButton stopAsking = buttons.label("<gray>[Stop asking]</gray>")
                     .tooltip("<gray>Keep the bypass on without being asked again this session")
                     .forOnly(id).expiringIn(BYPASS_REMINDER_AFTER)
                     .does(clicker -> {
@@ -1072,7 +1089,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
-    public void reapplyGrants(org.bukkit.entity.Player player) {
+    public void reapplyGrants(Player player) {
         if (grantListener != null) {
             grantListener.apply(player);
         }
@@ -1089,22 +1106,22 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
-    public de.raindancer.core.world.manage.WorldEntryPoints worldEntryPoints() {
+    public WorldEntryPoints worldEntryPoints() {
         return worldEntryPoints;
     }
 
     @Override
-    public de.raindancer.core.world.manage.SeedHistory seedHistory() {
+    public SeedHistory seedHistory() {
         return seedHistory;
     }
 
     @Override
-    public de.raindancer.core.world.manage.WorldRegenerator worldRegenerator() {
+    public WorldRegenerator worldRegenerator() {
         return worldRegenerator;
     }
 
     @Override
-    public de.raindancer.core.world.manage.WorldEntryRules worldEntryRules() {
+    public WorldEntryRules worldEntryRules() {
         return worldEntryRules;
     }
 
@@ -1148,9 +1165,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
-    public de.raindancer.core.world.chunk.ChunkPregen pregeneration(
-            java.util.List<de.raindancer.core.world.chunk.ChunkAt> region) {
-        return new de.raindancer.core.world.chunk.ChunkPregen(new BukkitChunkLoader(this), region);
+    public ChunkPregen pregeneration(
+            List<ChunkAt> region) {
+        return new ChunkPregen(new BukkitChunkLoader(this), region);
     }
 
     @Override
@@ -1189,11 +1206,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     /** Held here rather than built lazily: modules report into it during their own enable. */
-    private final de.raindancer.core.platform.command.CommandDirectory commandDirectory =
-            new de.raindancer.core.platform.command.CommandDirectory();
+    private final CommandDirectory commandDirectory =
+            new CommandDirectory();
 
     @Override
-    public de.raindancer.core.platform.command.CommandDirectory commands() {
+    public CommandDirectory commands() {
         return commandDirectory;
     }
 
@@ -1369,7 +1386,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * plugin that throws on the way down while shutting down hides whatever went wrong on the way up.
      */
     private static void stopTimer(
-            io.papermc.paper.threadedregions.scheduler.ScheduledTask task) {
+            ScheduledTask task) {
         if (task != null && !task.isCancelled()) {
             task.cancel();
         }

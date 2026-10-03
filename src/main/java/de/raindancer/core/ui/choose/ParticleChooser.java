@@ -13,6 +13,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -50,7 +52,7 @@ public final class ParticleChooser extends PaginatedMenu<ParticleGroup> {
 
     /** Every particle this server has. */
     public static ParticleCatalogue everythingOnThisServer() {
-        return new ParticleCatalogue(() -> java.util.Arrays.stream(Particle.values())
+        return new ParticleCatalogue(() -> Arrays.stream(Particle.values())
                 .map(Enum::name)
                 .toList());
     }
@@ -103,7 +105,7 @@ public final class ParticleChooser extends PaginatedMenu<ParticleGroup> {
         @Override
         protected ItemStack icon(String particle) {
             Material face = Material.matchMaterial(ParticleCatalogue.iconFor(particle));
-            List<String> lore = new java.util.ArrayList<>(List.of(
+            List<String> lore = new ArrayList<>(List.of(
                     "<" + Style.itemLore() + ">" + particle));
             if (ParticleCatalogue.needsExtraData(particle)) {
                 // Said on the button rather than discovered afterwards: this one spawns nothing at

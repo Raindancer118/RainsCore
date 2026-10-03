@@ -9,6 +9,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -241,7 +242,7 @@ public final class LootTables {
     }
 
     private static Map<String, Object> asMap(LootEntry entry) {
-        Map<String, Object> written = new java.util.LinkedHashMap<>();
+        Map<String, Object> written = new LinkedHashMap<>();
         if (entry.isCustom()) {
             written.put("item", entry.customKey());
         } else {

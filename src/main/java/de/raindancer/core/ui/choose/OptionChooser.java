@@ -9,6 +9,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.Locale;
@@ -78,7 +79,7 @@ public final class OptionChooser extends PaginatedMenu<String> {
     }
 
     @Override
-    protected org.bukkit.inventory.ItemStack icon(String option) {
+    protected ItemStack icon(String option) {
         boolean chosen = option != null && option.equalsIgnoreCase(current);
         // Lit up rather than merely ticked in the lore: on a page of otherwise identical buttons the
         // only thing anybody scans for is which one looks different.
@@ -99,7 +100,7 @@ public final class OptionChooser extends PaginatedMenu<String> {
     }
 
     @Override
-    protected org.bukkit.inventory.ItemStack emptyIcon() {
+    protected ItemStack emptyIcon() {
         return Icons.of(Material.COBWEB, "<gray>Nothing to choose from",
                 "<dark_gray>This setting has no listed values.");
     }

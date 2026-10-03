@@ -4,6 +4,7 @@ import org.bukkit.Material;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -409,7 +410,7 @@ public final class Teams {
                 unassigned.add(candidate);
             }
         }
-        java.util.Collections.shuffle(unassigned, random);
+        Collections.shuffle(unassigned, random);
 
         TeamPolicy p = policy.get();
         int autoTeamCounter = teams.size();

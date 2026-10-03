@@ -1,7 +1,10 @@
 package de.raindancer.core.ui.tablist;
 
+import de.raindancer.core.RainsCore;
+import de.raindancer.core.ui.banner.BlockLetters;
 import de.raindancer.core.ui.identity.Identities;
 import de.raindancer.core.ui.identity.Symbols;
+import de.raindancer.core.ui.messages.Messages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
@@ -11,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.ToIntFunction;
 
 /**
  * What the tablist says: who is on, and which world they are in.
@@ -299,8 +303,8 @@ public final class TablistModel {
      * wider than a tablist column.
      */
     public static List<String> logoFor(String name) {
-        return de.raindancer.core.ui.banner.BlockLetters.render(
-                de.raindancer.core.ui.banner.BlockLetters.abbreviate(
+        return BlockLetters.render(
+                BlockLetters.abbreviate(
                         name == null || name.isBlank() ? "MC" : name)).stream()
                 .map(line -> "<gradient:#C9A0FF:#7C5CBF>" + line + "</gradient>")
                 .toList();
@@ -405,7 +409,7 @@ public final class TablistModel {
      *
      * @param ranks higher sorts nearer the top; 0 to 99
      */
-    public void rankOf(java.util.function.ToIntFunction<TablistEntry> ranks) {
+    public void rankOf(ToIntFunction<TablistEntry> ranks) {
         this.ranks = ranks == null ? entry -> 0 : ranks;
     }
 
@@ -424,7 +428,7 @@ public final class TablistModel {
         }
     }
 
-    private volatile java.util.function.ToIntFunction<TablistEntry> ranks = entry -> 0;
+    private volatile ToIntFunction<TablistEntry> ranks = entry -> 0;
 
     private static String escape(String raw) {
         return MINI.escapeTags(raw);
@@ -439,11 +443,11 @@ public final class TablistModel {
      */
     private static String nobodyOn() {
         String builtIn = "<dark_gray>nobody is on";
-        if (!de.raindancer.core.RainsCore.isAvailable()) {
+        if (!RainsCore.isAvailable()) {
             return builtIn;
         }
-        de.raindancer.core.ui.messages.Messages words =
-                de.raindancer.core.RainsCore.get().messages();
+        Messages words =
+                RainsCore.get().messages();
         return words == null ? builtIn : words.raw("tablist.nobody-on");
     }
 

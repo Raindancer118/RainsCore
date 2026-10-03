@@ -1,6 +1,7 @@
 package de.raindancer.core.data.sql;
 
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * What a database should look like, as an ordered list of steps that get it there.
@@ -54,7 +55,7 @@ public record Schema(List<String> steps) {
         if (from >= steps.size()) {
             return List.of();
         }
-        return java.util.stream.IntStream.range(from, steps.size())
+        return IntStream.range(from, steps.size())
                 .mapToObj(at -> new Step(at + 1, steps.get(at)))
                 .toList();
     }

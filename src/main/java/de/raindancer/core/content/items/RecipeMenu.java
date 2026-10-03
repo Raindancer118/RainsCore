@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -127,7 +128,7 @@ public final class RecipeMenu extends Menu {
                         List.of("<gray>Empties every slot.",
                                 "<dark_gray>Nothing is saved until you click Save.")),
                 click -> {
-                    java.util.Arrays.fill(grid, null);
+                    Arrays.fill(grid, null);
                     refresh();
                 });
 
@@ -135,7 +136,7 @@ public final class RecipeMenu extends Menu {
                         List.of("<gray>The recipe this item currently has.",
                                 "<dark_gray>Undoes everything since this page opened.")),
                 click -> {
-                    java.util.Arrays.fill(grid, null);
+                    Arrays.fill(grid, null);
                     readInto(grid, item.recipe());
                     refresh();
                 });

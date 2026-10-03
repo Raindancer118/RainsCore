@@ -3,6 +3,7 @@ package de.raindancer.core.world.protection;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Enderman;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.FallingBlock;
@@ -20,16 +21,21 @@ import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
+import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
+import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Enforces the environmental flags: explosions, fire, decay, grief, pistons, fluids, weather and the
@@ -235,8 +241,8 @@ public final class EnvironmentProtectionListener implements Listener {
      * push it in. Every block in the list was unclaimed, so nothing objected, and the block landed inside —
      * replacing whatever was there.
      */
-    private boolean pistonCrossesBorder(Block piston, java.util.List<Block> moved,
-                                        org.bukkit.block.BlockFace direction) {
+    private boolean pistonCrossesBorder(Block piston, List<Block> moved,
+                                        BlockFace direction) {
         if (!land.landFlags().isEnforced(LandFlag.PISTONS_FROM_OUTSIDE)) {
             return false;
         }
@@ -303,9 +309,9 @@ public final class EnvironmentProtectionListener implements Listener {
      * and dropping experience where the items vanished leaves a glowing pile marking a death that cost nothing.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
+    public void onDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-        org.bukkit.Location where = player.getLocation();
+        Location where = player.getLocation();
 
         // isAppliedAt, not isAllowedAt. This flag's true means "keep their things", not "keeping their
         // things is permitted", and the permission question answers yes on unclaimed ground — which is most
@@ -339,7 +345,7 @@ public final class EnvironmentProtectionListener implements Listener {
      * rather than losing an expensive item to a rule they did not know about.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onTotem(org.bukkit.event.entity.EntityResurrectEvent event) {
+    public void onTotem(EntityResurrectEvent event) {
         if (!land.landFlags().isEnforced(LandFlag.TOTEMS)) {
             return;
         }
@@ -364,7 +370,7 @@ public final class EnvironmentProtectionListener implements Listener {
      * is one machine.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onRedstone(org.bukkit.event.block.BlockRedstoneEvent event) {
+    public void onRedstone(BlockRedstoneEvent event) {
         if (!land.landFlags().isEnforced(LandFlag.REDSTONE)) {
             return;
         }
@@ -384,12 +390,12 @@ public final class EnvironmentProtectionListener implements Listener {
      * a bucket of wheat.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onBreed(org.bukkit.event.entity.EntityBreedEvent event) {
+    public void onBreed(EntityBreedEvent event) {
         if (!land.landFlags().isEnforced(LandFlag.BREEDING)) {
             return;
         }
-        org.bukkit.entity.LivingEntity breeder = event.getBreeder();
-        java.util.UUID who = breeder instanceof Player person ? person.getUniqueId() : null;
+        LivingEntity breeder = event.getBreeder();
+        UUID who = breeder instanceof Player person ? person.getUniqueId() : null;
         if (breeder instanceof Player person && land.isBypassing(person)) {
             return;
         }

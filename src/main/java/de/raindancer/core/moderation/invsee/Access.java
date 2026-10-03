@@ -1,5 +1,7 @@
 package de.raindancer.core.moderation.invsee;
 
+import de.raindancer.core.ui.messages.Messages;
+
 /**
  * What somebody watching an inventory is allowed to do to it.
  *
@@ -32,7 +34,7 @@ public enum Access {
     }
 
     /** What to call this level, in whatever words this server uses. */
-    public String saying(de.raindancer.core.ui.messages.Messages words) {
+    public String saying(Messages words) {
         return words == null ? builtIn : words.raw(key);
     }
 

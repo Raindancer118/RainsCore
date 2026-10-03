@@ -2,6 +2,7 @@ package de.raindancer.core.content.items;
 
 import de.raindancer.core.ui.messages.Messages;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -9,6 +10,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -74,7 +76,7 @@ public final class CustomItemListener implements Listener {
         if (event.getHand() != EquipmentSlot.HAND) {
             return;   // one click, one use — the off hand fires a second event for the same click
         }
-        if (event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
+        if (event.useItemInHand() == Event.Result.DENY) {
             return;
         }
         Optional<ItemTrigger> trigger = ItemTrigger.forClick(event.getAction());
@@ -104,7 +106,7 @@ public final class CustomItemListener implements Listener {
                 event.setCancelled(true);
                 messages.send(player, "items.cooling-down", "item", nameOf(held),
                         "seconds", String.valueOf(
-                                Math.max(1, result.remaining().orElse(java.time.Duration.ZERO)
+                                Math.max(1, result.remaining().orElse(Duration.ZERO)
                                         .toSeconds())));
             }
             case NO_CHARGES -> {

@@ -1,14 +1,18 @@
 package de.raindancer.core.world.safety;
 
+import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.world.chunk.ChunkAt;
 import de.raindancer.core.world.chunk.ChunkHolds;
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -113,7 +117,7 @@ public final class Safety {
     /** The same, with the checker configured first — for a search that wants natural ground only. */
     public CompletableFuture<Optional<Spot>> findSafeAtConsistentHeight(
             Spot around, int radius, int heightTolerance,
-            java.util.function.Consumer<SafeSpots> setUp) {
+            Consumer<SafeSpots> setUp) {
         if (around == null) {
             return CompletableFuture.completedFuture(Optional.empty());
         }
@@ -129,7 +133,7 @@ public final class Safety {
 
     /** The same, with the checker configured first — for water, or for looking at the surroundings. */
     public CompletableFuture<Optional<Spot>> findSafe(Spot around, int radius,
-                                                      java.util.function.Consumer<SafeSpots> setUp) {
+                                                      Consumer<SafeSpots> setUp) {
         if (around == null) {
             return CompletableFuture.completedFuture(Optional.empty());
         }
@@ -155,7 +159,7 @@ public final class Safety {
      * there first rather than trusting whichever thread the future happened to continue on.
      */
     private <T> CompletableFuture<T> onTheOwningThread(Supplier<T> lookup) {
-        if (org.bukkit.Bukkit.isPrimaryThread()) {
+        if (Bukkit.isPrimaryThread()) {
             return CompletableFuture.completedFuture(lookup.get());
         }
         CompletableFuture<T> future = new CompletableFuture<>();
@@ -178,8 +182,8 @@ public final class Safety {
      * rather than a mystery freeze twenty minutes into a session.
      */
     private void warnIfOnTheServerThread() {
-        if (org.bukkit.Bukkit.isPrimaryThread() && warnedAboutBlocking.compareAndSet(false, true)) {
-            de.raindancer.core.platform.log.Log.of("safety").warn(
+        if (Bukkit.isPrimaryThread() && warnedAboutBlocking.compareAndSet(false, true)) {
+            Log.of("safety").warn(
                     "findSafe was called on the server thread. That is fine — but if you then "
                             + "join() or get() the result you will deadlock the server, because the "
                             + "chunk load it is waiting for needs this same thread. Use "
@@ -187,8 +191,8 @@ public final class Safety {
         }
     }
 
-    private final java.util.concurrent.atomic.AtomicBoolean warnedAboutBlocking =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicBoolean warnedAboutBlocking =
+            new AtomicBoolean();
 
     /**
      * Every chunk a search of this size could touch.

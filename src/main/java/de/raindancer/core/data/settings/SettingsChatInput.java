@@ -7,6 +7,7 @@ import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.ui.prompt.ChatPrompts;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import de.raindancer.core.RainsCore;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -116,8 +117,8 @@ public final class SettingsChatInput {
      * <p>Asked for each time rather than held, because this is built while the plugin is still
      * starting and the message file may be read again afterwards.
      */
-    private static de.raindancer.core.ui.messages.Messages words() {
-        return de.raindancer.core.RainsCore.get().messages();
+    private static Messages words() {
+        return RainsCore.get().messages();
     }
 
 }

@@ -1,6 +1,9 @@
 package de.raindancer.core.moderation.invsee;
 
+import de.raindancer.core.ui.messages.Messages;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -93,8 +96,8 @@ public final class Layout {
     }
 
     /** Every window slot that is chrome rather than an item — the divider and the gaps. */
-    public static java.util.List<Integer> chromeSlots() {
-        java.util.List<Integer> chrome = new java.util.ArrayList<>();
+    public static List<Integer> chromeSlots() {
+        List<Integer> chrome = new ArrayList<>();
         for (int slot = 0; slot < SIZE; slot++) {
             if (at(slot).isEmpty()) {
                 chrome.add(slot);
@@ -127,7 +130,7 @@ public final class Layout {
 
     /** The same, in whatever words this server uses. */
     public static String armourName(int indexFromHelmet,
-                                    de.raindancer.core.ui.messages.Messages words) {
+                                    Messages words) {
         return words == null ? armourName(indexFromHelmet) : words.raw(armourKey(indexFromHelmet));
     }
 

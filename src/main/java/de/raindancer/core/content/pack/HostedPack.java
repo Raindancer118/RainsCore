@@ -3,6 +3,7 @@ package de.raindancer.core.content.pack;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * A pack that already exists somewhere, rather than one built here.
@@ -26,8 +27,8 @@ import java.util.UUID;
 public record HostedPack(String id, String url, String sha1) {
 
     /** What a sha1 looks like written down. A client rejects anything else, saying nothing useful. */
-    private static final java.util.regex.Pattern SHA1 =
-            java.util.regex.Pattern.compile("[0-9a-f]{40}");
+    private static final Pattern SHA1 =
+            Pattern.compile("[0-9a-f]{40}");
 
     /**
      * One, with everything tidied.

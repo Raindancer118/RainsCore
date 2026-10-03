@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.vanish;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -19,7 +20,7 @@ public interface VanishSink {
      *
      * @param mayStillSee who is allowed to keep seeing them
      */
-    void hide(UUID who, java.util.Set<UUID> mayStillSee);
+    void hide(UUID who, Set<UUID> mayStillSee);
 
     /** Shows them again. */
     void show(UUID who);
@@ -60,8 +61,8 @@ public interface VanishSink {
      *
      * @param exceptThem who should not be told, because they know
      */
-    void announceDeparture(UUID who, java.util.Set<UUID> exceptThem);
+    void announceDeparture(UUID who, Set<UUID> exceptThem);
 
     /** The counterpart: what the server would have said had they just joined. */
-    void announceArrival(UUID who, java.util.Set<UUID> exceptThem);
+    void announceArrival(UUID who, Set<UUID> exceptThem);
 }

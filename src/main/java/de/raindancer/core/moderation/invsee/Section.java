@@ -1,5 +1,7 @@
 package de.raindancer.core.moderation.invsee;
 
+import de.raindancer.core.ui.messages.Messages;
+
 /**
  * The parts of what somebody is carrying.
  *
@@ -49,7 +51,7 @@ public enum Section {
     }
 
     /** What to write above it, in whatever words this server uses. */
-    public String title(de.raindancer.core.ui.messages.Messages words) {
+    public String title(Messages words) {
         return words == null ? title : words.raw(key);
     }
 

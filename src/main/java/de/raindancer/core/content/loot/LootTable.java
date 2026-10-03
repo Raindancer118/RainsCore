@@ -1,6 +1,7 @@
 package de.raindancer.core.content.loot;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -112,7 +113,7 @@ public record LootTable(String plugin, String id, int tier, int fillPercent,
         for (int slot = 0; slot < containerSize; slot++) {
             slots.add(slot);
         }
-        java.util.Collections.shuffle(slots, random);
+        Collections.shuffle(slots, random);
         return List.copyOf(slots.subList(0, Math.max(0, Math.min(containerSize, howMany))));
     }
 

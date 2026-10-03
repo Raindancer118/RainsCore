@@ -5,8 +5,10 @@ import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.World;
+import org.bukkit.plugin.Plugin;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The handful of lines that actually load a chunk.
@@ -18,9 +20,9 @@ public final class BukkitChunkLoader implements ChunkLoader {
 
     private static final LogChannel log = Log.of("chunks");
 
-    private final org.bukkit.plugin.Plugin plugin;
+    private final Plugin plugin;
 
-    public BukkitChunkLoader(org.bukkit.plugin.Plugin plugin) {
+    public BukkitChunkLoader(Plugin plugin) {
         this.plugin = plugin;
     }
 
@@ -83,8 +85,8 @@ public final class BukkitChunkLoader implements ChunkLoader {
     /** How long "a moment" is: long enough for a search that starts right away, and no longer. */
     private static final long MOMENT_TICKS = 100L;
 
-    private final java.util.concurrent.ConcurrentHashMap<ChunkAt, Integer> held =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private final ConcurrentHashMap<ChunkAt, Integer> held =
+            new ConcurrentHashMap<>();
 
     /**
      * Turns the force-load flag on or off, on the thread that is allowed to.

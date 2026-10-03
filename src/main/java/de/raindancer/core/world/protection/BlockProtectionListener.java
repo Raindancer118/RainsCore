@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockMultiPlaceEvent;
@@ -117,7 +118,7 @@ public final class BlockProtectionListener implements Listener {
     /** Trampling farmland fires as a physical interaction, not as a block break. */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onTrample(PlayerInteractEvent event) {
-        if (event.getAction() != org.bukkit.event.block.Action.PHYSICAL) {
+        if (event.getAction() != Action.PHYSICAL) {
             return;
         }
         Block block = event.getClickedBlock();

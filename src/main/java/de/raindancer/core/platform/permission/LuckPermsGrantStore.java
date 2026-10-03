@@ -13,6 +13,7 @@ import net.luckperms.api.node.types.InheritanceNode;
 import net.luckperms.api.node.types.PermissionNode;
 import net.luckperms.api.query.QueryOptions;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -20,11 +21,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * {@link GrantStore} backed by an installed LuckPerms.
@@ -248,7 +252,7 @@ final class LuckPermsGrantStore implements GrantStore {
     }
 
     private static String groupNameFor(String presetId) {
-        String cleaned = presetId.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
+        String cleaned = presetId.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
         return GROUP_PREFIX + (cleaned.isEmpty() ? "preset" : cleaned);
     }
 
@@ -391,8 +395,8 @@ final class LuckPermsGrantStore implements GrantStore {
             return;
         }
         YamlStore oldStore = new YamlStore(oldGrantsFile);
-        var imported = new java.util.concurrent.atomic.AtomicInteger();
-        java.util.List<CompletableFuture<Void>> saves = new java.util.ArrayList<>();
+        var imported = new AtomicInteger();
+        List<CompletableFuture<Void>> saves = new ArrayList<>();
         LocalGrantStore.readInto(oldStore, (who, nodes) -> {
             CompletableFuture<Void> saved = grantAllSaving(who, nodes);
             if (saved != null) {
@@ -405,7 +409,7 @@ final class LuckPermsGrantStore implements GrantStore {
         // permissions are nowhere. Waited for here because this runs once, at startup.
         try {
             CompletableFuture.allOf(saves.toArray(CompletableFuture[]::new))
-                    .get(30, java.util.concurrent.TimeUnit.SECONDS);
+                    .get(30, TimeUnit.SECONDS);
         } catch (Exception notSaved) {
             log.error("LuckPerms did not confirm saving the permissions imported from grants.yml ({}). "
                     + "grants.yml is left where it is and will be imported again on the next start.",
@@ -416,7 +420,7 @@ final class LuckPermsGrantStore implements GrantStore {
             Files.move(oldGrantsFile,
                     oldGrantsFile.resolveSibling(oldGrantsFile.getFileName() + ".imported-into-luckperms"),
                     StandardCopyOption.REPLACE_EXISTING);
-        } catch (java.io.IOException moveFailed) {
+        } catch (IOException moveFailed) {
             log.warn("Imported grants.yml into LuckPerms but could not rename it aside afterwards: {}. "
                     + "It is safe to delete by hand once the import above is confirmed.",
                     moveFailed.toString());

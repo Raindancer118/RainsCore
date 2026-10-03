@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 /**
@@ -280,7 +281,7 @@ public final class PackBuilder {
      * guessing at here.
      */
     private static String whyItIsNotAPack(Path file) {
-        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file.toFile())) {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
             return zip.getEntry("pack.mcmeta") == null ? "it has no pack.mcmeta" : null;
         } catch (IOException | RuntimeException notAZip) {
             return "it is not a zip";

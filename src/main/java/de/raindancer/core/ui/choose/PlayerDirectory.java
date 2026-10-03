@@ -2,8 +2,11 @@ package de.raindancer.core.ui.choose;
 
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -99,12 +102,12 @@ public final class PlayerDirectory {
      * <p>Every rank is present even when empty is not — an empty section is a heading with nothing
      * under it — but nobody is ever dropped: the sum of the sections is the whole list.
      */
-    public java.util.Map<Presence, List<PlayerEntry>> bySection() {
+    public Map<Presence, List<PlayerEntry>> bySection() {
         // Read once. This asked the supplier once per rank, and the Bukkit supplier reads the whole
         // player data directory off disk — so opening a chooser hit the disk and sorted thousands of
         // offline players three times over, on whatever thread the menu was drawn on.
         List<PlayerEntry> everybody = everybody();
-        java.util.Map<Presence, List<PlayerEntry>> sections = new java.util.LinkedHashMap<>();
+        Map<Presence, List<PlayerEntry>> sections = new LinkedHashMap<>();
         for (Presence presence : Presence.values()) {
             List<PlayerEntry> theirs = everybody.stream()
                     .filter(entry -> presenceOf(entry) == presence)
@@ -187,7 +190,7 @@ public final class PlayerDirectory {
      * yourself is a menu with a bug in it.
      */
     public PlayerDirectory excluding(UUID... ids) {
-        Set<UUID> without = new java.util.HashSet<>(hidden);
+        Set<UUID> without = new HashSet<>(hidden);
         for (UUID id : ids) {
             if (id != null) {
                 without.add(id);

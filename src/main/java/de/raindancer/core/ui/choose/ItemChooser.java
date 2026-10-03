@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.choose;
 
+import de.raindancer.core.RainsCore;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Style;
 import de.raindancer.core.ui.effect.Cues;
@@ -13,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -69,8 +71,8 @@ public final class ItemChooser extends PaginatedMenu<Category> {
      * rebound this one too — which is the whole point of there being named cues at all.
      */
     private void play(String cue) {
-        if (de.raindancer.core.RainsCore.isAvailable()) {
-            de.raindancer.core.RainsCore.get().effects().play(viewer().getUniqueId(), cue);
+        if (RainsCore.isAvailable()) {
+            RainsCore.get().effects().play(viewer().getUniqueId(), cue);
         }
     }
 
@@ -81,7 +83,7 @@ public final class ItemChooser extends PaginatedMenu<Category> {
      * the sorting is testable without a server and this is not.
      */
     public static Catalogue everythingOnThisServer() {
-        return new Catalogue(() -> java.util.Arrays.stream(Material.values())
+        return new Catalogue(() -> Arrays.stream(Material.values())
                 .filter(material -> !material.isLegacy())
                 .filter(Material::isItem)
                 .map(Enum::name)

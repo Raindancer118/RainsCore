@@ -3,6 +3,7 @@ package de.raindancer.core.content.items;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -122,7 +123,7 @@ public record ItemAbility(String plugin, String id, ItemTrigger trigger, String 
         }
 
         /** An effect that always happens. */
-        public Builder does(java.util.function.Consumer<ItemUse> value) {
+        public Builder does(Consumer<ItemUse> value) {
             this.effect = use -> {
                 value.accept(use);
                 return true;

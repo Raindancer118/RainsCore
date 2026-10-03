@@ -1,6 +1,7 @@
 package de.raindancer.core.platform.util;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -192,7 +193,7 @@ public final class Times {
     }
 
     /** What tab completion offers for a length. */
-    public static java.util.List<String> suggestions() {
-        return java.util.List.of("perm", "30m", "1h", "12h", "1d", "7d", "2w");
+    public static List<String> suggestions() {
+        return List.of("perm", "30m", "1h", "12h", "1d", "7d", "2w");
     }
 }

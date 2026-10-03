@@ -35,9 +35,20 @@ import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
+import de.raindancer.core.ui.messages.Messages;
+import org.bukkit.Material;
+import org.bukkit.entity.AreaEffectCloud;
+import org.bukkit.event.entity.PlayerLeashEntityEvent;
+import org.bukkit.event.player.PlayerRiptideEvent;
+import org.bukkit.potion.PotionType;
+import org.bukkit.util.Vector;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,11 +60,11 @@ public final class InteractionProtectionListener implements Listener {
     /** Throttles every flag refusal this listener sends, per player — see refuse. */
     private final Map<UUID, Long> lastPotionRefusal =
             new ConcurrentHashMap<>();
-    private final de.raindancer.core.ui.messages.Messages messages;
+    private final Messages messages;
     private final Audit audit;
 
     public InteractionProtectionListener(Land land,
-                                         de.raindancer.core.ui.messages.Messages messages) {
+                                         Messages messages) {
         this(land, messages, null);
     }
 
@@ -62,7 +73,7 @@ public final class InteractionProtectionListener implements Listener {
      *              nothing
      */
     public InteractionProtectionListener(Land land,
-                                         de.raindancer.core.ui.messages.Messages messages,
+                                         Messages messages,
                                          Audit audit) {
         this.land = land;
         this.messages = messages;
@@ -235,7 +246,7 @@ public final class InteractionProtectionListener implements Listener {
      * hovering by a player fires this repeatedly.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onExperiencePickup(com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent event) {
+    public void onExperiencePickup(PlayerPickupExperienceEvent event) {
         if (!land.landFlags().isEnforced(LandFlag.XP_PICKUP)) {
             return;
         }
@@ -338,7 +349,7 @@ public final class InteractionProtectionListener implements Listener {
         if (thrower == null || !isHarmful(event.getPotion().getEffects())) {
             return;
         }
-        for (LivingEntity affected : new java.util.ArrayList<>(event.getAffectedEntities())) {
+        for (LivingEntity affected : new ArrayList<>(event.getAffectedEntities())) {
             if (!mayBeSplashed(thrower, affected)) {
                 event.setIntensity(affected, 0.0D);
             }
@@ -386,8 +397,8 @@ public final class InteractionProtectionListener implements Listener {
         if (!land.landFlags().isEnforced(LandFlag.POTIONS)) {
             return;
         }
-        org.bukkit.Material drinking = event.getItem().getType();
-        if (drinking != org.bukkit.Material.POTION) {
+        Material drinking = event.getItem().getType();
+        if (drinking != Material.POTION) {
             return;   // milk, food and everything else is not this flag's business
         }
         Player player = event.getPlayer();
@@ -443,7 +454,7 @@ public final class InteractionProtectionListener implements Listener {
      * click, so a border that stops one does not stop the other.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onRiptide(org.bukkit.event.player.PlayerRiptideEvent event) {
+    public void onRiptide(PlayerRiptideEvent event) {
         Player player = event.getPlayer();
         if (!land.landFlags().isEnforced(LandFlag.RIPTIDE) || land.isBypassing(player)) {
             return;
@@ -453,7 +464,7 @@ public final class InteractionProtectionListener implements Listener {
         }
         // PlayerRiptideEvent cannot be cancelled — the client has already launched — so the velocity is taken
         // away on the next tick instead. Stopping them dead rather than letting them sail over the wall.
-        player.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+        player.setVelocity(new Vector(0, 0, 0));
         land.areaAt(player.getLocation()).ifPresent(area -> refuseRiptide(player, area));
     }
 
@@ -469,7 +480,7 @@ public final class InteractionProtectionListener implements Listener {
      * protection ever sees it happen.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onLeash(org.bukkit.event.entity.PlayerLeashEntityEvent event) {
+    public void onLeash(PlayerLeashEntityEvent event) {
         Player player = event.getPlayer();
         if (!land.landFlags().isEnforced(LandFlag.LEADS) || land.isBypassing(player)) {
             return;
@@ -491,7 +502,7 @@ public final class InteractionProtectionListener implements Listener {
      * a wall nobody meant to be climbable.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onVehiclePlaced(org.bukkit.event.player.PlayerInteractEvent event) {
+    public void onVehiclePlaced(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getItem() == null) {
             return;
         }
@@ -502,7 +513,7 @@ public final class InteractionProtectionListener implements Listener {
         if (!land.landFlags().isEnforced(LandFlag.BOATS) || land.isBypassing(player)) {
             return;
         }
-        org.bukkit.Location where = event.getClickedBlock() == null
+        Location where = event.getClickedBlock() == null
                 ? player.getLocation() : event.getClickedBlock().getLocation();
         if (land.landFlags().isAllowedAt(where, LandFlag.BOATS, player.getUniqueId())) {
             return;
@@ -512,7 +523,7 @@ public final class InteractionProtectionListener implements Listener {
     }
 
     /** Whether this item puts a vehicle down. Boats, rafts and every kind of minecart. */
-    private static boolean isVehicle(org.bukkit.Material material) {
+    private static boolean isVehicle(Material material) {
         String name = material.name();
         return name.endsWith("_BOAT") || name.endsWith("_CHEST_BOAT")
                 || name.endsWith("_RAFT") || name.endsWith("_CHEST_RAFT")
@@ -528,7 +539,7 @@ public final class InteractionProtectionListener implements Listener {
             return;
         }
         land.areaAt(where).ifPresent(area -> {
-            java.util.UUID owner = area.owners().isEmpty() ? null : area.owners().get(0);
+            UUID owner = area.owners().isEmpty() ? null : area.owners().get(0);
             audit.record(AuditEntry.of("land", "opened protected container")
                     .by(player.getUniqueId(), player.getName())
                     .to(owner, area.name())
@@ -556,7 +567,7 @@ public final class InteractionProtectionListener implements Listener {
     }
 
     /** Whether potions are allowed for this person on this ground. */
-    private boolean potionsAllowedFor(Player who, org.bukkit.Location where) {
+    private boolean potionsAllowedFor(Player who, Location where) {
         return land.landFlags().isAllowedAt(where, LandFlag.POTIONS, who.getUniqueId());
     }
 
@@ -584,11 +595,11 @@ public final class InteractionProtectionListener implements Listener {
      * {@code getCustomEffects()} is empty for it — so checking only the custom list read every stock Lingering
      * Potion of Harming as harmless and let it through.
      */
-    private boolean isHarmful(org.bukkit.entity.AreaEffectCloud cloud) {
+    private boolean isHarmful(AreaEffectCloud cloud) {
         if (isHarmful(cloud.getCustomEffects())) {
             return true;
         }
-        org.bukkit.potion.PotionType base = cloud.getBasePotionType();
+        PotionType base = cloud.getBasePotionType();
         if (base == null) {
             return false;
         }
@@ -596,7 +607,7 @@ public final class InteractionProtectionListener implements Listener {
     }
 
     /** Whether an effect list contains anything a player would not want thrown at them. */
-    private boolean isHarmful(java.util.Collection<PotionEffect> effects) {
+    private boolean isHarmful(Collection<PotionEffect> effects) {
         for (PotionEffect effect : effects) {
             if (HARMFUL_EFFECTS.contains(effect.getType())) {
                 return true;
@@ -605,7 +616,7 @@ public final class InteractionProtectionListener implements Listener {
         return false;
     }
 
-    private static final java.util.Set<PotionEffectType> HARMFUL_EFFECTS = java.util.Set.of(
+    private static final Set<PotionEffectType> HARMFUL_EFFECTS = Set.of(
             PotionEffectType.INSTANT_DAMAGE, PotionEffectType.POISON, PotionEffectType.WITHER,
             PotionEffectType.SLOWNESS, PotionEffectType.WEAKNESS, PotionEffectType.MINING_FATIGUE,
             PotionEffectType.BLINDNESS, PotionEffectType.NAUSEA, PotionEffectType.HUNGER,

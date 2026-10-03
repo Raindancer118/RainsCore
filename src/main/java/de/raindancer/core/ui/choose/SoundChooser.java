@@ -16,6 +16,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -63,7 +64,7 @@ public final class SoundChooser extends PaginatedMenu<SoundFamily> {
      */
     public static SoundCatalogue everythingOnThisServer() {
         return new SoundCatalogue(() -> {
-            List<String> keys = new java.util.ArrayList<>();
+            List<String> keys = new ArrayList<>();
             Registry.SOUNDS.forEach(sound -> {
                 NamespacedKey key = sound.getKey();
                 keys.add(key.getNamespace().equals("minecraft")

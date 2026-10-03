@@ -8,11 +8,15 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongSupplier;
 
 /**
@@ -80,8 +84,8 @@ public final class Land {
      * enabling at once could both read null and both believe they had the job. Whichever wrote second would
      * win silently, so which plugin's rules a server ran would depend on load order.
      */
-    private final java.util.concurrent.atomic.AtomicReference<LandProvider> provider =
-            new java.util.concurrent.atomic.AtomicReference<>();
+    private final AtomicReference<LandProvider> provider =
+            new AtomicReference<>();
 
     private final Set<UUID> bypassing = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastRefusal = new ConcurrentHashMap<>();
@@ -219,10 +223,10 @@ public final class Land {
      * this only says who is due, since asking has nothing to do with the flag question the rest of
      * this class answers.
      */
-    public java.util.List<UUID> dueForBypassReminder(java.time.Duration after) {
+    public List<UUID> dueForBypassReminder(Duration after) {
         long now = clock.getAsLong();
         long threshold = after.toMillis();
-        java.util.List<UUID> due = new java.util.ArrayList<>();
+        List<UUID> due = new ArrayList<>();
         for (UUID id : bypassing) {
             if (bypassReminderSilenced.contains(id)) {
                 continue;

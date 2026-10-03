@@ -4,6 +4,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -98,7 +99,7 @@ public final class ChunkPregen {
         if (state != State.RUNNING || batchSize <= 0) {
             return CompletableFuture.completedFuture(0);
         }
-        List<ChunkAt> batch = new java.util.ArrayList<>(Math.min(batchSize, remaining.size()));
+        List<ChunkAt> batch = new ArrayList<>(Math.min(batchSize, remaining.size()));
         for (int taken = 0; taken < batchSize; taken++) {
             ChunkAt next = remaining.poll();
             if (next == null) {

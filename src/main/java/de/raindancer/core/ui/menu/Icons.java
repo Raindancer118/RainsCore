@@ -10,6 +10,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import de.raindancer.core.RainsCore;
+import de.raindancer.core.ui.messages.Messages;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.UUID;
 
@@ -112,7 +116,7 @@ public final class Icons {
             Component name = meta.displayName();
             if (name != null) {
                 meta.displayName(name.colorIfAbsent(
-                        net.kyori.adventure.text.format.NamedTextColor.GRAY));
+                        NamedTextColor.GRAY));
             }
             List<Component> lore = meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
             lore.add(Component.empty());
@@ -191,14 +195,14 @@ public final class Icons {
      * be handed a {@code Messages} that would still be the right one later.
      */
     private static String word(String key, String builtIn, Object... values) {
-        if (!de.raindancer.core.RainsCore.isAvailable()) {
+        if (!RainsCore.isAvailable()) {
             return builtIn;
         }
-        de.raindancer.core.ui.messages.Messages words = de.raindancer.core.RainsCore.get().messages();
+        Messages words = RainsCore.get().messages();
         if (words == null) {
             return builtIn;
         }
-        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        return PlainTextComponentSerializer.plainText()
                 .serialize(words.get(key, values));
     }
 

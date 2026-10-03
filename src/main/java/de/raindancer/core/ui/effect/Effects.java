@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -229,7 +230,7 @@ public final class Effects {
      * a test leaves alone — so a sequence plays fully in a test, on this thread, in order, and nothing has to
      * pretend a scheduler exists to check that a cannon has sixteen sounds in it.
      */
-    private void playSounds(Effect effect, java.util.function.Consumer<SoundCue> play) {
+    private void playSounds(Effect effect, Consumer<SoundCue> play) {
         for (SoundSequence.Step step : effect.sounds().steps()) {
             if (step.sound().isSilent()) {
                 continue;

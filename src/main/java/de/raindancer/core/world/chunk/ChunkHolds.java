@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Who is keeping which chunks loaded, and when one can actually go.
@@ -196,7 +197,7 @@ public final class ChunkHolds {
         return holders.entrySet().stream()
                 .filter(entry -> entry.getValue().contains(who))
                 .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** Every chunk being held, by anybody. */

@@ -11,6 +11,15 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import de.raindancer.core.RainsCore;
+import de.raindancer.core.ui.chat.ChatButtons;
+import de.raindancer.core.ui.choose.AmountChooser;
+import de.raindancer.core.ui.choose.ColorChooser;
+import de.raindancer.core.ui.choose.ItemChooser;
+import de.raindancer.core.ui.choose.OptionChooser;
+import de.raindancer.core.ui.prompt.ChatPrompts;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -43,15 +52,15 @@ public final class SettingsMenu extends Menu {
      * starting and holding a reference taken then would be a reference to nothing.
      */
     private static Messages words() {
-        return de.raindancer.core.RainsCore.get().messages();
+        return RainsCore.get().messages();
     }
 
-    private static de.raindancer.core.ui.chat.ChatButtons buttons() {
-        return de.raindancer.core.RainsCore.get().buttons();
+    private static ChatButtons buttons() {
+        return RainsCore.get().buttons();
     }
 
-    private static de.raindancer.core.ui.prompt.ChatPrompts prompts() {
-        return de.raindancer.core.RainsCore.get().prompts();
+    private static ChatPrompts prompts() {
+        return RainsCore.get().prompts();
     }
 
     /**
@@ -199,7 +208,7 @@ public final class SettingsMenu extends Menu {
         };
     }
 
-    private org.bukkit.inventory.ItemStack categoryIcon(SettingsTopic topic) {
+    private ItemStack categoryIcon(SettingsTopic topic) {
         Material material = topic.icon() == Material.AIR ? Material.BOOK : topic.icon();
         if (material == Material.PLAYER_HEAD) {
             // The viewer's own face, not Steve's. "Your settings" over a default head is a menu that
@@ -209,7 +218,7 @@ public final class SettingsMenu extends Menu {
         return Icons.of(material, "<white>" + topic.title(), navigation.describe(topic));
     }
 
-    private org.bukkit.inventory.ItemStack settingIcon(Setting<?> setting) {
+    private ItemStack settingIcon(Setting<?> setting) {
         Material material = setting.icon() == null || setting.icon() == Material.AIR
                 ? Material.PAPER : setting.icon();
         // A flag shows what it is at a glance rather than making somebody read the lore for it.
@@ -227,20 +236,20 @@ public final class SettingsMenu extends Menu {
                 navigation.registry().saveAll();
                 refresh();
             }
-            case NEEDS_MATERIAL_CHOICE -> new de.raindancer.core.ui.choose.ItemChooser(viewer, brand(), this,
+            case NEEDS_MATERIAL_CHOICE -> new ItemChooser(viewer, brand(), this,
                     "Choose " + setting.title(),
                     chosen -> {
                         navigation.registry().set(setting.key(), chosen.name());
                         navigation.registry().saveAll();
                         refresh();
                     }).open();
-            case NEEDS_COLOR_CHOICE -> new de.raindancer.core.ui.choose.ColorChooser(viewer, brand(), this,
+            case NEEDS_COLOR_CHOICE -> new ColorChooser(viewer, brand(), this,
                     setting.title(),
-                    net.kyori.adventure.text.format.NamedTextColor.NAMES.value(
+                    NamedTextColor.NAMES.value(
                             navigation.registry().display(setting.key())),
                     chosen -> {
                         navigation.registry().set(setting.key(),
-                                net.kyori.adventure.text.format.NamedTextColor.NAMES.key(chosen));
+                                NamedTextColor.NAMES.key(chosen));
                         navigation.registry().saveAll();
                         refresh();
                     }).open();
@@ -251,7 +260,7 @@ public final class SettingsMenu extends Menu {
                 chat.raw(viewer, chat.prefixed("<gray>Type a new value for <white><name></white>, or ",
                                 Chat.arg("name", setting.title()))
                         .append(cancelButton())
-                        .append(net.kyori.adventure.text.Component.text(".")));
+                        .append(Component.text(".")));
                 chat.row(viewer, "<dark_gray>  now: <gray>"
                         + navigation.registry().display(setting.key()));
                 if (setting.min() != null) {
@@ -263,7 +272,7 @@ public final class SettingsMenu extends Menu {
                     chat.raw(viewer, words().prefixed("settings.finish-first"));
                 }
             }
-            case NEEDS_OPTION_CHOICE -> new de.raindancer.core.ui.choose.OptionChooser(viewer, brand(),
+            case NEEDS_OPTION_CHOICE -> new OptionChooser(viewer, brand(),
                     this, setting.title(), setting.choices(),
                     navigation.registry().display(setting.key()),
                     chosen -> {
@@ -271,7 +280,7 @@ public final class SettingsMenu extends Menu {
                         navigation.registry().saveAll();
                         refresh();
                     }).open();
-            case NEEDS_NUMBER_CHOICE -> new de.raindancer.core.ui.choose.AmountChooser(viewer, brand(),
+            case NEEDS_NUMBER_CHOICE -> new AmountChooser(viewer, brand(),
                     this, setting.title(), currentNumber(setting), setting.min(), setting.max(),
                     chosen -> {
                         navigation.registry().set(setting.key(), String.valueOf(chosen));

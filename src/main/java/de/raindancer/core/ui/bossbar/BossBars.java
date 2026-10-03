@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Boss bars, and how many of them a player should have to look at.
@@ -299,7 +300,7 @@ public final class BossBars {
      * can be taken, and it can be removed in between. Every removal holds the monitor, so a writer
      * that still finds its own slot in the map knows it cannot be removed until it lets go.
      */
-    private void withSlot(UUID player, java.util.function.Consumer<Slot> work) {
+    private void withSlot(UUID player, Consumer<Slot> work) {
         while (true) {
             Slot slot = slots.computeIfAbsent(player, key -> new Slot());
             synchronized (slot) {

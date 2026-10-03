@@ -18,6 +18,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * Every place any plugin has asked to remember.
@@ -166,7 +170,7 @@ public final class PoiStore {
         return List.copyOf(problems);
     }
 
-    private List<Poi> filtered(java.util.function.Predicate<Poi> test) {
+    private List<Poi> filtered(Predicate<Poi> test) {
         return places.values().stream().filter(test).toList();
     }
 
@@ -233,8 +237,8 @@ public final class PoiStore {
      * <p>Rather than one query per place, which on a server with a few thousand homes is a few
      * thousand queries to open a menu.
      */
-    private static Map<String, Map<String, String>> readTags(java.sql.Connection connection)
-            throws java.sql.SQLException {
+    private static Map<String, Map<String, String>> readTags(Connection connection)
+            throws SQLException {
         Map<String, Map<String, String>> tags = new LinkedHashMap<>();
         try (PreparedStatement statement =
                      connection.prepareStatement("SELECT place, name, value FROM place_tag");
@@ -248,7 +252,7 @@ public final class PoiStore {
     }
 
     private static Poi readOne(ResultSet rows, Map<String, String> tags)
-            throws java.sql.SQLException {
+            throws SQLException {
         String name = rows.getString("name");
         String world = rows.getString("world");
         if (name == null || world == null) {
@@ -329,7 +333,7 @@ public final class PoiStore {
         Set<String> writing = Marks.drain(changed);
         Set<String> removing = Marks.drain(deleted);
         List<Poi> rows = writing.stream().map(places::get)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .toList();
 
         boolean written = database.write(connection -> {

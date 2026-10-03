@@ -2,6 +2,8 @@ package de.raindancer.core.world.teleport;
 
 import de.raindancer.core.world.safety.Spot;
 
+import java.util.UUID;
+
 /**
  * Somebody part-way through being sent somewhere.
  *
@@ -14,7 +16,7 @@ import de.raindancer.core.world.safety.Spot;
  * @param secondsLeft what the action bar counts down
  * @param what        what they are going to, for the line that says so — "spawn", "your bed"
  */
-public record Departure(java.util.UUID traveller, Spot from, int secondsLeft, String what) {
+public record Departure(UUID traveller, Spot from, int secondsLeft, String what) {
 
     /** The same departure, a second closer. */
     Departure aSecondOn() {

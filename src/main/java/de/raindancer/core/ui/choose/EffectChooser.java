@@ -16,6 +16,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -59,11 +60,11 @@ public final class EffectChooser extends PaginatedMenu<String> {
         Effect effect = effects == null ? null : effects.all().get(cue);
         String sound = effect == null || effect.sound() == null ? "silent" : effect.sound().key();
         String particles = effect == null || effect.particles() == null
-                ? "no particles" : effect.particles().particle().toLowerCase(java.util.Locale.ROOT);
+                ? "no particles" : effect.particles().particle().toLowerCase(Locale.ROOT);
         return Icons.of(iconFor(cue),
                 "<" + Style.itemName() + ">" + Catalogue.readable(
                         cue.substring(cue.indexOf(':') + 1).replace('-', '_').toUpperCase(
-                                java.util.Locale.ROOT)),
+                                Locale.ROOT)),
                 "<" + Style.itemLore() + ">" + cue,
                 "<" + Style.itemLore() + ">" + sound,
                 "<" + Style.itemLore() + ">" + particles,
@@ -79,7 +80,7 @@ public final class EffectChooser extends PaginatedMenu<String> {
      * still has to have an icon, and a grid of identical note blocks is not a chooser.
      */
     private static Material iconFor(String cue) {
-        String name = cue.toLowerCase(java.util.Locale.ROOT);
+        String name = cue.toLowerCase(Locale.ROOT);
         if (name.contains("teleport")) {
             return Material.ENDER_PEARL;
         }

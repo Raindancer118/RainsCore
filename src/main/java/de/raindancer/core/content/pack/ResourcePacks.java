@@ -6,7 +6,10 @@ import de.raindancer.core.platform.util.Hashes;
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 /**
  * The one owner of what is on a player's screen.
@@ -62,7 +66,7 @@ public final class ResourcePacks {
      * for why these go through here rather than round it.
      */
     private final Map<String, HostedPack> hosted =
-            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+            Collections.synchronizedMap(new LinkedHashMap<>());
 
     private volatile PackBuild current;
     private volatile boolean required;
@@ -169,8 +173,8 @@ public final class ResourcePacks {
     }
 
     /** What was refused, and why. Kept separately from the builder's own troubles. */
-    private final java.util.List<String> hostingProblems =
-            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+    private final List<String> hostingProblems =
+            Collections.synchronizedList(new ArrayList<>());
 
     /** Takes a plugin's assets. False means the source is not there; see {@link #problems()}. */
     public boolean contribute(PackContribution contribution) {
@@ -194,7 +198,7 @@ public final class ResourcePacks {
 
     /** What was refused, and why the last build did not work. */
     public List<String> problems() {
-        List<String> all = new java.util.ArrayList<>(library.problems());
+        List<String> all = new ArrayList<>(library.problems());
         all.addAll(builder.problems());
         synchronized (hostingProblems) {
             all.addAll(hostingProblems);
@@ -264,7 +268,7 @@ public final class ResourcePacks {
             return;
         }
 
-        List<PackOffer> offers = new java.util.ArrayList<>();
+        List<PackOffer> offers = new ArrayList<>();
         // Hosted first. The client applies packs in order and the last one wins a conflict, so the
         // server's own texture pack is the base and the plugins' specific assets — a custom item's
         // model, a custom sound — go on top of it rather than under it.
@@ -368,7 +372,7 @@ public final class ResourcePacks {
         return status.entrySet().stream()
                 .filter(entry -> entry.getValue().isWearing())
                 .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** Whether one player has it, for a plugin deciding whether to draw its custom icons. */

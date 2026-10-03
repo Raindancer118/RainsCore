@@ -5,6 +5,7 @@ import de.raindancer.core.platform.log.LogChannel;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
@@ -99,7 +100,7 @@ public final class Databases implements AutoCloseable {
     }
 
     public Collection<Database> all() {
-        return java.util.List.copyOf(open.values());
+        return List.copyOf(open.values());
     }
 
     /** How often any database has been used from a thread that is running the world. */

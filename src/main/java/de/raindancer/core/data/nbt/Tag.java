@@ -132,7 +132,7 @@ public sealed interface Tag {
      */
     record List_(int elementType, List<Tag> items) implements Tag {
         public List_ {
-            items = java.util.List.copyOf(items);
+            items = List.copyOf(items);
         }
 
         /** A list that works out its own element type — empty means the format's "end" marker. */
@@ -141,7 +141,7 @@ public sealed interface Tag {
         }
 
         public static List_ empty() {
-            return new List_(END, java.util.List.of());
+            return new List_(END, List.of());
         }
 
         @Override

@@ -9,6 +9,7 @@ import de.raindancer.core.world.safety.Safety;
 import de.raindancer.core.world.safety.Spot;
 import io.papermc.paper.entity.Leashable;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -760,7 +761,7 @@ public final class Travel {
      * nudged two blocks by the safety check still looks at what it was pointed at.
      */
     private static Location at(Spot spot, Location facingLike) {
-        World world = org.bukkit.Bukkit.getWorld(spot.world());
+        World world = Bukkit.getWorld(spot.world());
         if (world == null) {
             return facingLike;
         }

@@ -24,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
+import java.util.Objects;
 
 /**
  * Custom achievements: what a player has done, and what they are working towards.
@@ -206,7 +207,7 @@ public final class Achievements {
     public int pointsOf(UUID player) {
         return earnedBy(player).keySet().stream()
                 .map(defined::get)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .mapToInt(Achievement::points)
                 .sum();
     }

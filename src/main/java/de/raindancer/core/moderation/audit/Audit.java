@@ -4,6 +4,7 @@ import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -11,6 +12,7 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -321,12 +323,12 @@ public final class Audit {
      * are numbers this class read out of the database a moment ago, so building the list of
      * placeholders from their count is safe.
      */
-    private static void attachFields(java.sql.Connection connection, List<AuditEntry> entries)
+    private static void attachFields(Connection connection, List<AuditEntry> entries)
             throws SQLException {
         if (entries.isEmpty()) {
             return;
         }
-        String placeholders = String.join(",", java.util.Collections.nCopies(entries.size(), "?"));
+        String placeholders = String.join(",", Collections.nCopies(entries.size(), "?"));
         Map<Long, Map<String, String>> byEntry = new LinkedHashMap<>();
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT entry, name, value FROM entry_field WHERE entry IN (" + placeholders + ")")) {

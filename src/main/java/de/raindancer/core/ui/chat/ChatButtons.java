@@ -1,5 +1,7 @@
 package de.raindancer.core.ui.chat;
 
+import de.raindancer.core.platform.log.Log;
+import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 
@@ -7,6 +9,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -33,14 +36,14 @@ public final class ChatButtons {
     /** What goes between two buttons in a row. A space, so they do not read as one word. */
     private static final Component GAP = Component.text(" ");
 
-    private static final de.raindancer.core.platform.log.LogChannel log =
-            de.raindancer.core.platform.log.Log.of("chat");
+    private static final LogChannel log =
+            Log.of("chat");
 
     private final ClickActions actions;
     private volatile String command;
     /** So the warning about there being no command is said once, not once per button. */
-    private final java.util.concurrent.atomic.AtomicBoolean warned =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicBoolean warned =
+            new AtomicBoolean();
 
     /**
      * @param command the command that runs a callback, without its slash — one for the whole server,

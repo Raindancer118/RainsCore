@@ -10,6 +10,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
 
@@ -75,7 +76,7 @@ public final class AmountChooser extends Menu {
 
     /** The steps this offers, for the test that pins them. */
     public static List<Integer> steps() {
-        List<Integer> all = new java.util.ArrayList<>(STEPS.length);
+        List<Integer> all = new ArrayList<>(STEPS.length);
         for (int step : STEPS) {
             all.add(step);
         }

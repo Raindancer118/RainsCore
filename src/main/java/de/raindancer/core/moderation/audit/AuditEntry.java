@@ -1,6 +1,7 @@
 package de.raindancer.core.moderation.audit;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,7 +103,7 @@ public record AuditEntry(long id, Instant at, String feature, String action,
         private String subjectName;
         private String detail;
         private String world;
-        private final java.util.Map<String, String> fields = new java.util.LinkedHashMap<>();
+        private final Map<String, String> fields = new LinkedHashMap<>();
 
         private Builder(String feature, String action) {
             this.feature = feature;

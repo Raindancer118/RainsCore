@@ -3,6 +3,7 @@ package de.raindancer.core.ui.choose;
 import de.raindancer.core.world.time.Times;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -47,9 +48,9 @@ public record PlayerEntry(UUID id, String name, boolean online, long lastSeen) {
     }
 
     /** How long ago they were here. Empty for somebody who is here, or was never seen. */
-    public java.util.Optional<Duration> away(long now) {
+    public Optional<Duration> away(long now) {
         return online || lastSeen <= 0
-                ? java.util.Optional.empty()
-                : java.util.Optional.of(Duration.ofMillis(Math.max(0, now - lastSeen)));
+                ? Optional.empty()
+                : Optional.of(Duration.ofMillis(Math.max(0, now - lastSeen)));
     }
 }

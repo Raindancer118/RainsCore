@@ -2,10 +2,13 @@ package de.raindancer.core.moderation.vanish;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,7 +32,7 @@ public final class BukkitVanishSink implements VanishSink {
     }
 
     @Override
-    public void hide(UUID who, java.util.Set<UUID> mayStillSee) {
+    public void hide(UUID who, Set<UUID> mayStillSee) {
         Player target = Bukkit.getPlayer(who);
         if (target == null) {
             return;
@@ -133,23 +136,23 @@ public final class BukkitVanishSink implements VanishSink {
      * precisely the tell this exists to remove.
      */
     @Override
-    public void announceDeparture(UUID who, java.util.Set<UUID> exceptThem) {
+    public void announceDeparture(UUID who, Set<UUID> exceptThem) {
         announce(who, exceptThem, "multiplayer.player.left");
     }
 
     @Override
-    public void announceArrival(UUID who, java.util.Set<UUID> exceptThem) {
+    public void announceArrival(UUID who, Set<UUID> exceptThem) {
         announce(who, exceptThem, "multiplayer.player.joined");
     }
 
-    private void announce(UUID who, java.util.Set<UUID> exceptThem, String key) {
+    private void announce(UUID who, Set<UUID> exceptThem, String key) {
         Player target = Bukkit.getPlayer(who);
         if (target == null) {
             return;
         }
-        net.kyori.adventure.text.Component line = net.kyori.adventure.text.Component
-                .translatable(key, net.kyori.adventure.text.format.NamedTextColor.YELLOW,
-                        net.kyori.adventure.text.Component.text(target.getName()));
+        Component line = Component
+                .translatable(key, NamedTextColor.YELLOW,
+                        Component.text(target.getName()));
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             // Not to anybody who can see them anyway: telling the staff a moderator "left" while
             // they can still see them standing there is worse than saying nothing.

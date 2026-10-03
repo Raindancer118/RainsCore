@@ -4,7 +4,9 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -110,12 +112,12 @@ public final class BukkitEffectSink implements EffectSink {
 
     /** Whether a sound name is one the server itself knows — for a chooser, not for playing. */
     public static boolean isVanillaSound(String key) {
-        return Sound.class.isEnum() && org.bukkit.Registry.SOUNDS.get(
-                org.bukkit.NamespacedKey.minecraft(key.replace("minecraft:", ""))) != null;
+        return Sound.class.isEnum() && Registry.SOUNDS.get(
+                NamespacedKey.minecraft(key.replace("minecraft:", ""))) != null;
     }
     /** Particles already complained about, so a cue on a timer is one log line rather than a flood. */
-    private static final java.util.Set<String> WITHOUT_DATA =
-            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<String> WITHOUT_DATA =
+            ConcurrentHashMap.newKeySet();
 
     /**
      * Whether this particle cannot be spawned without extra data.
@@ -130,7 +132,7 @@ public final class BukkitEffectSink implements EffectSink {
      * behalf, which is a cue that works and looks wrong — harder to diagnose than one that says why
      * it did nothing.
      */
-    private static boolean needsData(org.bukkit.Particle particle) {
+    private static boolean needsData(Particle particle) {
         if (particle.getDataType() == Void.class) {
             return false;
         }

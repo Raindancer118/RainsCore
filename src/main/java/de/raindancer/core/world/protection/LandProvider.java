@@ -2,6 +2,7 @@ package de.raindancer.core.world.protection;
 
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 
 import java.util.Optional;
 
@@ -32,7 +33,7 @@ public interface LandProvider {
      * roof, and every flicker is an entry and an exit. A provider that tracks presence should answer from
      * that tracking; one that does not can simply delegate to {@link #at}.
      */
-    default Optional<ProtectedArea> around(org.bukkit.entity.Player player) {
+    default Optional<ProtectedArea> around(Player player) {
         return player == null ? Optional.empty() : at(player.getLocation());
     }
 

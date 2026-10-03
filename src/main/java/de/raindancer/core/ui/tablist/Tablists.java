@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * The tablist, as the players see it.
@@ -56,11 +59,11 @@ public final class Tablists {
     private volatile Animated headerFrames = Animated.of("");
     private volatile Animated footerFrames = Animated.of("");
     /** Counts refreshes, which is what an animation is measured in. */
-    private final java.util.concurrent.atomic.AtomicLong tick =
-            new java.util.concurrent.atomic.AtomicLong();
+    private final AtomicLong tick =
+            new AtomicLong();
 
     /** Who is hidden and should not appear. Nobody, until something says otherwise. */
-    private java.util.function.Supplier<java.util.Set<UUID>> hidden = java.util.Set::of;
+    private Supplier<Set<UUID>> hidden = Set::of;
 
     public Tablists(TablistModel model, String serverName) {
         this.model = model;
@@ -74,8 +77,8 @@ public final class Tablists {
      * class, so this package keeps knowing nothing about moderation — and so a server with no vanish at
      * all still has a tablist.
      */
-    public void hiddenPlayers(java.util.function.Supplier<java.util.Set<UUID>> hidden) {
-        this.hidden = hidden == null ? java.util.Set::<UUID>of : hidden;
+    public void hiddenPlayers(Supplier<Set<UUID>> hidden) {
+        this.hidden = hidden == null ? Set::<UUID>of : hidden;
     }
 
     public void serverName(String name) {
@@ -140,11 +143,11 @@ public final class Tablists {
      * @param everyTicks how many refreshes each frame lasts; the list redraws about twice a second,
      *                   so 4 is roughly two seconds and 1 is a strobe
      */
-    public void headerFrames(java.util.List<String> frames, int everyTicks) {
+    public void headerFrames(List<String> frames, int everyTicks) {
         this.headerFrames = Animated.of(frames).everyTicks(everyTicks);
     }
 
-    public void footerFrames(java.util.List<String> frames, int everyTicks) {
+    public void footerFrames(List<String> frames, int everyTicks) {
         this.footerFrames = Animated.of(frames).everyTicks(everyTicks);
     }
 
@@ -169,7 +172,7 @@ public final class Tablists {
         // player's own tablist without a single further update for as long as they stayed hidden —
         // frozen on whatever was true the moment before, and un-vanishing simply resumed updates from
         // there, which reads as nothing having changed at all.
-        java.util.Set<UUID> hidden = this.hidden.get();
+        Set<UUID> hidden = this.hidden.get();
         List<Player> allOnline = new ArrayList<>(Bukkit.getOnlinePlayers());
 
         // Everybody, hidden included — their own line in their own tablist, and the scoreboard team

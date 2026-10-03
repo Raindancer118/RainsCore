@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Who is looking inside whose inventory, and what they may do there.
@@ -105,7 +106,7 @@ public final class InventoryViews {
         return watching.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(owner))
                 .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** Who, if anybody, is editing one inventory — so a watcher can be told why they cannot. */

@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -296,7 +297,7 @@ public final class InventoryWindow implements InventoryHolder {
         if (words == null) {
             return builtIn;
         }
-        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        return PlainTextComponentSerializer.plainText()
                 .serialize(words.get(key, values));
     }
 
@@ -547,7 +548,7 @@ public final class InventoryWindow implements InventoryHolder {
         String said = item.getAmount() + "x " + item.getType().name().toLowerCase();
         ItemMeta meta = item.getItemMeta();
         if (meta != null && meta.hasDisplayName()) {
-            said += " named \"" + net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+            said += " named \"" + PlainTextComponentSerializer
                     .plainText().serialize(meta.displayName()) + "\"";
         }
         return said;

@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.players;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -171,7 +172,7 @@ public final class PlayerPowers {
      * @return how many people had at least one of the three
      */
     public int forgetEverybody() {
-        Set<UUID> everybody = new java.util.HashSet<>(invulnerable);
+        Set<UUID> everybody = new HashSet<>(invulnerable);
         everybody.addAll(oneHit);
         everybody.addAll(instantBreakers);
         invulnerable.clear();

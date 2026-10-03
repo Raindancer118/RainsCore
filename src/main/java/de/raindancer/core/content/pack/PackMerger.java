@@ -5,7 +5,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -122,7 +124,7 @@ public final class PackMerger {
                             out.put(name, mergeJson(out.get(name), data, name));
                             continue;
                         }
-                        if (java.util.Arrays.equals(out.get(name), data)) {
+                        if (Arrays.equals(out.get(name), data)) {
                             continue;
                         }
                         conflicts.add(name + " (" + owner.get(name) + " → " + label + ")");
@@ -164,7 +166,7 @@ public final class PackMerger {
                     }
                 }
             }
-            Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
             return new Result(target, sha1, Files.size(target), List.copyOf(conflicts),
                     minFormat, maxFormat);
         } catch (IOException e) {

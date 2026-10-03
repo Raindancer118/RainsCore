@@ -4,6 +4,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.logging.Level;
 
 /**
  * One subsystem's door to {@link Log}.
@@ -86,7 +87,7 @@ public final class LogChannel {
             // so only DEBUG needs the workaround: log it at INFO with its own label spelled out,
             // rather than relying on java.util.logging to print a level it would otherwise swallow.
             if (level == LogLevel.DEBUG) {
-                Log.console().log(java.util.logging.Level.INFO,
+                Log.console().log(Level.INFO,
                         "[" + name + "] [DEBUG] " + text, cause);
             } else {
                 // Prefixed with the channel, not the level: java.util.logging already prints the

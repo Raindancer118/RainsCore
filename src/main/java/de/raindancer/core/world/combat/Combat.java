@@ -3,6 +3,7 @@ package de.raindancer.core.world.combat;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -158,7 +159,7 @@ public final class Combat {
 
     /** Every world that has rules of its own. */
     public List<String> worldsWithTheirOwnRules() {
-        List<String> named = new java.util.ArrayList<>(byWorld.keySet());
+        List<String> named = new ArrayList<>(byWorld.keySet());
         named.sort(String::compareTo);
         return named;
     }

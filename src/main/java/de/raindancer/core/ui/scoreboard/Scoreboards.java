@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Who gets a player's sidebar.
@@ -69,8 +70,8 @@ public final class Scoreboards {
     private final Map<UUID, Slot> slots = new ConcurrentHashMap<>();
     private final AtomicBoolean unavailable = new AtomicBoolean();
     /** Orders claims without a clock: only their relative order matters. */
-    private final java.util.concurrent.atomic.AtomicLong sequence =
-            new java.util.concurrent.atomic.AtomicLong();
+    private final AtomicLong sequence =
+            new AtomicLong();
 
     public Scoreboards(BoardFactory factory) {
         this.factory = factory;

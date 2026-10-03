@@ -1,5 +1,7 @@
 package de.raindancer.core.social.team;
 
+import java.util.Locale;
+
 /**
  * What happened when something asked to change a team.
  *
@@ -97,6 +99,6 @@ public enum TeamOutcome {
      * line per reason, rather than a switch with fourteen arms in every screen that changes a team.
      */
     public String key() {
-        return name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 }

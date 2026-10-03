@@ -1,5 +1,6 @@
 package de.raindancer.core.world.safety;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -66,7 +67,7 @@ public final class SafeSpots {
      * the best spot found so far beats a search that quietly keeps going, and it beats a refusal
      * even more.
      */
-    private static final long SEARCH_TIME_BUDGET_NANOS = java.time.Duration.ofSeconds(2).toNanos();
+    private static final long SEARCH_TIME_BUDGET_NANOS = Duration.ofSeconds(2).toNanos();
 
     private final Blocks blocks;
 

@@ -1,5 +1,8 @@
 package de.raindancer.core.content.items;
 
+import java.util.Optional;
+import org.bukkit.event.block.Action;
+
 /**
  * What made a custom item do its thing.
  *
@@ -64,14 +67,14 @@ public enum ItemTrigger {
      * <p>Physical (a pressure plate, a tripwire) is deliberately absent: that is the world acting on
      * the player rather than the player using what they are holding.
      */
-    public static java.util.Optional<ItemTrigger> forClick(org.bukkit.event.block.Action action) {
+    public static Optional<ItemTrigger> forClick(Action action) {
         if (action == null) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         return switch (action) {
-            case RIGHT_CLICK_AIR, RIGHT_CLICK_BLOCK -> java.util.Optional.of(RIGHT_CLICK);
-            case LEFT_CLICK_AIR, LEFT_CLICK_BLOCK -> java.util.Optional.of(LEFT_CLICK);
-            default -> java.util.Optional.empty();
+            case RIGHT_CLICK_AIR, RIGHT_CLICK_BLOCK -> Optional.of(RIGHT_CLICK);
+            case LEFT_CLICK_AIR, LEFT_CLICK_BLOCK -> Optional.of(LEFT_CLICK);
+            default -> Optional.empty();
         };
     }
 }

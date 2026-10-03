@@ -2,6 +2,7 @@ package de.raindancer.core.platform.util;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -36,7 +37,7 @@ public final class Hashes {
      * outdated pack out of its cache. Deriving it from {@code id + sha1} gives exactly that.
      */
     public static UUID packId(String packId, String sha1) {
-        return UUID.nameUUIDFromBytes((packId + "@" + sha1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return UUID.nameUUIDFromBytes((packId + "@" + sha1).getBytes(StandardCharsets.UTF_8));
     }
 
     private static MessageDigest newDigest() {

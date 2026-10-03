@@ -13,6 +13,7 @@ import de.raindancer.core.world.protection.ProtectedArea;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -115,7 +116,7 @@ public final class FlagChooser extends Menu {
      * immediately obvious which page is about <em>you</em> — the same reason the member lists use heads instead
      * of named paper.
      */
-    private org.bukkit.inventory.ItemStack iconFor(LandFlagGroup group) {
+    private ItemStack iconFor(LandFlagGroup group) {
         String name = "<gold>" + words(group.nameKey());
         List<String> lore = lore(group);
         return group == LandFlagGroup.PLAYER
@@ -228,7 +229,7 @@ public final class FlagChooser extends Menu {
             }
         }
 
-        private org.bukkit.inventory.ItemStack button(LandFlag flag) {
+        private ItemStack button(LandFlag flag) {
             FlagRules.Summary summary = rules.summarise(area, flag);
             List<String> lore = new ArrayList<>();
             lore.add("<gray>" + words(flag.descriptionKey()));

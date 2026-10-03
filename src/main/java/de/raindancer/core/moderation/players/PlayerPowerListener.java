@@ -4,6 +4,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
@@ -66,7 +67,7 @@ public final class PlayerPowerListener implements Listener {
      * already refused stays refused.
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onBlockDamage(org.bukkit.event.block.BlockDamageEvent event) {
+    public void onBlockDamage(BlockDamageEvent event) {
         if (powers.breaksInstantly(event.getPlayer().getUniqueId())) {
             event.setInstaBreak(true);
         }

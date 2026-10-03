@@ -6,6 +6,7 @@ import de.raindancer.core.ui.messages.Messages;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
@@ -251,7 +252,7 @@ public final class PunishmentGuard {
     }
 
     private String remaining(Punishment punishment) {
-        return punishment.remainingAt(java.time.Instant.ofEpochMilli(clock.getAsLong()))
+        return punishment.remainingAt(Instant.ofEpochMilli(clock.getAsLong()))
                 .map(Durations::describe)
                 .orElse("for ever");
     }

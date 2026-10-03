@@ -17,11 +17,18 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 
 /**
  * Every message a plugin says, in a file somebody can edit.
@@ -81,9 +88,9 @@ public final class Messages {
     /** What the plugin shipped in its jar. The floor: nothing is ever missing from here. */
     private volatile Map<String, Object> shipped = Map.of();
     /** Defaults a plugin supplied in code. Below the owner's file. */
-    private final Map<String, Object> defined = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Object> defined = new ConcurrentHashMap<>();
     /** Wording a plugin insists on. Above everything. */
-    private final Map<String, Object> forced = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Object> forced = new ConcurrentHashMap<>();
 
     /**
      * A prefix per top-level section, so a message is signed by the plugin it came from.
@@ -94,11 +101,11 @@ public final class Messages {
      * a sentence attributed to the wrong plugin. A module now claims the sections it supplies, and
      * anything unclaimed still falls back to the host.
      */
-    private final Map<String, java.util.function.Supplier<String>> sectionPrefixes =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Supplier<String>> sectionPrefixes =
+            new ConcurrentHashMap<>();
 
     /** What the host says it is called; see prefixFrom. Null means read the prefix key. */
-    private volatile java.util.function.Supplier<String> prefixSource;
+    private volatile Supplier<String> prefixSource;
 
     private final List<String> problems = new CopyOnWriteArrayList<>();
     private final List<String> missing = new CopyOnWriteArrayList<>();
@@ -272,8 +279,8 @@ public final class Messages {
 
         try {
             Path backup = file.resolveSibling(file.getFileName() + "."
-                    + java.time.LocalDateTime.now().format(
-                            java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".bak");
+                    + LocalDateTime.now().format(
+                            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".bak");
             Files.copy(file, backup);
             Files.writeString(file, String.join("\n", lines));
             log.info("Added {} new message(s) to {}; your wording was kept and the previous file is "
@@ -448,7 +455,7 @@ public final class Messages {
         if (key != null) {
             int dot = key.indexOf('.');
             if (dot > 0) {
-                java.util.function.Supplier<String> owner = sectionPrefixes.get(key.substring(0, dot));
+                Supplier<String> owner = sectionPrefixes.get(key.substring(0, dot));
                 if (owner != null) {
                     try {
                         String given = owner.get();
@@ -482,7 +489,7 @@ public final class Messages {
      * <p>One identity per server, whether its features arrive as one plugin or as six modules: a player does not
      * care which jar a line came from. {@code null} puts it back to reading the key.
      */
-    public void prefixFrom(java.util.function.Supplier<String> source) {
+    public void prefixFrom(Supplier<String> source) {
         this.prefixSource = source;
     }
 
@@ -493,7 +500,7 @@ public final class Messages {
      * framework swallowing somebody's command output over a decoration.
      */
     private String prefix() {
-        java.util.function.Supplier<String> source = prefixSource;
+        Supplier<String> source = prefixSource;
         if (source != null) {
             try {
                 String given = source.get();
@@ -575,7 +582,7 @@ public final class Messages {
         }
         Object chosen = options.size() == 1
                 ? options.getFirst()
-                : options.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(options.size()));
+                : options.get(ThreadLocalRandom.current().nextInt(options.size()));
         // prefixFor rather than the raw prefix key: a variant is as much this module's sentence as any
         // other, and reading the key directly ignored both the host's brand and the section's.
         return render(prefixFor(key) + fill(String.valueOf(chosen), values));
@@ -621,7 +628,7 @@ public final class Messages {
     // ------------------------------------------------------------------ per-plugin overrides
 
     /** plugin → (key → the key that plugin says it with instead). */
-    private final Map<String, Map<String, String>> overrides = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Map<String, String>> overrides = new ConcurrentHashMap<>();
 
     /**
      * Makes one plugin say {@code key} with {@code replacementKey} instead — for that plugin only.
@@ -640,7 +647,7 @@ public final class Messages {
                 || replacementKey == null || replacementKey.isBlank()) {
             return false;
         }
-        overrides.computeIfAbsent(plugin, ignored -> new java.util.concurrent.ConcurrentHashMap<>())
+        overrides.computeIfAbsent(plugin, ignored -> new ConcurrentHashMap<>())
                 .put(key, replacementKey);
         return true;
     }
@@ -740,7 +747,7 @@ public final class Messages {
      *
      * @param signature what to put in front of these sections' messages; null keeps the host's
      */
-    public int defineFrom(InputStream bundled, java.util.function.Supplier<String> signature) {
+    public int defineFrom(InputStream bundled, Supplier<String> signature) {
         if (bundled == null) {
             return 0;
         }
@@ -796,7 +803,7 @@ public final class Messages {
      *
      * @return how many sections were signed
      */
-    public int claimSections(java.util.function.Supplier<String> signature) {
+    public int claimSections(Supplier<String> signature) {
         if (signature == null) {
             return 0;
         }
@@ -855,7 +862,7 @@ public final class Messages {
 
     /** Every key there is, for tab completion or a settings page. */
     public List<String> keys() {
-        java.util.Set<String> all = new java.util.LinkedHashSet<>(shipped.keySet());
+        Set<String> all = new LinkedHashSet<>(shipped.keySet());
         all.addAll(defined.keySet());
         all.addAll(theirs.keySet());
         all.addAll(forced.keySet());

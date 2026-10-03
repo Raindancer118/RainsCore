@@ -14,6 +14,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -149,7 +150,7 @@ public final class BukkitPlayerAdminSink implements PlayerAdminSink {
         if (name == null || name.isBlank()) {
             return null;
         }
-        String key = name.trim().toLowerCase(java.util.Locale.ROOT);
+        String key = name.trim().toLowerCase(Locale.ROOT);
         PotionEffectType found = Registry.EFFECT.get(NamespacedKey.minecraft(key));
         if (found == null && unknown.add(key)) {
             log.warn("This server has no effect called '{}'.", key);

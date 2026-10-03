@@ -21,6 +21,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Bans, mutes, freezes, and the record of who did what.
@@ -47,7 +51,7 @@ public final class Punishments {
 
     private final Database database;
     private final LongSupplier clock;
-    private final java.util.Map<UUID, CopyOnWriteArrayList<Punishment>> byPlayer =
+    private final Map<UUID, CopyOnWriteArrayList<Punishment>> byPlayer =
             new ConcurrentHashMap<>();
 
     /**
@@ -117,7 +121,7 @@ public final class Punishments {
             return false;
         }
         replace(target, existing.get(), existing.get().lifted(moderator, reason, now()));
-        log.info("{}'s {} was lifted by {} ('{}')", target, kind.name().toLowerCase(java.util.Locale.ROOT),
+        log.info("{}'s {} was lifted by {} ('{}')", target, kind.name().toLowerCase(Locale.ROOT),
                 moderator, reason);
         return true;
     }
@@ -245,7 +249,7 @@ public final class Punishments {
         }
     }
 
-    private static Punishment readOne(ResultSet rows) throws java.sql.SQLException {
+    private static Punishment readOne(ResultSet rows) throws SQLException {
         return new Punishment(
                 rows.getString("id"),
                 UUID.fromString(rows.getString("target")),
@@ -260,7 +264,7 @@ public final class Punishments {
     }
 
     /** A time column that may be absent — SQLite answers 0 for NULL, so the flag has to be read. */
-    private static Instant instantOrNull(ResultSet rows, String column) throws java.sql.SQLException {
+    private static Instant instantOrNull(ResultSet rows, String column) throws SQLException {
         long millis = rows.getLong(column);
         return rows.wasNull() ? null : Instant.ofEpochMilli(millis);
     }
@@ -351,9 +355,9 @@ public final class Punishments {
     }
 
     private static void setMillisOrNull(PreparedStatement statement, int at, Instant when)
-            throws java.sql.SQLException {
+            throws SQLException {
         if (when == null) {
-            statement.setNull(at, java.sql.Types.INTEGER);
+            statement.setNull(at, Types.INTEGER);
         } else {
             statement.setLong(at, when.toEpochMilli());
         }

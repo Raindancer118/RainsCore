@@ -2,6 +2,7 @@ package de.raindancer.core.content.vote;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.world.time.Times;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -101,7 +102,7 @@ public final class Votes {
                 now + lasting.toMillis(), mayVote == null ? null : Set.copyOf(mayVote));
         votes.put(vote.id(), vote);
         log.info("Vote opened: \"{}\" with {} answers, closing in {}", vote.question(),
-                cleaned.size(), de.raindancer.core.world.time.Times.brief(lasting));
+                cleaned.size(), Times.brief(lasting));
         return Optional.of(vote);
     }
 

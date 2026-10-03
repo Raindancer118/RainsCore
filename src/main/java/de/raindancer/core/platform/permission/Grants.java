@@ -2,13 +2,18 @@ package de.raindancer.core.platform.permission;
 
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.LuckPermsProvider;
 import org.bukkit.plugin.Plugin;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Permissions this server has granted somebody, remembered across restarts.
@@ -55,8 +60,8 @@ public final class Grants {
      * each having to remember is seven chances to reintroduce it, and the failure is silent — the file
      * says one thing and the player experiences another.
      */
-    private final java.util.List<java.util.function.Consumer<UUID>> watchers =
-            new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Consumer<UUID>> watchers =
+            new CopyOnWriteArrayList<>();
 
     /** Always the local file store — used by every test, and by anything that has no server to ask. */
     public Grants(Path folder) {
@@ -75,7 +80,7 @@ public final class Grants {
      * nobody's permissions silently vanish on the restart that installed a permissions plugin.
      */
     public Grants(Path folder, Plugin plugin) {
-        net.luckperms.api.LuckPerms luckPerms = tryLuckPerms(plugin);
+        LuckPerms luckPerms = tryLuckPerms(plugin);
         if (luckPerms != null) {
             LuckPermsGrantStore lp = new LuckPermsGrantStore(folder, luckPerms);
             lp.importFromLocalIfPresent(folder.resolve("grants.yml"));
@@ -87,13 +92,13 @@ public final class Grants {
         }
     }
 
-    private static net.luckperms.api.LuckPerms tryLuckPerms(Plugin plugin) {
+    private static LuckPerms tryLuckPerms(Plugin plugin) {
         if (plugin == null || plugin.getServer() == null
                 || plugin.getServer().getPluginManager().getPlugin("LuckPerms") == null) {
             return null;
         }
         try {
-            return net.luckperms.api.LuckPermsProvider.get();
+            return LuckPermsProvider.get();
         } catch (IllegalStateException notYetLoaded) {
             log.warn("LuckPerms is installed but was not ready yet when Grants asked for it — falling "
                     + "back to the local file store for this session. If this persists, check that "
@@ -113,14 +118,14 @@ public final class Grants {
      * <p>Wired to {@code GrantListener.apply} so a promotion or a revocation reaches the player who is
      * standing there, and to vanish's may-see set, which is likewise decided once and then cached.
      */
-    public void onChange(java.util.function.Consumer<UUID> watcher) {
+    public void onChange(Consumer<UUID> watcher) {
         if (watcher != null) {
             watchers.add(watcher);
         }
     }
 
     private void changed(UUID who) {
-        for (java.util.function.Consumer<UUID> watcher : watchers) {
+        for (Consumer<UUID> watcher : watchers) {
             try {
                 watcher.accept(who);
             } catch (RuntimeException refreshFailed) {

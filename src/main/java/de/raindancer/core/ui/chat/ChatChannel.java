@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.chat;
 
+import org.bukkit.entity.Player;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -31,7 +32,7 @@ public interface ChatChannel {
      *
      * @return false to leave rendering and delivery to the chat plugin
      */
-    default boolean deliver(org.bukkit.entity.Player speaker, String text) {
+    default boolean deliver(Player speaker, String text) {
         return false;
     }
 }

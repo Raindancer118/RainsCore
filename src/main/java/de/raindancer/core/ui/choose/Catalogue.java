@@ -3,9 +3,11 @@ package de.raindancer.core.ui.choose;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -302,7 +304,7 @@ public final class Catalogue {
     }
 
     private Map<String, List<String>> groupedIn(Category category) {
-        Map<String, List<String>> grouped = new java.util.LinkedHashMap<>();
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
         for (String material : itemsIn(category)) {
             grouped.computeIfAbsent(groupOf(material), family -> new ArrayList<>()).add(material);
         }
@@ -364,7 +366,7 @@ public final class Catalogue {
      * "USE" and "HIT" are all three letters and all capitals in a sound key, and none of them is an
      * acronym. A deny-list of those would have been missing one for ever.
      */
-    private static final java.util.Set<String> ACRONYMS = java.util.Set.of("TNT", "XP", "UI", "ID");
+    private static final Set<String> ACRONYMS = Set.of("TNT", "XP", "UI", "ID");
 
     /**
      * A material name, written the way a person would.
