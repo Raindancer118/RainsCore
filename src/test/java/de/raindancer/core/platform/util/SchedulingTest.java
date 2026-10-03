@@ -127,4 +127,36 @@ class SchedulingTest {
             verify(entities, never()).runDelayed(any(), any(), any(), anyLong());
         }
     }
+
+    @Nested
+    @DisplayName("on the owner's thread")
+    class OnOwner {
+
+        @BeforeEach
+        void enabled() {
+            when(plugin.isEnabled()).thenReturn(true);
+        }
+
+        @Test
+        @DisplayName("runs at once when this thread owns the entity")
+        void here() {
+            bukkit.when(() -> Bukkit.isOwnedByCurrentRegion(player)).thenReturn(true);
+
+            Scheduling.onOwner(plugin, player, ran::incrementAndGet);
+
+            assertThat(ran).hasValue(1);
+            verifyNoInteractions(entities);
+        }
+
+        @Test
+        @DisplayName("goes through the entity's scheduler when another region owns it")
+        void there() {
+            bukkit.when(() -> Bukkit.isOwnedByCurrentRegion(player)).thenReturn(false);
+
+            Scheduling.onOwner(plugin, player, ran::incrementAndGet);
+
+            assertThat(ran).hasValue(0);
+            verify(entities).run(eq(plugin), any(), any());
+        }
+    }
 }

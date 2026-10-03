@@ -385,11 +385,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             };
             // A grant arrives on whoever made it — a moderator's command, on their region. The
             // attachment and the recalculation belong to the affected player's own thread.
-            if (Bukkit.isOwnedByCurrentRegion(affected)) {
-                reapply.run();
-            } else {
-                Scheduling.entity(this, affected, reapply);
-            }
+            Scheduling.onOwner(this, affected, reapply);
         });
         getServer().getPluginManager().registerEvents(grantListener, this);
 
@@ -521,7 +517,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects = new Effects(new BukkitEffectSink(), System::currentTimeMillis);
 
         votes = new Votes(System::currentTimeMillis);
-        players = new PlayerAdmin(new BukkitPlayerAdminSink());
+        players = new PlayerAdmin(new BukkitPlayerAdminSink(this));
 
         // God mode and instakill. Here rather than in a moderation plugin because they are answers to a
         // damage event, and there must be exactly one plugin on the server deciding what one means —

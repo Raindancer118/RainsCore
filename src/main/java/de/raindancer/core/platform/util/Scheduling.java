@@ -75,6 +75,22 @@ public final class Scheduling {
     }
 
     /**
+     * Runs on the thread owning {@code entity}: right here when that is this thread — always, on
+     * Paper's main thread — and through the entity's scheduler otherwise. For an action that should
+     * take effect at once where it can, and must not touch somebody another Folia region is ticking.
+     */
+    public static void onOwner(Plugin plugin, Entity entity, Runnable task) {
+        if (entity == null) {
+            return;
+        }
+        if (Bukkit.isOwnedByCurrentRegion(entity)) {
+            task.run();
+            return;
+        }
+        entity(plugin, entity, task);
+    }
+
+    /**
      * The same, a number of ticks later.
      * <p>
      * Needed where the point is to read state back <em>after</em> the server has finished changing it —

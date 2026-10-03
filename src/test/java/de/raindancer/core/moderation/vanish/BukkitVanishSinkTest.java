@@ -128,4 +128,46 @@ class BukkitVanishSinkTest {
             // Reaching here without throwing is the assertion.
         }
     }
+
+    @Nested
+    @DisplayName("on Folia, from somebody else's region")
+    class OtherRegion {
+
+        @Test
+        @DisplayName("hiding is done on each viewer's own thread, and flight on the target's")
+        @SuppressWarnings("unchecked")
+        void hopsToTheOwners() {
+            Plugin plugin = mock(Plugin.class);
+            when(plugin.isEnabled()).thenReturn(true);
+            Player target = playerIn(GameMode.SURVIVAL);
+            Player viewer = mock(Player.class);
+            when(viewer.getUniqueId()).thenReturn(UUID.randomUUID());
+            java.util.List<java.util.function.Consumer<io.papermc.paper.threadedregions.scheduler.ScheduledTask>>
+                    queued = new java.util.ArrayList<>();
+            for (Player each : java.util.List.of(target, viewer)) {
+                io.papermc.paper.threadedregions.scheduler.EntityScheduler scheduler =
+                        mock(io.papermc.paper.threadedregions.scheduler.EntityScheduler.class);
+                when(each.getScheduler()).thenReturn(scheduler);
+                when(scheduler.run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any())).thenAnswer(call -> {
+                            queued.add(call.getArgument(1));
+                            return null;
+                        });
+            }
+            BukkitVanishSink sink = new BukkitVanishSink(plugin);
+
+            try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+                bukkit.when(() -> Bukkit.getPlayer(MOD)).thenReturn(target);
+                bukkit.when(Bukkit::getOnlinePlayers).thenAnswer(call -> java.util.List.of(target, viewer));
+                sink.hide(MOD, Set.of());
+                sink.allowFlight(MOD, true);
+            }
+
+            verify(viewer, never()).hidePlayer(plugin, target);
+            verify(target, never()).setAllowFlight(anyBoolean());
+            queued.forEach(task -> task.accept(null));
+            verify(viewer).hidePlayer(plugin, target);
+            verify(target).setAllowFlight(true);
+        }
+    }
 }

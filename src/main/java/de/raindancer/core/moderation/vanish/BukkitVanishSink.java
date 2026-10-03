@@ -4,6 +4,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -39,7 +40,9 @@ public final class BukkitVanishSink implements VanishSink {
         }
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (!viewer.equals(target) && !mayStillSee.contains(viewer.getUniqueId())) {
-                viewer.hidePlayer(plugin, target);
+                // On each viewer's own thread: hiding changes what that viewer's client is sent,
+                // and on Folia the viewer may be ticking in a region the caller does not own.
+                Scheduling.onOwner(plugin, viewer, () -> viewer.hidePlayer(plugin, target));
             }
         }
     }
@@ -54,7 +57,7 @@ public final class BukkitVanishSink implements VanishSink {
         // who was never hidden is harmless, and missing one leaves a player invisible to one person
         // for the rest of the session with nothing to explain it.
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            viewer.showPlayer(plugin, target);
+            Scheduling.onOwner(plugin, viewer, () -> viewer.showPlayer(plugin, target));
         }
     }
 
@@ -65,19 +68,24 @@ public final class BukkitVanishSink implements VanishSink {
         if (watching == null || target == null) {
             return;
         }
-        if (sees) {
-            watching.showPlayer(plugin, target);
-        } else {
-            watching.hidePlayer(plugin, target);
-        }
+        Scheduling.onOwner(plugin, watching, () -> {
+            if (sees) {
+                watching.showPlayer(plugin, target);
+            } else {
+                watching.hidePlayer(plugin, target);
+            }
+        });
     }
 
     @Override
     public void allowFlight(UUID who, boolean allowed) {
         Player target = Bukkit.getPlayer(who);
-        if (target == null) {
-            return;
+        if (target != null) {
+            Scheduling.onOwner(plugin, target, () -> reconcileFlight(target, allowed));
         }
+    }
+
+    private static void reconcileFlight(Player target, boolean allowed) {
         if (target.getGameMode().isInvulnerable()) {
             // Creative and Spectator (see GameMode#isInvulnerable) each own flight for reasons of
             // their own that have nothing to do with whatever this class granted or is taking back.
@@ -110,7 +118,7 @@ public final class BukkitVanishSink implements VanishSink {
     public void collidable(UUID who, boolean collides) {
         Player target = Bukkit.getPlayer(who);
         if (target != null) {
-            target.setCollidable(collides);
+            Scheduling.onOwner(plugin, target, () -> target.setCollidable(collides));
         }
     }
 
@@ -123,7 +131,7 @@ public final class BukkitVanishSink implements VanishSink {
             // splashing, a hurt noise, drinking) stops; a block a vanished player mines still sounds
             // exactly as loud as ever, because that sound belongs to the block, not the player, and
             // hiding a griefer's own noise was never meant to also hide the grief.
-            target.setSilent(silent);
+            Scheduling.onOwner(plugin, target, () -> target.setSilent(silent));
         }
     }
 
