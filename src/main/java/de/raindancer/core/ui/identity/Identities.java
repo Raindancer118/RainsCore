@@ -1,22 +1,27 @@
 package de.raindancer.core.ui.identity;
 
+import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
-import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.platform.util.Marks;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 
 /**
  * Who a player is, as everybody else sees them.
@@ -175,11 +180,11 @@ public final class Identities {
         if (player == null) {
             return Optional.empty();
         }
-        org.bukkit.entity.Player online = org.bukkit.Bukkit.getPlayer(player);
+        Player online = Bukkit.getPlayer(player);
         if (online != null) {
             return Optional.of(online.getName());
         }
-        String saved = org.bukkit.Bukkit.getOfflinePlayer(player).getName();
+        String saved = Bukkit.getOfflinePlayer(player).getName();
         return saved == null || saved.isBlank() ? Optional.empty() : Optional.of(saved);
     }
 
@@ -220,7 +225,9 @@ public final class Identities {
         if (colour != null && !colour.isBlank() && !isColour(colour)) {
             return false;
         }
-        return change(player, colour, (identity, value) -> new Identity(identity.prefix(),
+        // Stored as it was judged: " RED" passes the check, and stored raw it names no colour at all.
+        String cleaned = colour == null ? null : colour.trim().toLowerCase(Locale.ROOT);
+        return change(player, cleaned, (identity, value) -> new Identity(identity.prefix(),
                 identity.suffix(), identity.nametagPrefix(), value, identity.subtitle()));
     }
 
@@ -238,7 +245,7 @@ public final class Identities {
     }
 
     private boolean change(UUID player, String raw,
-                           java.util.function.BiFunction<Identity, String, Identity> update) {
+                           BiFunction<Identity, String, Identity> update) {
         if (player == null) {
             return false;
         }
@@ -255,12 +262,13 @@ public final class Identities {
         if (!value.isEmpty() && !isUsableMarkup(value)) {
             return false;
         }
-        Identity updated = update.apply(identityOf(player), value);
-        if (updated.isBlank()) {
-            identities.remove(player);
-        } else {
-            identities.put(player, updated);
-        }
+        String accepted = value;
+        // One atomic step: read, change and put back separately, a prefix and a suffix set at the same
+        // moment from two threads kept only one of them.
+        identities.compute(player, (key, before) -> {
+            Identity updated = update.apply(before == null ? Identity.BLANK : before, accepted);
+            return updated.isBlank() ? null : updated;
+        });
         changed.add(player);
         return true;
     }
@@ -397,9 +405,9 @@ public final class Identities {
         if (colour.isEmpty()) {
             return text;
         }
-        net.kyori.adventure.text.format.TextColor parsed = colour.startsWith("#")
-                ? net.kyori.adventure.text.format.TextColor.fromHexString(colour)
-                : net.kyori.adventure.text.format.NamedTextColor.NAMES.value(colour);
+        TextColor parsed = colour.startsWith("#")
+                ? TextColor.fromHexString(colour)
+                : NamedTextColor.NAMES.value(colour);
         return parsed == null ? text : text.color(parsed);
     }
 
@@ -439,9 +447,9 @@ public final class Identities {
             java.util.regex.Pattern.compile("<[a-zA-Z_][a-zA-Z0-9_:#-]*>");
 
     private static boolean isColour(String colour) {
-        String cleaned = colour.trim().toLowerCase(java.util.Locale.ROOT);
+        String cleaned = colour.trim().toLowerCase(Locale.ROOT);
         return cleaned.matches("#[0-9a-f]{6}")
-                || net.kyori.adventure.text.format.NamedTextColor.NAMES.value(cleaned) != null;
+                || NamedTextColor.NAMES.value(cleaned) != null;
     }
 
     /** Cuts a nametag down to something that fits over a moving player, tags kept whole. */

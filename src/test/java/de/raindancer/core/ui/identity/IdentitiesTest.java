@@ -98,6 +98,17 @@ class IdentitiesTest {
         }
 
         @Test
+        @DisplayName("a colour accepted in capitals or with spaces is the colour it was accepted as")
+        void aColourIsStoredAsAccepted() {
+            assertThat(identities.setColour(ALICE, " RED ")).isTrue();
+
+            assertThat(identities.colour(ALICE)).contains("red");
+            assertThat(identities.chatName(ALICE, "Raindancer118").children().getFirst().color())
+                    .as("accepted, then stored raw, it drew the name in no colour at all")
+                    .isEqualTo(net.kyori.adventure.text.format.NamedTextColor.RED);
+        }
+
+        @Test
         @DisplayName("a name a player did not choose is never parsed as markup")
         void doesNotParseTheName() {
             assertThat(plain(identities.chatName(ALICE, "<red>notacolour")))
