@@ -13,8 +13,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -56,7 +58,7 @@ public final class SeedHistory {
 
     private final Database database;
     private final LongSupplier clock;
-    private final java.util.function.Consumer<Runnable> writeSoon;
+    private final Consumer<Runnable> writeSoon;
 
     /** Newest first, per world, keyed case-insensitively the way Bukkit looks worlds up. */
     private final Map<String, List<Entry>> byWorld = new ConcurrentHashMap<>();
@@ -72,7 +74,7 @@ public final class SeedHistory {
      *                  for the saving timer only leaves them to be written at shutdown, which is on the
      *                  thread running the world. Null leaves writing to whoever calls {@link #flush()}.
      */
-    public SeedHistory(Database database, LongSupplier clock, java.util.function.Consumer<Runnable> writeSoon) {
+    public SeedHistory(Database database, LongSupplier clock, Consumer<Runnable> writeSoon) {
         this.database = database;
         this.clock = clock == null ? System::currentTimeMillis : clock;
         this.writeSoon = writeSoon;
@@ -173,11 +175,11 @@ public final class SeedHistory {
      *
      * @return true once everything is written; false when it could not be
      */
-    public java.util.concurrent.CompletableFuture<Boolean> flushNow() {
+    public CompletableFuture<Boolean> flushNow() {
         if (writeSoon == null) {
-            return java.util.concurrent.CompletableFuture.completedFuture(flush());
+            return CompletableFuture.completedFuture(flush());
         }
-        java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+        CompletableFuture<Boolean> done = new CompletableFuture<>();
         writeSoon.accept(() -> {
             try {
                 done.complete(flush());
@@ -196,9 +198,13 @@ public final class SeedHistory {
     /**
      * Writes whatever has been recorded since the last flush.
      *
+     * <p>One flush at a time. A second one arriving while the first holds the queued seeds in hand
+     * would find the queue empty and answer "written" — and {@link WorldRegenerator} deletes a world
+     * on that answer.
+     *
      * @return whether everything is on disk; a failed write keeps the rows queued for the next one
      */
-    public boolean flush() {
+    public synchronized boolean flush() {
         if (unwritten.isEmpty()) {
             return true;
         }

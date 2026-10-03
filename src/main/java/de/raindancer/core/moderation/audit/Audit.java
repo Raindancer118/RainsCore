@@ -128,6 +128,18 @@ public final class Audit {
      * @return how many were written
      */
     public int flush() {
+        synchronized (flushing) {
+            return writeChanges();
+        }
+    }
+
+    /**
+     * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
+     * two at once either land out of order or answer "written" while the other still holds the rows.
+     */
+    private final Object flushing = new Object();
+
+    private int writeChanges() {
         if (pending.isEmpty() || !database.isUsable()) {
             return 0;
         }

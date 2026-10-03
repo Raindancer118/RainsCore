@@ -295,6 +295,18 @@ public final class PoiStore {
      *         that had already thrown away its source would have nothing left to try with
      */
     public boolean flush() {
+        synchronized (flushing) {
+            return writeChanges();
+        }
+    }
+
+    /**
+     * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
+     * two at once either land out of order or answer "written" while the other still holds the rows.
+     */
+    private final Object flushing = new Object();
+
+    private boolean writeChanges() {
         if (!isDirty()) {
             // Nothing to write is not a failure. A caller that treated it as one would refuse to
             // finish work that had already finished.

@@ -266,6 +266,18 @@ public final class Punishments {
      * <p>Must be called off the server's threads.
      */
     public void flush() {
+        synchronized (flushing) {
+            writeChanges();
+        }
+    }
+
+    /**
+     * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
+     * two at once either land out of order or answer "written" while the other still holds the rows.
+     */
+    private final Object flushing = new Object();
+
+    private void writeChanges() {
         if (changed.isEmpty() || !database.isUsable()) {
             return;
         }

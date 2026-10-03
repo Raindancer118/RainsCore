@@ -142,7 +142,9 @@ public final class YamlStore {
         }
     }
 
-    private boolean put(YamlConfiguration yaml, Consumer<YamlConfiguration> contents) {
+    private synchronized boolean put(YamlConfiguration yaml, Consumer<YamlConfiguration> contents) {
+        // The contents are built under the same lock as the move, so two writers cannot each read
+        // what they know and then land in the opposite order — the older picture last.
         String text;
         try {
             contents.accept(yaml);
@@ -154,29 +156,27 @@ public final class YamlStore {
             return false;
         }
 
-        synchronized (this) {
-            Path temporary = file.resolveSibling(file.getFileName() + ".writing");
+        Path temporary = file.resolveSibling(file.getFileName() + ".writing");
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(temporary, text);
+            // The move is what makes this safe: on every filesystem these run on it is atomic,
+            // so a reader sees the old file or the new one and never a partial write.
+            Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException failure) {
+            log.error(failure, "Could not write {}; it is unchanged.", file);
+            return false;
+        } finally {
+            // A temporary left behind after a failure would be written over next time anyway,
+            // but a directory littered with .writing files is a directory somebody worries about.
             try {
-                Path parent = file.getParent();
-                if (parent != null) {
-                    Files.createDirectories(parent);
-                }
-                Files.writeString(temporary, text);
-                // The move is what makes this safe: on every filesystem these run on it is atomic,
-                // so a reader sees the old file or the new one and never a partial write.
-                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
-                return true;
-            } catch (IOException failure) {
-                log.error(failure, "Could not write {}; it is unchanged.", file);
-                return false;
-            } finally {
-                // A temporary left behind after a failure would be written over next time anyway,
-                // but a directory littered with .writing files is a directory somebody worries about.
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                    // Nothing useful to do, and nothing depends on it.
-                }
+                Files.deleteIfExists(temporary);
+            } catch (IOException ignored) {
+                // Nothing useful to do, and nothing depends on it.
             }
         }
     }

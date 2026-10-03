@@ -606,4 +606,35 @@ class PoiStoreTest {
         Optional<Poi> found = store.byId("nothing");
         assertThat(found).isEmpty();
     }
+
+    @Test
+    @DisplayName("a flush does not answer 'written' while an earlier one still has the change in hand")
+    void aFlushWaitsForTheOneAlreadyWriting() throws Exception {
+        store.save(Poi.builder("base", "world", 0, 0, 0).owner(BOB).kind("home").build());
+
+        try (java.sql.Connection other = java.sql.DriverManager.getConnection(
+                "jdbc:sqlite:" + directory.resolve("core.db"));
+             java.sql.Statement lock = other.createStatement()) {
+            lock.execute("BEGIN EXCLUSIVE");
+            java.util.concurrent.CompletableFuture<Boolean> first =
+                    java.util.concurrent.CompletableFuture.supplyAsync(store::flush);
+            long until = System.currentTimeMillis() + 5_000;
+            while (store.isDirty() && System.currentTimeMillis() < until) {
+                Thread.sleep(5);
+            }
+            assertThat(store.isDirty()).as("the first flush took the change").isFalse();
+
+            // What the shutdown flush is, while a timer flush cancelled a moment ago is still running.
+            java.util.concurrent.CompletableFuture<Boolean> second =
+                    java.util.concurrent.CompletableFuture.supplyAsync(store::flush);
+            Thread.sleep(300);
+            assertThat(second)
+                    .as("answering now lets the databases close under the write still running")
+                    .isNotDone();
+
+            lock.execute("ROLLBACK");
+            assertThat(first.get(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(10, TimeUnit.SECONDS)).isTrue();
+        }
+    }
 }

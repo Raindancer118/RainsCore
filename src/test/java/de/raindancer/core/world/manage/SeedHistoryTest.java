@@ -153,4 +153,42 @@ class SeedHistoryTest {
         assertThat(history.record(null, 1L, SeedHistory.Cause.CREATED)).isFalse();
         assertThat(history.isDirty()).isFalse();
     }
+
+    @Test
+    @DisplayName("a flush does not answer 'written' while an earlier flush still has the seed in hand")
+    void aFlushWaitsForTheOneAlreadyWriting() throws Exception {
+        SeedHistory history = open();
+        history.record("farm", 7L, SeedHistory.Cause.REPLACED);
+
+        // Somebody else holds the write lock, so the first flush takes the seed off the queue and
+        // then has to wait for its turn.
+        try (java.sql.Connection other = java.sql.DriverManager.getConnection(
+                "jdbc:sqlite:" + folder.resolve("core.db"))) {
+            try (java.sql.Statement lock = other.createStatement()) {
+                lock.execute("BEGIN EXCLUSIVE");
+            }
+            java.util.concurrent.CompletableFuture<Boolean> first =
+                    java.util.concurrent.CompletableFuture.supplyAsync(history::flush);
+            long until = System.currentTimeMillis() + 5_000;
+            while (history.isDirty() && System.currentTimeMillis() < until) {
+                Thread.sleep(5);
+            }
+            assertThat(history.isDirty()).as("the first flush took the seed").isFalse();
+
+            java.util.concurrent.CompletableFuture<Boolean> second =
+                    java.util.concurrent.CompletableFuture.supplyAsync(history::flush);
+            Thread.sleep(300);
+            assertThat(second)
+                    .as("answering true here is what lets a world be deleted before its seed is on "
+                            + "disk anywhere")
+                    .isNotDone();
+
+            try (java.sql.Statement unlock = other.createStatement()) {
+                unlock.execute("ROLLBACK");
+            }
+            assertThat(first.get(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(open().of("farm")).extracting(SeedHistory.Entry::seed).containsExactly(7L);
+    }
 }

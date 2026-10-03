@@ -229,6 +229,18 @@ public final class CustomItems {
 
     /** Writes, if anything changed. Via a temporary file, so a kill mid-write cannot truncate it. */
     public void flush() {
+        synchronized (flushing) {
+            writeChanges();
+        }
+    }
+
+    /**
+     * One flush at a time. The saving timer can still be mid-flush when shutdown flushes by hand, and
+     * two at once either land out of order or answer "written" while the other still holds the rows.
+     */
+    private final Object flushing = new Object();
+
+    private void writeChanges() {
         if (!dirty.compareAndSet(true, false)) {
             return;
         }
