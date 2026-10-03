@@ -56,6 +56,7 @@ import de.raindancer.core.ui.checklist.Checklist;
 import de.raindancer.core.ui.checklist.ChecklistChat;
 import de.raindancer.core.data.settings.SettingsMenu;
 import de.raindancer.core.data.runs.RunHistory;
+import de.raindancer.core.ui.prompt.AnvilInput;
 import de.raindancer.core.world.locate.StructureLocator;
 import de.raindancer.core.ui.effect.BukkitEffectSink;
 import de.raindancer.core.ui.effect.Effects;
@@ -459,6 +460,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         landPolicyStore.problem().ifPresent(trouble -> log.warn("land-flags.yml: {}", trouble));
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
+        getServer().getPluginManager().registerEvents(new AnvilInput.Listener(), this);
         interactionProtection = new InteractionProtectionListener(land, messages, audit);
         getServer().getPluginManager().registerEvents(interactionProtection, this);
         EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);
@@ -1519,6 +1521,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects.forget(player.getUniqueId());
         land.forget(player.getUniqueId());
         movementProtection.forget(player.getUniqueId());
+        AnvilInput.forget(player.getUniqueId());
         interactionProtection.forget(player.getUniqueId());
         seclusion.forget(player.getUniqueId());
         worldEntryPoints.forget(player.getUniqueId());
