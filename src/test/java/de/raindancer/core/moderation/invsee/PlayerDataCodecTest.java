@@ -357,4 +357,101 @@ class PlayerDataCodecTest {
             return slots;
         }
     }
+
+    /**
+     * Minecraft 1.21.5 took armour and the off-hand out of {@code Inventory} and into an
+     * {@code equipment} compound keyed by slot name. A 26.x server never writes slots 100–103 or −106
+     * any more and ignores them on load — so reading only those shows a moderator bare armour, and
+     * writing an item there throws it away.
+     */
+    @Nested
+    @DisplayName("a file from 1.21.5 on, with its armour under equipment")
+    class Equipment {
+
+        private static final int MODERN = 4440;
+
+        private static Tag.Compound item(String id) {
+            Map<String, Tag> values = new LinkedHashMap<>();
+            values.put("id", new Tag.Str(id));
+            values.put("count", new Tag.Int(1));
+            return new Tag.Compound(values);
+        }
+
+        private static Tag.Compound modernFile(List<Tag> inventory, Map<String, Tag> equipment) {
+            Map<String, Tag> values = new LinkedHashMap<>();
+            values.put("DataVersion", new Tag.Int(MODERN));
+            values.put("Inventory", Tag.List_.of(inventory));
+            values.put("EnderItems", Tag.List_.of(List.of()));
+            if (equipment != null) {
+                values.put("equipment", compound(equipment));
+            }
+            return new Tag.Compound(values);
+        }
+
+        private static byte[] bytesOf(String id) throws IOException {
+            return Nbt.writeCompressed(item(id).with("DataVersion", new Tag.Int(MODERN)));
+        }
+
+        @Test
+        @DisplayName("armour and the off-hand are read from it, helmet first")
+        void readsEquipment() throws IOException {
+            Tag.Compound root = modernFile(List.of(saved("minecraft:bread", 3, 0)), Map.of(
+                    "head", item("minecraft:netherite_helmet"),
+                    "feet", item("minecraft:leather_boots"),
+                    "offhand", item("minecraft:shield")));
+
+            Carried<byte[]> carried = PlayerDataCodec.read(root);
+
+            assertThat(asItem(carried.at(Section.ARMOUR, 0)).string("id"))
+                    .contains("minecraft:netherite_helmet");
+            assertThat(asItem(carried.at(Section.ARMOUR, 3)).string("id"))
+                    .contains("minecraft:leather_boots");
+            assertThat(asItem(carried.at(Section.OFF_HAND, 0)).string("id"))
+                    .contains("minecraft:shield");
+            assertThat(asItem(carried.at(Section.ARMOUR, 0)).intOr("DataVersion", 0))
+                    .isEqualTo(MODERN);
+        }
+
+        @Test
+        @DisplayName("armour put in is written under equipment, and what this does not own is kept")
+        void writesEquipment() throws IOException {
+            Tag.Compound root = modernFile(List.of(), Map.of(
+                    "head", item("minecraft:iron_helmet"),
+                    "body", item("minecraft:wolf_armor")));
+            Carried<byte[]> carried = PlayerDataCodec.read(root)
+                    .with(Section.ARMOUR, 0, null)
+                    .with(Section.ARMOUR, 1, bytesOf("minecraft:diamond_chestplate"))
+                    .with(Section.OFF_HAND, 0, bytesOf("minecraft:totem_of_undying"));
+
+            Tag.Compound written = PlayerDataCodec.write(root, carried);
+
+            Tag.Compound equipment = written.compound("equipment").orElseThrow();
+            assertThat(equipment.has("head")).as("the helmet was taken off").isFalse();
+            assertThat(equipment.compound("chest").flatMap(chest -> chest.string("id")))
+                    .contains("minecraft:diamond_chestplate");
+            assertThat(equipment.compound("offhand").flatMap(hand -> hand.string("id")))
+                    .contains("minecraft:totem_of_undying");
+            assertThat(equipment.compound("chest").orElseThrow().has("DataVersion")).isFalse();
+            assertThat(equipment.compound("body").flatMap(body -> body.string("id")))
+                    .as("not a slot this window shows, so not this window's to drop")
+                    .contains("minecraft:wolf_armor");
+            assertThat(written.list("Inventory").orElseThrow().items())
+                    .as("slots 100-103 and -106 are ignored by a 26.x server on load")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a modern file with nothing equipped yet still gets its armour under equipment")
+        void modernWithoutEquipment() throws IOException {
+            Tag.Compound root = modernFile(List.of(), null);
+            Carried<byte[]> carried = Carried.<byte[]>empty()
+                    .with(Section.ARMOUR, 3, bytesOf("minecraft:golden_boots"));
+
+            Tag.Compound written = PlayerDataCodec.write(root, carried);
+
+            assertThat(written.compound("equipment").flatMap(e -> e.compound("feet"))
+                    .flatMap(feet -> feet.string("id"))).contains("minecraft:golden_boots");
+            assertThat(written.list("Inventory").orElseThrow().items()).isEmpty();
+        }
+    }
 }

@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.IntPredicate;
 
 /**
  * What a saved player file says somebody is carrying, and how to put it back.
@@ -44,6 +45,17 @@ public final class PlayerDataCodec {
     public static final String ENDER_ITEMS = "EnderItems";
     public static final String DATA_VERSION = "DataVersion";
     public static final String SLOT = "Slot";
+    /**
+     * Where armour and the off-hand live from Minecraft 1.21.5 on: a compound keyed by slot name
+     * rather than entries 100–103 and −106 in {@link #INVENTORY}, which a newer server no longer
+     * writes and ignores on load.
+     */
+    public static final String EQUIPMENT = "equipment";
+    /** The first data version (1.21.5) that keeps armour under {@link #EQUIPMENT}. */
+    public static final int EQUIPMENT_SINCE = 4325;
+    /** The names {@link #EQUIPMENT} uses for the armour, helmet first like {@link Section#ARMOUR}. */
+    private static final List<String> ARMOUR_KEYS = List.of("head", "chest", "legs", "feet");
+    private static final String OFF_HAND_KEY = "offhand";
 
     private PlayerDataCodec() {
     }
@@ -87,7 +99,26 @@ public final class PlayerDataCodec {
             carried = carried.with(Section.ENDER_CHEST, slot.get(),
                     asItemBytes(entry, dataVersion));
         }
+        Optional<Tag.Compound> equipment = root.compound(EQUIPMENT);
+        if (equipment.isPresent()) {
+            for (int within = 0; within < ARMOUR_KEYS.size(); within++) {
+                Optional<Tag.Compound> worn = equipment.get().compound(ARMOUR_KEYS.get(within));
+                if (worn.isPresent()) {
+                    carried = carried.with(Section.ARMOUR, within,
+                            asItemBytes(worn.get(), dataVersion));
+                }
+            }
+            Optional<Tag.Compound> held = equipment.get().compound(OFF_HAND_KEY);
+            if (held.isPresent()) {
+                carried = carried.with(Section.OFF_HAND, 0, asItemBytes(held.get(), dataVersion));
+            }
+        }
         return carried;
+    }
+
+    /** Whether this file keeps armour and the off-hand under {@link #EQUIPMENT}. */
+    private static boolean keepsEquipmentApart(Tag.Compound root) {
+        return root.has(EQUIPMENT) || dataVersionOf(root) >= EQUIPMENT_SINCE;
     }
 
     /** One saved entry as the bytes the server's own item reader takes. */
@@ -112,9 +143,11 @@ public final class PlayerDataCodec {
         Tag.Compound file = root == null ? Tag.Compound.empty() : root;
         Carried<byte[]> items = carried == null ? Carried.empty() : carried;
 
+        boolean equipmentApart = keepsEquipmentApart(file);
         List<Tag> inventory = new ArrayList<>();
-        for (Section section : List.of(Section.HOTBAR, Section.STORAGE, Section.ARMOUR,
-                Section.OFF_HAND)) {
+        List<Section> inInventory = equipmentApart ? List.of(Section.HOTBAR, Section.STORAGE)
+                : List.of(Section.HOTBAR, Section.STORAGE, Section.ARMOUR, Section.OFF_HAND);
+        for (Section section : inInventory) {
             for (int within = 0; within < section.size(); within++) {
                 byte[] bytes = items.at(section, within);
                 if (bytes != null) {
@@ -135,8 +168,28 @@ public final class PlayerDataCodec {
         ender.addAll(keptFrom(file, ENDER_ITEMS,
                 slot -> slot < 0 || slot >= Section.ENDER_CHEST.size()));
 
-        return file.with(INVENTORY, Tag.List_.of(inventory))
+        Tag.Compound written = file.with(INVENTORY, Tag.List_.of(inventory))
                 .with(ENDER_ITEMS, Tag.List_.of(ender));
+        return equipmentApart ? written.with(EQUIPMENT, equipment(file, items)) : written;
+    }
+
+    /**
+     * The file's equipment with this window's slots replaced. Anything else in it — a saddle, body
+     * armour — is not shown here, so it is carried through rather than dropped.
+     */
+    private static Tag.Compound equipment(Tag.Compound file, Carried<byte[]> items)
+            throws IOException {
+        Tag.Compound equipment = file.compound(EQUIPMENT).orElse(Tag.Compound.empty());
+        for (int within = 0; within < ARMOUR_KEYS.size(); within++) {
+            equipment = withItem(equipment, ARMOUR_KEYS.get(within), items.at(Section.ARMOUR, within));
+        }
+        return withItem(equipment, OFF_HAND_KEY, items.at(Section.OFF_HAND, 0));
+    }
+
+    private static Tag.Compound withItem(Tag.Compound equipment, String key, byte[] bytes)
+            throws IOException {
+        return bytes == null ? equipment.without(key)
+                : equipment.with(key, Nbt.readCompressed(bytes).without(DATA_VERSION));
     }
 
     /** One item's bytes as the file wants them: no DataVersion, with a Slot. */
@@ -154,7 +207,7 @@ public final class PlayerDataCodec {
      * understand is somebody's property.
      */
     private static List<Tag> keptFrom(Tag.Compound root, String listName,
-                                      java.util.function.IntPredicate unplaceable) {
+                                      IntPredicate unplaceable) {
         List<Tag> kept = new ArrayList<>();
         for (Tag.Compound entry : entriesOf(root, listName)) {
             Optional<Integer> slot = slotOf(entry);
