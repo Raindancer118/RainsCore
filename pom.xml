@@ -194,6 +194,36 @@
                     <argLine>-Dnet.bytebuddy.experimental=true</argLine>
                 </configuration>
             </plugin>
+            <plugin>
+                <!--
+                  The testkit (de.raindancer.core.testkit) ships as RainsCore-<version>-tests.jar so module
+                  tests can build items, inventories and players without a server. Only the kit and the
+                  service file that registers its registries go in, never Core's own tests. A module uses it as
+                  <dependency> ... <artifactId>RainsCore</artifactId> <type>test-jar</type> <scope>test</scope>
+                  plus mockito-core in test scope, which the kit is built on.
+                -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>testkit</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>de/raindancer/core/testkit/**</include>
+                                <include>META-INF/services/io.papermc.paper.registry.RegistryAccess</include>
+                            </includes>
+                            <excludes>
+                                <exclude>**/*Test.class</exclude>
+                                <exclude>**/*Test$*.class</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
