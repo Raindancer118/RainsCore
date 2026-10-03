@@ -101,7 +101,7 @@ public final class InteractionProtectionListener implements Listener {
         if (required == LandAction.REDSTONE
                 && land.landFlags().isEnforced(LandFlag.REDSTONE)
                 && !land.landFlags().isAllowedForTracked(
-                        land.areaAround(event.getPlayer()).orElse(null),
+                        land.areaAt(block.getLocation()).orElse(null),
                         block.getLocation(), LandFlag.REDSTONE, event.getPlayer())) {
             event.setCancelled(true);
             land.areaAt(block.getLocation())

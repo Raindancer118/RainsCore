@@ -94,4 +94,20 @@ class RedstoneByHandTest {
                 .as("a click that does nothing with no explanation reads as the server lagging")
                 .containsPattern("refuse\\(|land\\.redstone-refused|messages");
     }
+
+    @Test
+    @DisplayName("the lever is judged by the claim it is in, not the one its user stands in")
+    void judgedWhereTheComponentIs() {
+        String body = read("InteractionProtectionListener.java");
+        int at = body.indexOf("required == LandAction.REDSTONE");
+        assertThat(at).isNotNegative();
+        String check = body.substring(at, body.indexOf("event.setCancelled(true);", at));
+
+        assertThat(check)
+                .as("asked about the player's own area, anybody standing just outside a claim could reach "
+                        + "in and flip its levers, and somebody inside one was refused for a lever in the "
+                        + "wilderness")
+                .contains("areaAt(block.getLocation())")
+                .doesNotContain("areaAround(");
+    }
 }

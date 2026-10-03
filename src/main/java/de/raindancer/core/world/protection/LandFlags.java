@@ -1,5 +1,6 @@
 package de.raindancer.core.world.protection;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -55,8 +56,10 @@ public final class LandFlags {
         ProtectedArea area = land.areaAt(location).orElse(null);
         // The actor-less half of the bypass. This overload is what every world event comes through — a redstone
         // torch, a pressure plate, a block completing a circuit — and none of them carry a player, so the
-        // per-player check above can never fire for them. See Land.isSuspendedIn.
-        if (land.isSuspendedIn(area)) {
+        // per-player check above can never fire for them. See Land.isSuspendedIn. Only for them: a question
+        // about a particular player is that player's, and answering it from an admin's presence switched
+        // every flag off for everybody standing in the claim with them.
+        if (who == null && land.isSuspendedIn(area)) {
             return true;
         }
         return rules.isAllowed(area, flag, LandAudience.of(area, who), who);
@@ -80,7 +83,7 @@ public final class LandFlags {
             return false;
         }
         ProtectedArea area = land.areaAt(location).orElse(null);
-        if (land.isSuspendedIn(area)) {
+        if (who == null && land.isSuspendedIn(area)) {
             return false;
         }
         return rules.isAppliedTo(area, flag, LandAudience.of(area, who), who);
@@ -107,7 +110,7 @@ public final class LandFlags {
         if (who == null) {
             return false;
         }
-        Player player = org.bukkit.Bukkit.getPlayer(who);
+        Player player = Bukkit.getPlayer(who);
         return player != null && land.isBypassing(player);
     }
 
