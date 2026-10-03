@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.vanish;
 
+import de.raindancer.core.platform.util.Scheduling;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -55,7 +56,7 @@ public final class VanishListener implements Listener {
         if (vanish.isVanished(joining.getUniqueId())) {
             for (Player viewer : Bukkit.getOnlinePlayers()) {
                 if (!viewer.equals(joining) && !vanish.maySeeVanished(viewer.getUniqueId())) {
-                    viewer.hidePlayer(plugin, joining);
+                    Scheduling.onOwner(plugin, viewer, () -> viewer.hidePlayer(plugin, joining));
                 }
             }
         } else {
@@ -64,7 +65,7 @@ public final class VanishListener implements Listener {
             // was never hidden costs nothing.
             for (Player viewer : Bukkit.getOnlinePlayers()) {
                 if (!viewer.equals(joining)) {
-                    viewer.showPlayer(plugin, joining);
+                    Scheduling.onOwner(plugin, viewer, () -> viewer.showPlayer(plugin, joining));
                 }
             }
         }
