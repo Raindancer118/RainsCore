@@ -54,6 +54,11 @@ class VanishTest {
             }
 
             @Override
+            public void seenBy(UUID viewer, UUID who, boolean sees) {
+                did.add(new Did((sees ? "seen-by:" : "unseen-by:") + viewer, who));
+            }
+
+            @Override
             public void allowFlight(UUID who, boolean allowed) {
                 did.add(new Did("flight:" + allowed, who));
             }
@@ -425,5 +430,23 @@ class VanishTest {
             vanish.maySeeVanished(MOD, false);
             assertThat(vanish.maySeeVanished(MOD)).isFalse();
         }
+    }
+
+    @Test
+    @DisplayName("being given or losing the right to see the hidden takes effect at once, not at the next join")
+    void seeingIsAppliedWhenItChanges() {
+        Vanish vanish = vanish();
+        UUID hidden = UUID.randomUUID();
+        UUID moderator = UUID.randomUUID();
+        vanish.vanish(hidden);
+        did.clear();
+
+        vanish.maySeeVanished(moderator, true);
+        vanish.maySeeVanished(moderator, true);
+        vanish.maySeeVanished(moderator, false);
+
+        assertThat(did).containsExactly(
+                new Did("seen-by:" + moderator, hidden),
+                new Did("unseen-by:" + moderator, hidden));
     }
 }

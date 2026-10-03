@@ -56,6 +56,20 @@ public final class BukkitVanishSink implements VanishSink {
     }
 
     @Override
+    public void seenBy(UUID viewer, UUID who, boolean sees) {
+        Player watching = Bukkit.getPlayer(viewer);
+        Player target = Bukkit.getPlayer(who);
+        if (watching == null || target == null) {
+            return;
+        }
+        if (sees) {
+            watching.showPlayer(plugin, target);
+        } else {
+            watching.hidePlayer(plugin, target);
+        }
+    }
+
+    @Override
     public void allowFlight(UUID who, boolean allowed) {
         Player target = Bukkit.getPlayer(who);
         if (target == null) {

@@ -361,12 +361,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             if (affected == null) {
                 return;     // they get it all on join anyway
             }
-            grantListener.apply(affected);
-            // Vanish decides who may see hidden players once, at join, and caches it. A moderator who
-            // is granted that node mid-session would otherwise not be able to see anybody until they
-            // relogged — the same defect one layer up.
-            if (vanish != null) {
-                vanish.maySeeVanished(who, affected.hasPermission(SEE_VANISHED));
+            Runnable reapply = () -> {
+                grantListener.apply(affected);
+                // Vanish decides who may see hidden players once, at join, and caches it. A moderator
+                // who is granted that node mid-session would otherwise not be able to see anybody until
+                // they relogged — the same defect one layer up.
+                if (vanish != null) {
+                    vanish.maySeeVanished(who, affected.hasPermission(SEE_VANISHED));
+                }
+            };
+            // A grant arrives on whoever made it — a moderator's command, on their region. The
+            // attachment and the recalculation belong to the affected player's own thread.
+            if (Bukkit.isOwnedByCurrentRegion(affected)) {
+                reapply.run();
+            } else {
+                Scheduling.entity(this, affected, reapply);
             }
         });
         getServer().getPluginManager().registerEvents(grantListener, this);

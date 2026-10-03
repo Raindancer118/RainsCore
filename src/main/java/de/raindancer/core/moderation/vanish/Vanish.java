@@ -236,10 +236,16 @@ public final class Vanish {
         if (who == null) {
             return;
         }
-        if (may) {
-            maySee.add(who);
-        } else {
-            maySee.remove(who);
+        boolean changed = may ? maySee.add(who) : maySee.remove(who);
+        if (!changed) {
+            return;
+        }
+        // Applied now: the cache alone changes nothing a player can see until the next join, which
+        // is a moderator granted the node mid-session still seeing nobody.
+        for (UUID target : everybodyVanished()) {
+            if (!target.equals(who)) {
+                sink.seenBy(who, target, may);
+            }
         }
     }
 

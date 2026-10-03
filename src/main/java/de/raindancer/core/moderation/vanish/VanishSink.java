@@ -24,6 +24,13 @@ public interface VanishSink {
     /** Shows them again. */
     void show(UUID who);
 
+    /**
+     * Shows or hides one hidden player to one viewer — for a viewer whose right to see the hidden
+     * changed while both are online. A no-op by default, so a sink written before this still compiles.
+     */
+    default void seenBy(UUID viewer, UUID who, boolean sees) {
+    }
+
     /** Turns flight on or off. */
     void allowFlight(UUID who, boolean allowed);
 
