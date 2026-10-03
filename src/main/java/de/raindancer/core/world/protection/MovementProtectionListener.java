@@ -47,7 +47,7 @@ public final class MovementProtectionListener implements Listener {
     private static final long GLIDE_GRACE = 8_000L;
 
     /** Players the plugin took out of the air, and when. */
-    private final java.util.Map<UUID, Long> caughtFalling = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Long> caughtFalling = new ConcurrentHashMap<>();
 
     public MovementProtectionListener(Land land, Messages messages) {
         this.land = land;
@@ -166,5 +166,6 @@ public final class MovementProtectionListener implements Listener {
     /** Called when a player leaves, or the throttle grows an entry per player who has ever been on. */
     public void forget(UUID player) {
         lastRefusal.remove(player);
+        caughtFalling.remove(player);
     }
 }

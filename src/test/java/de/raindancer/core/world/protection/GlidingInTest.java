@@ -107,4 +107,17 @@ class GlidingInTest {
                 .as("the crossing test already exists for WALK_IN and has to be shared, not written twice")
                 .contains("refusedAt");
     }
+
+    @Test
+    @DisplayName("somebody grounded who never took the fall is forgotten when they leave")
+    void theGraceIsForgottenOnQuit() {
+        String body = listener();
+        int forget = body.indexOf("public void forget(UUID");
+        assertThat(forget).isNotNegative();
+
+        assertThat(body.substring(forget, body.indexOf("\n    }", forget)))
+                .as("a grace is only taken back when fall damage arrives; landing in water or logging out "
+                        + "mid-air leaves it behind for every player who ever flew into a claim")
+                .contains("caughtFalling.remove(");
+    }
 }
