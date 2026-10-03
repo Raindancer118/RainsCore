@@ -78,12 +78,20 @@ public final class BatchBuilder {
         if (!ground.isLoaded(placement.spot())) {
             return;
         }
-        String before = ground.materialAt(placement.spot());
-        if (before == null || before.equals(placement.material())) {
+        String material = ground.materialAt(placement.spot());
+        if (material == null || material.equals(placement.material())) {
             return;
         }
+        // Left alone rather than built over: its contents would be destroyed, and an undo could
+        // only put back an empty one.
+        if (ground.holdsMoreThanItsState(placement.spot())) {
+            return;
+        }
+        // The full state, not the material: undone from the material alone, a stair comes back
+        // facing north and a door as half a door.
+        String before = ground.stateAt(placement.spot());
         if (ground.set(placement.spot(), placement.material())) {
-            covered.add(new BuildSnapshot.Placement(placement.spot(), before));
+            covered.add(new BuildSnapshot.Placement(placement.spot(), before == null ? material : before));
         }
     }
 }

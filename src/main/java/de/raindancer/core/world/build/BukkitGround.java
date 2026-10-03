@@ -5,6 +5,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
+import org.bukkit.block.data.BlockData;
 
 /**
  * {@link Ground} against a real world — the one implementation that needs a server, so everything
@@ -41,6 +43,9 @@ public final class BukkitGround implements Ground {
         if (!belongsHere(spot) || !isLoaded(spot)) {
             return false;
         }
+        if (material.indexOf('[') >= 0) {
+            return setState(spot, material);
+        }
         Material resolved = Material.matchMaterial(material);
         if (resolved == null || !resolved.isBlock()) {
             return false;
@@ -61,6 +66,36 @@ public final class BukkitGround implements Ground {
         // protecting.
         block.setType(resolved, connects(resolved));
         return true;
+    }
+
+    /** A full block state, as {@link #stateAt} wrote it — what an undo puts back. */
+    private boolean setState(Spot spot, String state) {
+        BlockData data;
+        try {
+            data = Bukkit.createBlockData(state);
+        } catch (IllegalArgumentException unreadable) {
+            return false;
+        }
+        Block block = world.getBlockAt(spot.x(), spot.y(), spot.z());
+        block.setBlockData(data, connects(data.getMaterial()));
+        return true;
+    }
+
+    @Override
+    public String stateAt(Spot spot) {
+        if (!belongsHere(spot) || !isLoaded(spot)) {
+            return null;
+        }
+        return world.getBlockAt(spot.x(), spot.y(), spot.z()).getBlockData().getAsString();
+    }
+
+    @Override
+    public boolean holdsMoreThanItsState(Spot spot) {
+        if (!belongsHere(spot) || !isLoaded(spot)) {
+            return false;
+        }
+        // getState(false): only asking what kind of block it is, not taking a copy of it.
+        return world.getBlockAt(spot.x(), spot.y(), spot.z()).getState(false) instanceof TileState;
     }
 
     @Override

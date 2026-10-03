@@ -133,4 +133,33 @@ class BatchBuilderTest {
         assertThat(builder.placed()).isEqualTo(3);
         assertThat(builder.remaining()).isEqualTo(7);
     }
+
+    @Test
+    @DisplayName("undo puts back the block as it was — facing, half and all — not just its material")
+    void undoKeepsTheState() {
+        Spot stair = new Spot(WORLD, 0, 64, 0);
+        MapGround ground = new MapGround()
+                .putState(stair, "OAK_STAIRS", "minecraft:oak_stairs[facing=east,half=top]");
+        BatchBuilder builder = new BatchBuilder(ground, List.of(new BatchBuilder.Placement(stair, "STONE")));
+        builder.advance(1);
+        assertThat(ground.materialAt(stair)).isEqualTo("STONE");
+
+        new BatchBuilder(ground, builder.snapshotSoFar().asRestorePlacements()).advance(1);
+
+        assertThat(ground.stateAt(stair)).isEqualTo("minecraft:oak_stairs[facing=east,half=top]");
+    }
+
+    @Test
+    @DisplayName("a chest, a sign or anything else whose contents an undo could not give back is left alone")
+    void containersAreNotBuiltOver() {
+        Spot chest = new Spot(WORLD, 1, 64, 0);
+        MapGround ground = new MapGround().keeper(chest, "CHEST");
+
+        BatchBuilder builder = new BatchBuilder(ground, row(3, "STONE"));
+        builder.advance(3);
+
+        assertThat(ground.materialAt(chest)).as("its items would be gone for good").isEqualTo("CHEST");
+        assertThat(ground.materialAt(new Spot(WORLD, 0, 64, 0))).isEqualTo("STONE");
+        assertThat(builder.snapshotSoFar().size()).isEqualTo(2);
+    }
 }

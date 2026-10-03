@@ -38,6 +38,23 @@ public interface Ground {
     }
 
     /**
+     * The block at a spot in full — its material and its state, as {@link #set} takes it back
+     * ({@code minecraft:oak_stairs[facing=east,half=top]}). What an undo is written from; a ground
+     * that knows only materials answers {@link #materialAt}.
+     */
+    default String stateAt(Spot spot) {
+        return materialAt(spot);
+    }
+
+    /**
+     * Whether the block here holds more than its state — a chest's items, a sign's text, a
+     * spawner's mob. Built over, that is gone for good, since an undo puts back only a state.
+     */
+    default boolean holdsMoreThanItsState(Spot spot) {
+        return false;
+    }
+
+    /**
      * Which biome this position is in, lower case and without its namespace — {@code "taiga"},
      * {@code "mangrove_swamp"} — or {@code null} where that cannot be answered.
      *
