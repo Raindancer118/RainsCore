@@ -110,8 +110,8 @@ public final class SettingsStore<T> {
         YamlConfiguration yaml = store.read();
         // Not fatal on purpose. A broken file means this plugin runs on its defaults for one start,
         // which is far better than a server that will not come up at all — and the file is never
-        // written over: the next save sets it aside first (YamlStore), so nothing the owner wrote
-        // is lost.
+        // written over: a save is refused while it cannot be read (YamlStore.update), so nothing the
+        // owner wrote is lost, and the next save after they fix it goes through.
         for (String problem : store.problems()) {
             found.add("the file " + problem + ", so every setting is at its default");
         }

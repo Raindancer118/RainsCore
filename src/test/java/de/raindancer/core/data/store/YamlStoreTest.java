@@ -117,18 +117,36 @@ class YamlStoreTest {
         }
 
         @Test
-        @DisplayName("an update to a file that cannot be read sets it aside rather than writing over it")
+        @DisplayName("an update to a file that cannot be read is refused, and the file left exactly as it is")
         void updateDoesNotOverwriteAnUnreadableFile() throws IOException {
             String broken = "this: is: not: valid: yaml:\n\t\tand neither is this\n";
             Files.writeString(directory.resolve("things.yml"), broken);
             YamlStore store = store();
 
+            assertThat(store.update(yaml -> yaml.set("x", 1)))
+                    .as("an update is a change to what is there, and what is there cannot be read")
+                    .isFalse();
+
+            assertThat(Files.readString(directory.resolve("things.yml")))
+                    .as("everything the owner wrote is in that file, one typo away from working")
+                    .isEqualTo(broken);
+            assertThat(setAside()).as("not moved aside either: it is still the file they are fixing")
+                    .isEmpty();
+            assertThat(store.problems()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("once the file is fixed, the next update goes through")
+        void updateWorksAgainOnceFixed() throws IOException {
+            Files.writeString(directory.resolve("things.yml"), "this: is: broken:\n");
+            YamlStore store = store();
+            assertThat(store.update(yaml -> yaml.set("x", 1))).isFalse();
+
+            Files.writeString(directory.resolve("things.yml"), "kept: here\n");
             assertThat(store.update(yaml -> yaml.set("x", 1))).isTrue();
 
+            assertThat(store.read().getString("kept")).isEqualTo("here");
             assertThat(store.read().getInt("x")).isEqualTo(1);
-            assertThat(setAside())
-                    .as("everything the owner wrote is in that file, one typo away from working")
-                    .containsExactly(broken);
         }
 
         @Test

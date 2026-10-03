@@ -137,6 +137,9 @@ public final class YamlStore {
      * those away. Reading and writing are one step here, so two callers cannot both read, both
      * change, and have the second undo the first.
      *
+     * <p>A file that exists but cannot be parsed is never written: the update is refused and the
+     * file left exactly as it is, for its owner to fix.
+     *
      * @return whether it was written; false leaves whatever was there before
      */
     public boolean update(Consumer<YamlConfiguration> change) {
@@ -144,7 +147,16 @@ public final class YamlStore {
             return false;
         }
         synchronized (this) {
-            return put(read(), change);
+            YamlConfiguration current = read();
+            if (unreadable) {
+                // Refused, and the file left where it is — not even set aside. An update is a change
+                // to what is there; what is there could not be read, so anything written now would
+                // replace it with this one change. The owner fixes the file; the next update works.
+                log.error("{} could not be read, so this change was not written to it. Fix the file "
+                        + "(the line above says where) and the next change will be kept.", file);
+                return false;
+            }
+            return put(current, change);
         }
     }
 
