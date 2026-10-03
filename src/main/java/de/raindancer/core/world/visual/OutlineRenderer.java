@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -52,15 +53,19 @@ public final class OutlineRenderer {
                          IntSupplier baseY, Particle.DustOptions dust) {
         stop(player);
         UUID id = player.getUniqueId();
+        AtomicReference<ScheduledTask> self = new AtomicReference<>();
         ScheduledTask task = Scheduling.entityTimer(plugin, player, PERIOD_TICKS, PERIOD_TICKS, scheduled -> {
             if (!player.isOnline()) {
                 scheduled.cancel();
-                live.remove(id);
+                live.remove(id, scheduled);
                 return;
             }
             draw(player, world, corners.get(), baseY.getAsInt(), dust);
-        });
+        // Retired with the entity — a logout, or a respawn — after which the task never runs again to
+        // notice. Without this the entry, and the Player it holds, stayed for good.
+        }, () -> live.remove(id, self.get()));
         if (task != null) {
+            self.set(task);
             live.put(id, task);
         }
     }

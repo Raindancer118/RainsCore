@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 /**
@@ -83,15 +84,24 @@ public final class Navigator {
         long until = System.currentTimeMillis() + MAX_DURATION.toMillis();
         Location goal = target.clone();
         String name = label == null ? "" : label;
+        AtomicReference<Trip> self = new AtomicReference<>();
         ScheduledTask task = Scheduling.entityTimer(plugin, player, 1L, PERIOD_TICKS, scheduled -> {
             if (!player.isOnline() || System.currentTimeMillis() > until) {
                 end(id, scheduled);
                 return;
             }
             tick(player, goal, owner, name, showTrail);
+        // Retired with the entity — a logout, or a respawn — after which the task never runs again to
+        // end itself, and isNavigating would answer true for a trip nothing is drawing.
+        }, () -> {
+            if (live.remove(id, self.get()) && actionBars != null) {
+                actionBars.clear(id, BAR_OWNER);
+            }
         });
         if (task != null) {
-            live.put(id, new Trip(task, owner));
+            Trip trip = new Trip(task, owner);
+            self.set(trip);
+            live.put(id, trip);
         }
         if (messages != null) {
             messages.sendFor(owner, player, "navigation.started", "target", name);
