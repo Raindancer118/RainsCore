@@ -24,6 +24,11 @@ public final class BukkitBarViewers implements BarViewers {
     }
 
     @Override
+    public boolean isOnline(UUID player) {
+        return Bukkit.getPlayer(player) != null;
+    }
+
+    @Override
     public void hide(UUID player, BossBar bar) {
         Player online = Bukkit.getPlayer(player);
         if (online != null) {

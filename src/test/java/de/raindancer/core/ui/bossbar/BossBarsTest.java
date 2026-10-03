@@ -292,6 +292,80 @@ class BossBarsTest {
         }
     }
 
+    @Nested
+    @DisplayName("shared bars, the edges")
+    class SharedEdges {
+
+        @Test
+        @DisplayName("somebody offline in the audience gets no slot kept for them")
+        void offlineMembersAreSkipped() {
+            viewers.offline.add(CAROL);
+
+            bars.showShared("ghasts", "flight-7", List.of(ALICE, CAROL), style("Flight"),
+                    BarPriority.NORMAL);
+
+            assertThat(bars.trackedPlayers()).containsExactly(ALICE);
+        }
+
+        @Test
+        @DisplayName("a caller still listing somebody who quit does not bring their slot back")
+        void forgottenStaysForgotten() {
+            bars.showShared("ghasts", "flight-7", List.of(ALICE, BOB), style("Flight"),
+                    BarPriority.NORMAL);
+            viewers.offline.add(BOB);
+            bars.forget(BOB);
+
+            bars.showShared("ghasts", "flight-7", List.of(ALICE, BOB), style("Flight"),
+                    BarPriority.NORMAL);
+
+            assertThat(bars.trackedPlayers()).containsExactly(ALICE);
+        }
+
+        @Test
+        @DisplayName("raising a shared bar's priority re-ranks it for everybody already watching")
+        void priorityChangesReachTheAudience() {
+            bars.show(ALICE, "claims", style("Claim"), BarPriority.HIGH);
+            bars.showShared("ghasts", "flight-7", List.of(ALICE), style("Flight"), BarPriority.LOW);
+            assertThat(bars.ownersFor(ALICE).getFirst()).isEqualTo("claims");
+
+            bars.showShared("ghasts", "flight-7", List.of(ALICE), style("Flight"),
+                    BarPriority.CRITICAL);
+
+            assertThat(bars.ownersFor(ALICE).getFirst()).isEqualTo("ghasts");
+        }
+
+        @Test
+        @DisplayName("a show and a clear racing each other never leave a bar nobody can take away")
+        void showAndClearRace() throws Exception {
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+            java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+            for (int worker = 0; worker < 4; worker++) {
+                boolean shows = worker % 2 == 0;
+                pool.submit(() -> {
+                    go.await();
+                    for (int round = 0; round < 3_000; round++) {
+                        if (shows) {
+                            bars.showShared("ghasts", "flight-7", List.of(ALICE, BOB), style("Flight"),
+                                    BarPriority.NORMAL);
+                        } else {
+                            bars.clearShared("ghasts", "flight-7");
+                        }
+                    }
+                    return null;
+                });
+            }
+            go.countDown();
+            pool.shutdown();
+            assertThat(pool.awaitTermination(60, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+            bars.clearShared("ghasts", "flight-7");
+
+            assertThat(shownTo(ALICE)).as("a bar shown after its clear, owned by nothing").isEmpty();
+            assertThat(shownTo(BOB)).isEmpty();
+            assertThat(bars.trackedPlayers()).isEmpty();
+        }
+    }
+
     // ------------------------------------------------------------------ housekeeping
 
     @Nested
@@ -410,6 +484,12 @@ class BossBarsTest {
         private final Set<BossBar> everShown =
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         private UUID failFor;
+        private final Set<UUID> offline = new java.util.HashSet<>();
+
+        @Override
+        public synchronized boolean isOnline(UUID player) {
+            return !offline.contains(player);
+        }
 
         synchronized int distinctBars() {
             return everShown.size();

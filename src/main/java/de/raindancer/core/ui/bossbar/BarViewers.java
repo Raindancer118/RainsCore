@@ -16,4 +16,13 @@ public interface BarViewers {
     void show(UUID player, BossBar bar);
 
     void hide(UUID player, BossBar bar);
+
+    /**
+     * Whether a bar can be shown to this player at all. A shared audience listing somebody who is
+     * not online gets no slot for them — one kept would outlive their quit. True by default, so a
+     * viewer written before this still compiles.
+     */
+    default boolean isOnline(UUID player) {
+        return true;
+    }
 }

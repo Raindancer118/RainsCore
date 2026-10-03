@@ -67,6 +67,8 @@ public final class BossBars {
     private final Map<UUID, Slot> slots = new ConcurrentHashMap<>();
     /** Shared bars by owner and id, each with the audience currently holding it. */
     private final Map<String, Shared> shared = new ConcurrentHashMap<>();
+    /** Held for the whole of a shared update or clear, so the two cannot interleave. */
+    private final Object sharedLock = new Object();
     private final AtomicLong sequence = new AtomicLong();
     private final AtomicInteger updates = new AtomicInteger();
 
@@ -75,10 +77,12 @@ public final class BossBars {
         private final BossBar bar;
         private final Set<UUID> audience = new LinkedHashSet<>();
         private BarStyle style;
+        private BarPriority priority;
 
-        private Shared(BossBar bar, BarStyle style) {
+        private Shared(BossBar bar, BarStyle style, BarPriority priority) {
             this.bar = bar;
             this.style = style;
+            this.priority = priority;
         }
     }
 
@@ -112,7 +116,7 @@ public final class BossBars {
         withSlot(player, slot -> {
             Claim existing = slot.byOwner.get(who);
             if (existing != null && existing.sharedKey() == null) {
-                if (existing.style().equals(style) && existing.priority() == priority) {
+                if (existing.style().equals(style) && existing.priority() == orDefault(priority)) {
                     return;
                 }
                 // Mutated in place rather than replaced: the client animates a bar that changes and
@@ -167,7 +171,9 @@ public final class BossBars {
         Set<UUID> wanted = new LinkedHashSet<>();
         if (audience != null) {
             for (UUID member : audience) {
-                if (member != null) {
+                // Nobody offline: a slot kept for them would outlive their quit, and a caller still
+                // listing somebody who left would bring theirs back after forget().
+                if (member != null && viewers.isOnline(member)) {
                     wanted.add(member);
                 }
             }
@@ -176,35 +182,61 @@ public final class BossBars {
             clearShared(who, key);
             return;
         }
+        BarPriority ranked = orDefault(priority);
 
-        Shared bar = shared.computeIfAbsent(sharedKey, ignored -> new Shared(style.toBar(), style));
-        List<UUID> joined;
-        List<UUID> left;
-        synchronized (bar) {
-            if (!bar.style.equals(style)) {
-                style.applyTo(bar.bar);
-                bar.style = style;
-                updates.incrementAndGet();
-            }
-            joined = wanted.stream().filter(member -> !bar.audience.contains(member)).toList();
-            left = bar.audience.stream().filter(member -> !wanted.contains(member)).toList();
-            bar.audience.clear();
-            bar.audience.addAll(wanted);
-        }
-
-        for (UUID member : joined) {
-            withSlot(member, slot -> {
-                slot.byOwner.put(sharedKey, new Claim(who, style, orDefault(priority),
-                        sequence.incrementAndGet(), bar.bar, sharedKey));
-                restack(member, slot);
-            });
-        }
-        for (UUID member : left) {
-            withSlot(member, slot -> {
-                if (slot.byOwner.remove(sharedKey) != null) {
-                    restack(member, slot);
+        // One shared update at a time, start to finish. Done in two halves — the audience under the
+        // bar, the players after — a clear landing between them removed the bar from the map while
+        // this went on to hand it to the players, where nothing tracked it any more.
+        synchronized (sharedLock) {
+            Shared bar = shared.computeIfAbsent(sharedKey,
+                    ignored -> new Shared(style.toBar(), style, ranked));
+            List<UUID> joined;
+            List<UUID> left;
+            List<UUID> stayed;
+            boolean reranked;
+            synchronized (bar) {
+                if (!bar.style.equals(style)) {
+                    style.applyTo(bar.bar);
+                    bar.style = style;
+                    updates.incrementAndGet();
                 }
-            });
+                reranked = bar.priority != ranked;
+                bar.priority = ranked;
+                joined = wanted.stream().filter(member -> !bar.audience.contains(member)).toList();
+                left = bar.audience.stream().filter(member -> !wanted.contains(member)).toList();
+                stayed = wanted.stream().filter(bar.audience::contains).toList();
+                bar.audience.clear();
+                bar.audience.addAll(wanted);
+            }
+
+            for (UUID member : joined) {
+                withSlot(member, slot -> {
+                    slot.byOwner.put(sharedKey, new Claim(who, style, ranked,
+                            sequence.incrementAndGet(), bar.bar, sharedKey));
+                    restack(member, slot);
+                });
+            }
+            for (UUID member : left) {
+                withSlot(member, slot -> {
+                    if (slot.byOwner.remove(sharedKey) != null) {
+                        restack(member, slot);
+                    }
+                });
+            }
+            if (reranked) {
+                // Kept in its place in the queue, but ranked again: a raised priority has to be able
+                // to push a bar onto the screen of somebody who was already watching.
+                for (UUID member : stayed) {
+                    withSlot(member, slot -> {
+                        Claim claim = slot.byOwner.get(sharedKey);
+                        if (claim != null) {
+                            slot.byOwner.put(sharedKey, new Claim(who, style, ranked, claim.order(),
+                                    bar.bar, sharedKey));
+                            restack(member, slot);
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -216,21 +248,23 @@ public final class BossBars {
             return;
         }
         String sharedKey = who + "/" + key;
-        Shared bar = shared.remove(sharedKey);
-        if (bar == null) {
-            return;
-        }
-        List<UUID> audience;
-        synchronized (bar) {
-            audience = List.copyOf(bar.audience);
-            bar.audience.clear();
-        }
-        for (UUID member : audience) {
-            withSlot(member, slot -> {
-                if (slot.byOwner.remove(sharedKey) != null) {
-                    restack(member, slot);
-                }
-            });
+        synchronized (sharedLock) {
+            Shared bar = shared.remove(sharedKey);
+            if (bar == null) {
+                return;
+            }
+            List<UUID> audience;
+            synchronized (bar) {
+                audience = List.copyOf(bar.audience);
+                bar.audience.clear();
+            }
+            for (UUID member : audience) {
+                withSlot(member, slot -> {
+                    if (slot.byOwner.remove(sharedKey) != null) {
+                        restack(member, slot);
+                    }
+                });
+            }
         }
     }
 
