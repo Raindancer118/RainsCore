@@ -1,5 +1,7 @@
 package de.raindancer.core.ui.chat;
 
+import net.kyori.adventure.text.format.NamedTextColor;
+
 import java.util.Locale;
 import java.util.function.UnaryOperator;
 
@@ -180,8 +182,9 @@ public final class Style {
         if (configured == null || configured.isBlank()) {
             return fallback;
         }
-        String cleaned = configured.trim().toLowerCase(Locale.ROOT);
-        if (cleaned.matches("#[0-9a-f]{6}") || cleaned.matches("[a-z_]{3,20}")) {
+        // "grey" as MiniMessage itself allows it; anything else has to be a colour's own name.
+        String cleaned = configured.trim().toLowerCase(Locale.ROOT).replace("grey", "gray");
+        if (cleaned.matches("#[0-9a-f]{6}") || NamedTextColor.NAMES.value(cleaned) != null) {
             return cleaned;
         }
         return fallback;
