@@ -55,6 +55,8 @@ public final class YamlStore {
 
     private final Path file;
     private final List<String> problems = new ArrayList<>();
+    /** Whether the last read found a file it could not parse — one a write must not replace. */
+    private boolean unreadable;
 
     public YamlStore(Path file) {
         this.file = file;
@@ -85,6 +87,7 @@ public final class YamlStore {
     public YamlConfiguration read() {
         synchronized (this) {
             problems.clear();
+            unreadable = false;
         }
         if (file == null || !Files.isRegularFile(file)) {
             return new YamlConfiguration();
@@ -100,8 +103,11 @@ public final class YamlStore {
             }
             yaml.loadFromString(text);
             return yaml;
-        } catch (IOException | InvalidConfigurationException | RuntimeException unreadable) {
-            note("could not be read (" + unreadable.getMessage() + ")");
+        } catch (IOException | InvalidConfigurationException | RuntimeException failure) {
+            synchronized (this) {
+                unreadable = true;
+            }
+            note("could not be read (" + failure.getMessage() + ")");
             return new YamlConfiguration();
         }
     }
@@ -156,6 +162,16 @@ public final class YamlStore {
             return false;
         }
 
+        // A store that read this file as empty because it could not parse it is about to write
+        // what it has — nothing — over everything somebody wrote there. Set aside first; if even
+        // that fails, the write is the thing that gives way.
+        if (unreadable && Files.isRegularFile(file)) {
+            if (quarantine().isEmpty()) {
+                log.error("Not writing {}: it could not be read, and could not be set aside either.",
+                        file);
+                return false;
+            }
+        }
         Path temporary = file.resolveSibling(file.getFileName() + ".writing");
         try {
             Path parent = file.getParent();
@@ -190,7 +206,7 @@ public final class YamlStore {
      *
      * @return where it was put, or empty when there was nothing to move
      */
-    public Optional<Path> quarantine() {
+    public synchronized Optional<Path> quarantine() {
         if (file == null || !Files.isRegularFile(file)) {
             return Optional.empty();
         }
@@ -198,9 +214,9 @@ public final class YamlStore {
                 file.getFileName() + ".broken-" + STAMP.format(LocalDateTime.now()));
         try {
             Files.move(file, kept, StandardCopyOption.REPLACE_EXISTING);
-            log.warn("{} could not be read and has been kept as {}. The plugin is starting with "
-                    + "nothing rather than writing over it.", file.getFileName(),
-                    kept.getFileName());
+            unreadable = false;
+            log.warn("{} could not be read and has been kept as {} rather than written over.",
+                    file.getFileName(), kept.getFileName());
             return Optional.of(kept);
         } catch (IOException failure) {
             log.error(failure, "Could not set aside the unreadable file {}", file);

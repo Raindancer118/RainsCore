@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -113,6 +114,57 @@ class YamlStoreTest {
             YamlStore fresh = new YamlStore(directory.resolve("first-run.yml"));
             assertThat(fresh.update(yaml -> yaml.set("x", 1))).isTrue();
             assertThat(fresh.read().getInt("x")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an update to a file that cannot be read sets it aside rather than writing over it")
+        void updateDoesNotOverwriteAnUnreadableFile() throws IOException {
+            String broken = "this: is: not: valid: yaml:\n\t\tand neither is this\n";
+            Files.writeString(directory.resolve("things.yml"), broken);
+            YamlStore store = store();
+
+            assertThat(store.update(yaml -> yaml.set("x", 1))).isTrue();
+
+            assertThat(store.read().getInt("x")).isEqualTo(1);
+            assertThat(setAside())
+                    .as("everything the owner wrote is in that file, one typo away from working")
+                    .containsExactly(broken);
+        }
+
+        @Test
+        @DisplayName("a store that started empty because its file was unreadable does not write over it")
+        void writeDoesNotOverwriteAnUnreadableFile() throws IOException {
+            String broken = "granted: [this is: not: yaml\n";
+            Files.writeString(directory.resolve("things.yml"), broken);
+            YamlStore store = store();
+            store.read();
+
+            assertThat(store.write(yaml -> yaml.set("granted", List.of()))).isTrue();
+
+            assertThat(setAside()).containsExactly(broken);
+        }
+
+        @Test
+        @DisplayName("a file that reads fine is replaced in place, with nothing set aside")
+        void aGoodFileIsNotSetAside() throws IOException {
+            YamlStore store = store();
+            store.write(yaml -> yaml.set("x", 1));
+            store.read();
+            store.write(yaml -> yaml.set("x", 2));
+
+            assertThat(setAside()).isEmpty();
+        }
+
+        private List<String> setAside() throws IOException {
+            try (var files = Files.list(directory)) {
+                List<Path> kept = files.filter(file -> file.getFileName().toString()
+                        .startsWith("things.yml.broken-")).toList();
+                List<String> contents = new ArrayList<>();
+                for (Path file : kept) {
+                    contents.add(Files.readString(file));
+                }
+                return contents;
+            }
         }
 
         @Test
