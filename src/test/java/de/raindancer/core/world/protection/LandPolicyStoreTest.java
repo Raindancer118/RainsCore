@@ -179,4 +179,28 @@ class LandPolicyStoreTest {
                         + "settings without anybody noticing")
                 .isPresent();
     }
+
+    @Test
+    @DisplayName("a file that would not parse is set aside, not written over or deleted, by the next save")
+    void anUnreadableFileIsKept() throws IOException {
+        String broken = "flags:\n  pvp: [policy: disabled\n";
+        Files.writeString(file(), broken);
+        LandPolicyStore store = new LandPolicyStore(file());
+        store.load();
+
+        store.save(LandPolicies.builtIn());
+
+        try (var kept = Files.list(file().getParent())) {
+            assertThat(kept.filter(each -> each.getFileName().toString().contains(".broken-"))
+                    .map(each -> {
+                        try {
+                            return Files.readString(each);
+                        } catch (IOException unreadable) {
+                            throw new AssertionError(unreadable);
+                        }
+                    }).toList())
+                    .as("every decision the admin made is in that file, one typo away from working")
+                    .containsExactly(broken);
+        }
+    }
 }

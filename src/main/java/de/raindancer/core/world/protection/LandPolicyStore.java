@@ -1,5 +1,6 @@
 package de.raindancer.core.world.protection;
 
+import de.raindancer.core.data.store.YamlStore;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.configuration.ConfigurationSection;
@@ -9,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -110,6 +112,16 @@ public final class LandPolicyStore {
         if (file == null) {
             return;
         }
+        if (problem != null && Files.isRegularFile(file)) {
+            // Loaded as built-ins because it would not parse: what is in memory is not what the admin
+            // decided, and writing it — or deleting the file for having "no changes" — loses every
+            // decision in there. Set aside first, and refuse if even that fails.
+            if (new YamlStore(file).quarantine().isEmpty()) {
+                throw new IOException(file.getFileName() + " could not be read and could not be set "
+                        + "aside, so it was not written over");
+            }
+            problem = null;
+        }
         LandPolicies.Changed changed = policies.changed();
         if (changed.isEmpty()) {
             // Not an empty file: no file. An admin who undid every change should not be left with
@@ -120,8 +132,8 @@ public final class LandPolicyStore {
 
         // Through YamlStore: a temporary, then an atomic move. Written in place, a crash or a full disk
         // mid-write left half a file, and every flag fell back to its built-in on the next start.
-        boolean written = new de.raindancer.core.data.store.YamlStore(file).write(yaml -> {
-            yaml.options().setHeader(java.util.List.of(
+        boolean written = new YamlStore(file).write(yaml -> {
+            yaml.options().setHeader(List.of(
                     "What this server decided about the land flags.",
                     "",
                     "Only decisions that differ from the built-in behaviour are written here, so a flag that is",
