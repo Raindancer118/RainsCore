@@ -187,8 +187,13 @@ public final class MobChooser extends PaginatedMenu<MobFamily> {
             if (chosen != null) {
                 chosen.accept(type);
             }
-            // Back to the page that asked, rather than leaving the viewer looking at nothing.
-            backToWhoeverOpenedThis();
+            // Back to the page that asked — the chooser's opener, not this page's parent, which is
+            // the chooser's own list of families.
+            if (parent() instanceof MobChooser chooser) {
+                chooser.backToWhoeverOpenedThis();
+            } else {
+                backToWhoeverOpenedThis();
+            }
         }
     }
 }

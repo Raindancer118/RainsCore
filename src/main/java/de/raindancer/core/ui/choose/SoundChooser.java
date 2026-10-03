@@ -139,7 +139,9 @@ public final class SoundChooser extends PaginatedMenu<SoundFamily> {
                     chosen.accept(key);
                 }
                 // Back to the page that asked, rather than leaving the viewer looking at nothing.
-                backToWhoeverOpenedThis();
+                // The chooser's own opener, not this page's: this page's parent is the chooser's
+                // previous level, and the answer was wanted by whoever opened the chooser.
+                SoundChooser.this.backToWhoeverOpenedThis();
                 return;
             }
             // Straight to the player rather than through a named cue: this is the raw sound being

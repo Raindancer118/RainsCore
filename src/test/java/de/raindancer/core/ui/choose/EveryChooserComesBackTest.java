@@ -101,6 +101,23 @@ class EveryChooserComesBackTest {
     }
 
     @Test
+    @DisplayName("a chooser with sub-pages goes back past them, to the page that opened the chooser")
+    void nestedChoosersGoBackPastTheirOwnPages() {
+        List<String> stuck = new ArrayList<>();
+        for (String name : List.of("ItemChooser", "MobChooser", "ParticleChooser", "SoundChooser")) {
+            String source = read(Path.of("src/main/java/de/raindancer/core/ui/choose/" + name + ".java"));
+            if (!source.contains(name + ".this.backToWhoeverOpenedThis()")
+                    && !source.contains("chooser.backToWhoeverOpenedThis()")) {
+                stuck.add(name);
+            }
+        }
+        assertThat(stuck)
+                .as("the leaf page's own parent is the chooser's previous level, so the viewer lands on "
+                        + "the list of families instead of the page that wanted the answer")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("no chooser just closes the inventory and walks away")
     void noneOfThemAbandonTheViewer() {
         List<String> abandoning = new ArrayList<>();

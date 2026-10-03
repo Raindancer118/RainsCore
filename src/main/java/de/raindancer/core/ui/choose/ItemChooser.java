@@ -213,7 +213,9 @@ public final class ItemChooser extends PaginatedMenu<Category> {
                 chosen.accept(found);
             }
             // Back to the page that asked, rather than leaving the viewer looking at nothing.
-            backToWhoeverOpenedThis();
+            // The chooser's own opener, not this page's: this page's parent is the chooser's
+            // previous level, and the answer was wanted by whoever opened the chooser.
+            ItemChooser.this.backToWhoeverOpenedThis();
         }
     }
 }
