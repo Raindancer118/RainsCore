@@ -296,4 +296,62 @@ class SettingsNavigationTest {
     private Setting<?> setting(String key) {
         return registry.setting(key).orElseThrow();
     }
+
+    // ------------------------------------------------------------------ finding
+
+    @Nested
+    @DisplayName("finding a setting")
+    class Finding {
+
+        @Test
+        @DisplayName("search matches the name, the key, the description and the category, every word")
+        void search() {
+            assertThat(navigation.search("fence")).extracting(Setting::key)
+                    .containsExactly("fences-enabled", "fence-style", "fence-block");
+            assertThat(navigation.search("fence block")).extracting(Setting::key).containsExactly("fence-block");
+            assertThat(navigation.search("how much")).extracting(Setting::key)
+                    .as("by the category's description").contains("blocks-per-player", "world-seed");
+            assertThat(navigation.search("   ")).isEmpty();
+            assertThat(navigation.search("zebra")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an exact key or title comes first")
+        void ranking() {
+            assertThat(navigation.search("claims per player")).extracting(Setting::key).first()
+                    .isEqualTo("claims-per-player");
+            assertThat(navigation.search("fence-block")).extracting(Setting::key).first().isEqualTo("fence-block");
+        }
+
+        @Test
+        @DisplayName("a mistyped key gets the nearest names, best first, and nothing silly")
+        void didYouMean() {
+            assertThat(navigation.closest("fenceStyel", 3)).first().isEqualTo("fence-style");
+            assertThat(navigation.closest("blocks", 3)).contains("blocks-per-player");
+            assertThat(navigation.closest("fence_block", 1)).as("however it is joined").containsExactly("fence-block");
+            assertThat(navigation.closest("xyzzy", 3)).isEmpty();
+            assertThat(navigation.closest("fence", 2)).hasSize(2);
+        }
+    }
+
+    // ------------------------------------------------------------------ saving
+
+    @Nested
+    @DisplayName("saving")
+    class Saving {
+
+        @Test
+        @DisplayName("says which files could not be written, instead of claiming it saved")
+        void reportsUnwritten() throws Exception {
+            assertThat(registry.saveAllChecked()).isEmpty();
+
+            java.nio.file.Files.writeString(directory.resolve("claims.yml"), "this: [is: not yaml");
+            registry.stores().getFirst().load();
+            registry.set("fences-enabled", "false");
+
+            assertThat(registry.saveAllChecked()).containsExactly(directory.resolve("claims.yml"));
+            assertThat(java.nio.file.Files.readString(directory.resolve("claims.yml")))
+                    .as("the owner's broken file is left for them to fix").isEqualTo("this: [is: not yaml");
+        }
+    }
 }

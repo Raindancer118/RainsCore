@@ -15,6 +15,7 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MenuType;
 import org.bukkit.inventory.view.AnvilView;
+import org.bukkit.plugin.Plugin;
 
 import java.util.List;
 import java.util.Map;
@@ -150,6 +151,18 @@ public final class AnvilInput {
     /** The listener behind every anvil question. Registered once, by Core. */
     public static final class Listener implements org.bukkit.event.Listener {
 
+        private final Plugin plugin;
+
+        /** Runs a cancel straight away — for tests. */
+        public Listener() {
+            this(null);
+        }
+
+        /** Runs a cancel on the tick after the window closed, as opening another window from a close needs. */
+        public Listener(Plugin plugin) {
+            this.plugin = plugin;
+        }
+
         @EventHandler(priority = EventPriority.HIGHEST)
         public void onPrepare(PrepareAnvilEvent event) {
             Session<?> session = open.get(event.getView().getPlayer().getUniqueId());
@@ -169,11 +182,16 @@ public final class AnvilInput {
             }
             // Nothing moves in or out of this window, ever.
             event.setCancelled(true);
-            if (event.getRawSlot() == RESULT && session.take(view.getRenameText())) {
-                open.remove(who, session);
-                clear(view);
-                event.getWhoClicked().closeInventory();
+            String typed = view.getRenameText();
+            if (event.getRawSlot() != RESULT || !session.show(typed).usable()) {
+                return;
             }
+            // Shut first, then answer: the answer often opens the next window, which a close after it
+            // would shut again.
+            open.remove(who, session);
+            clear(view);
+            event.getWhoClicked().closeInventory();
+            session.take(typed);
         }
 
         @EventHandler(priority = EventPriority.LOWEST)
@@ -186,7 +204,13 @@ public final class AnvilInput {
             open.remove(who, session);
             // Before the anvil hands its contents back: the paper was never theirs.
             clear(event.getView());
-            session.closed();
+            if (plugin == null || !(event.getPlayer() instanceof Player player)) {
+                session.closed();
+            } else {
+                // A cancel usually reopens the menu that asked, and a window cannot be opened from
+                // inside the closing of another. Dropped if they leave in between.
+                player.getScheduler().run(plugin, task -> session.closed(), null);
+            }
         }
 
         private static void clear(InventoryView view) {

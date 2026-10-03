@@ -1,12 +1,17 @@
 package de.raindancer.core.data.settings;
 
+import de.raindancer.core.platform.util.Closest;
 import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.ui.identity.Symbols;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -204,6 +209,81 @@ public final class SettingsNavigation {
         lines.add("<gray>" + settings + (settings == 1 ? " setting" : " settings"));
         lines.add("<yellow>" + Symbols.ARROW + " Click to open");
         return lines;
+    }
+
+    // ---------------------------------------------------------------------------- finding
+
+    /**
+     * The settings matching what somebody typed, best first.
+     *
+     * <p>Every word has to appear somewhere — in the key, the name, the description, the category
+     * names above it, the category's description, or the plugin's id — so "fence block" narrows rather
+     * than widens. An exact name or key comes first, then names that start with the words, then the
+     * rest in the order the menu shows them.
+     */
+    public List<Setting<?>> search(String query) {
+        String wanted = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+        if (wanted.isEmpty()) {
+            return List.of();
+        }
+        String[] words = wanted.split("[\\s_-]+");
+        List<Setting<?>> found = new ArrayList<>();
+        Map<Setting<?>, Integer> scores = new HashMap<>();
+        for (String key : registry.keys()) {
+            Setting<?> setting = registry.setting(key).orElse(null);
+            if (setting == null || scores.containsKey(setting)) {
+                continue;
+            }
+            String haystack = haystackOf(setting);
+            boolean all = true;
+            for (String word : words) {
+                all &= haystack.contains(word);
+            }
+            if (all) {
+                found.add(setting);
+                scores.put(setting, score(setting, wanted));
+            }
+        }
+        found.sort(Comparator.comparingInt((Setting<?> setting) -> -scores.get(setting)));
+        return List.copyOf(found);
+    }
+
+    private String haystackOf(Setting<?> setting) {
+        // The key three ways — fence-block, fence block, fenceblock — so however it is typed, it is found.
+        StringBuilder text = new StringBuilder(setting.key()).append(' ').append(setting.key().replace('-', ' '))
+                .append(' ').append(Closest.joined(setting.key())).append(' ').append(setting.title())
+                .append(' ').append(setting.description());
+        registry.storeOf(setting.key()).ifPresent(store -> {
+            text.append(' ').append(store.schema().id());
+            store.schema().topics().at(setting.topicPath()).ifPresent(topic -> {
+                text.append(' ').append(topic.description());
+                for (SettingsTopic above = topic; above != null; above = above.parent()) {
+                    text.append(' ').append(above.title());
+                }
+            });
+        });
+        return text.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private static int score(Setting<?> setting, String query) {
+        String wanted = Closest.joined(query);
+        String key = Closest.joined(setting.key());
+        String title = Closest.joined(setting.title());
+        if (key.equals(wanted) || title.equals(wanted)) {
+            return 3;
+        }
+        if (key.startsWith(wanted) || title.startsWith(wanted)) {
+            return 2;
+        }
+        return title.contains(wanted) || key.contains(wanted) ? 1 : 0;
+    }
+
+    /**
+     * Keys close to one that was mistyped — for "did you mean". Close is a couple of letters off, or
+     * containing what was typed; nothing is offered for a word that resembles no setting at all.
+     */
+    public List<String> closest(String typed, int limit) {
+        return Closest.to(typed, registry.keys(), limit);
     }
 
     public SettingsRegistry registry() {

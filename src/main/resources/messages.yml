@@ -75,6 +75,16 @@ settings:
   refused: "<red><value> is not something <name> can be."
   finish-first: "<gray>Finish what you were asked first."
   gone: "<gray>That setting is not there any more."
+  # A change that is in effect but could not be written, because the file has a mistake in it.
+  not-saved: "<yellow>Changed for now, but <file> could not be saved — it has a mistake in it (the console says where). Fix it and the next change is kept; until then a restart undoes this."
+  # /settings <name> for a name nothing has. <name> is what was typed.
+  unknown: "<red>Nothing on this server is called <name>."
+  did-you-mean: "<gray>Did you mean "
+  look-for-it: "<gray>Or look for it with <white>/settings search</white> and a word."
+  # Searching the settings. <query> is what was searched for.
+  search-title: "Search the settings"
+  search-none: "<gray>No setting mentions <query>. Try a shorter word."
+  search-found: "<gray><count> settings mention <query>:"
 
 # ─────────────────────────────────────── looking inside somebody's inventory
 invsee:

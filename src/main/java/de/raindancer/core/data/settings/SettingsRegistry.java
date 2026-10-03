@@ -5,6 +5,7 @@ import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import org.bukkit.Material;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -218,9 +219,23 @@ public final class SettingsRegistry {
 
     /** Writes every plugin's file. */
     public void saveAll() {
+        saveAllChecked();
+    }
+
+    /**
+     * Writes every plugin's file, and says which could not be written — a file somebody broke by hand
+     * is left as it is rather than overwritten, so a change made now lasts only until a restart.
+     *
+     * @return the files not written; empty when everything was saved
+     */
+    public List<Path> saveAllChecked() {
+        List<Path> unwritten = new ArrayList<>();
         for (SettingsStore<?> store : stores) {
-            store.save();
+            if (!store.trySave()) {
+                unwritten.add(store.file());
+            }
         }
+        return List.copyOf(unwritten);
     }
 
     // ---------------------------------------------------------------------------- clashes

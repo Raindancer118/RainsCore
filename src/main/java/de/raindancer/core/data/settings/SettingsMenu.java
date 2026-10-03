@@ -176,6 +176,11 @@ public final class SettingsMenu extends Menu {
             cell(row, index % 9, settingIcon(setting), event -> onClick(setting));
             index++;
         }
+
+        toolbar(4, Icons.of(Material.SPYGLASS, "<white>Search",
+                        "<gray>Find a setting by a word in its name",
+                        "<gray>or what it does, from every plugin."),
+                event -> SettingsSearchMenu.ask(viewer, brand(), chat, navigation, this));
     }
 
     /**
@@ -219,28 +224,32 @@ public final class SettingsMenu extends Menu {
     }
 
     private ItemStack settingIcon(Setting<?> setting) {
+        return Icons.of(materialFor(navigation, setting), "<white>" + setting.title(), navigation.describe(setting));
+    }
+
+    /** A setting's icon: its own, or for a flag a green or grey dye, so on and off show at a glance. */
+    static Material materialFor(SettingsNavigation navigation, Setting<?> setting) {
         Material material = setting.icon() == null || setting.icon() == Material.AIR
                 ? Material.PAPER : setting.icon();
-        // A flag shows what it is at a glance rather than making somebody read the lore for it.
         if (setting.type() == Boolean.class) {
             boolean on = "on".equals(navigation.registry().display(setting.key()));
             material = on ? Material.LIME_DYE : Material.GRAY_DYE;
         }
-        return Icons.of(material, "<white>" + setting.title(), navigation.describe(setting));
+        return material;
     }
 
     private void onClick(Setting<?> setting) {
         SettingsNavigation.Click what = navigation.click(setting.key());
         switch (what) {
             case CYCLED -> {
-                navigation.registry().saveAll();
+                SettingsSaving.saveThenTell(navigation.registry(), viewer);
                 refresh();
             }
             case NEEDS_MATERIAL_CHOICE -> new ItemChooser(viewer, brand(), this,
                     "Choose " + setting.title(),
                     chosen -> {
                         navigation.registry().set(setting.key(), chosen.name());
-                        navigation.registry().saveAll();
+                        SettingsSaving.saveThenTell(navigation.registry(), viewer);
                         refresh();
                     }).open();
             case NEEDS_COLOR_CHOICE -> new ColorChooser(viewer, brand(), this,
@@ -250,7 +259,7 @@ public final class SettingsMenu extends Menu {
                     chosen -> {
                         navigation.registry().set(setting.key(),
                                 NamedTextColor.NAMES.key(chosen));
-                        navigation.registry().saveAll();
+                        SettingsSaving.saveThenTell(navigation.registry(), viewer);
                         refresh();
                     }).open();
             case NEEDS_TYPING -> {
@@ -277,14 +286,14 @@ public final class SettingsMenu extends Menu {
                     navigation.registry().display(setting.key()),
                     chosen -> {
                         navigation.registry().set(setting.key(), chosen);
-                        navigation.registry().saveAll();
+                        SettingsSaving.saveThenTell(navigation.registry(), viewer);
                         refresh();
                     }).open();
             case NEEDS_NUMBER_CHOICE -> new AmountChooser(viewer, brand(),
                     this, setting.title(), currentNumber(setting), setting.min(), setting.max(),
                     chosen -> {
                         navigation.registry().set(setting.key(), String.valueOf(chosen));
-                        navigation.registry().saveAll();
+                        SettingsSaving.saveThenTell(navigation.registry(), viewer);
                         refresh();
                     }).open();
             case UNKNOWN -> chat.raw(viewer, words().prefixed("settings.gone"));

@@ -1,15 +1,17 @@
 package de.raindancer.core.data.settings;
 
 import de.raindancer.core.ui.chat.Brand;
-import de.raindancer.core.platform.util.Scheduling;
 import de.raindancer.core.ui.chat.Chat;
+import de.raindancer.core.ui.chat.ChatButton;
+import de.raindancer.core.ui.chat.ChatButtons;
+import de.raindancer.core.ui.messages.Messages;
+import de.raindancer.core.ui.text.Text;
+import net.kyori.adventure.text.Component;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import de.raindancer.core.RainsCore;
-import org.bukkit.Bukkit;
-import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,6 +31,10 @@ import java.util.Locale;
 public final class SettingsCommand implements BasicCommand {
 
     private static final String PERMISSION = "rainscore.settings";
+    /** How many near names "did you mean" offers. */
+    private static final int DID_YOU_MEAN = 3;
+    /** Up to this many choices are shown as buttons; more are listed. */
+    private static final int CLICKABLE_CHOICES = 12;
 
     /**
      * Nothing is held, because there is nothing to hold yet.
@@ -38,16 +44,6 @@ public final class SettingsCommand implements BasicCommand {
      * when it is actually run. See {@code RainsCoreBootstrap} for why registration cannot wait.
      */
     public SettingsCommand() {
-    }
-
-    /**
-     * The plugin to schedule against.
-     *
-     * <p>Core itself, because these settings are Core's and the work is a file write rather than
-     * anything belonging to whoever typed the command.
-     */
-    private static Plugin corePlugin() {
-        return Bukkit.getPluginManager().getPlugin("RainsCore");
     }
 
     private SettingsNavigation navigation() {
@@ -86,7 +82,15 @@ public final class SettingsCommand implements BasicCommand {
             case "get" -> get(sender, args);
             case "set" -> set(sender, args);
             case "reset" -> reset(sender, args);
-            default -> usage(sender);
+            case "search", "find" -> search(sender, args);
+            default -> {
+                // "/settings fence-style" — a setting's name where a word was expected: show it.
+                if (navigation().registry().setting(args[0]).isPresent()) {
+                    get(sender, new String[]{"get", args[0]});
+                } else {
+                    usage(sender);
+                }
+            }
         }
     }
 
@@ -114,10 +118,20 @@ public final class SettingsCommand implements BasicCommand {
             chat().tell(sender, "<white><name></white> is <white><value></white>.",
                     Chat.arg("name", setting.title()),
                     Chat.arg("value", navigation().registry().display(args[1])));
-            for (String line : navigation().describe(setting)) {
+            List<String> lines = navigation().describe(setting);
+            // The last line is the menu's "click to change"; here the buttons below say it.
+            for (String line : lines.subList(0, Math.max(0, lines.size() - 1))) {
                 if (!line.isBlank()) {
                     chat().row(sender, "<dark_gray>  " + line);
                 }
+            }
+            if (clickable(sender)) {
+                String key = setting.key();
+                chat().raw(sender, Component.text("  ").append(buttons().row(
+                        buttons().label("<yellow>[change]").tooltip("<gray>Type a new value")
+                                .suggests("/settings set " + key + " "),
+                        buttons().label("<gray>[reset]").tooltip("<gray>Back to what it shipped with")
+                                .runs("/settings reset " + key))));
             }
         }, () -> unknown(sender, args[1]));
     }
@@ -134,9 +148,7 @@ public final class SettingsCommand implements BasicCommand {
             return;
         }
         if (navigation().registry().set(args[1], value)) {
-            // Off the thread the command arrived on: this writes a YAML file for every plugin that
-            // has settings, and doing that on a region thread stalls the world for the disk.
-            Scheduling.async(corePlugin(), () -> navigation().registry().saveAll());
+            SettingsSaving.saveThenTell(navigation().registry(), sender);
             chat().ok(sender, "<name> is now <value>.",
                     Chat.arg("name", args[1]),
                     Chat.arg("value", navigation().registry().display(args[1])));
@@ -148,8 +160,18 @@ public final class SettingsCommand implements BasicCommand {
             if (setting.min() != null) {
                 chat().row(sender, "<dark_gray>  it goes from " + setting.min()
                         + " to " + setting.max());
+            } else if (!setting.choices().isEmpty() && setting.choices().size() <= CLICKABLE_CHOICES
+                    && clickable(sender)) {
+                // Few enough to click: each one sets it.
+                List<ChatButton> choices = new ArrayList<>();
+                for (String choice : setting.choices()) {
+                    choices.add(buttons().label("<aqua>[" + Text.literal(choice) + "]")
+                            .tooltip("<gray>Set it to " + Text.literal(choice))
+                            .runs("/settings set " + args[1] + " " + choice));
+                }
+                chat().raw(sender, Component.text("  ").append(buttons().row(choices.toArray(ChatButton[]::new))));
             } else if (!setting.choices().isEmpty()) {
-                chat().row(sender, "<dark_gray>  one of: " + String.join(", ", setting.choices()));
+                chat().row(sender, "<dark_gray>  one of: " + Text.literal(String.join(", ", setting.choices())));
             }
         });
     }
@@ -164,22 +186,94 @@ public final class SettingsCommand implements BasicCommand {
             return;
         }
         navigation().registry().reset(args[1]);
-        Scheduling.async(corePlugin(), () -> navigation().registry().saveAll());
+        SettingsSaving.saveThenTell(navigation().registry(), sender);
         chat().ok(sender, "<name> is back to <value>.",
                 Chat.arg("name", args[1]),
                 Chat.arg("value", navigation().registry().display(args[1])));
     }
 
+    private void search(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            if (sender instanceof Player player) {
+                SettingsSearchMenu.ask(player, brand(), chat(), navigation(), null);
+            } else {
+                usage(sender);
+            }
+            return;
+        }
+        String query = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
+        if (sender instanceof Player player) {
+            new SettingsSearchMenu(player, brand(), chat(), navigation(), query,
+                    SettingsMenu.root(player, brand(), chat(), navigation())).open();
+            return;
+        }
+        List<Setting<?>> found = navigation().search(query);
+        if (found.isEmpty()) {
+            sender.sendMessage(words().prefixed("settings.search-none", "query", query));
+            return;
+        }
+        sender.sendMessage(words().prefixed("settings.search-found", "count", found.size(), "query", query));
+        for (Setting<?> setting : found) {
+            chat().row(sender, "<dark_gray>  <white><key> <dark_gray>— <gray><title> <dark_gray>= <gray><value>",
+                    Chat.arg("key", setting.key()), Chat.arg("title", setting.title()),
+                    Chat.arg("value", navigation().registry().display(setting.key())));
+        }
+    }
+
+    /** Nothing is called that: say what is close, clickable, and how to look for it instead. */
     private void unknown(CommandSender sender, String key) {
-        chat().no(sender, "Nothing on this server is called <name>.", Chat.arg("name", key));
+        sender.sendMessage(words().prefixed("settings.unknown", "name", key));
+        List<String> close = navigation().closest(key, DID_YOU_MEAN);
+        if (!close.isEmpty()) {
+            Component line = words().get("settings.did-you-mean");
+            if (clickable(sender)) {
+                List<ChatButton> options = new ArrayList<>();
+                for (String option : close) {
+                    options.add(buttons().label("<aqua>[" + Text.literal(option) + "]")
+                            .tooltip("<gray>Show " + Text.literal(option))
+                            .runs("/settings get " + option));
+                }
+                line = line.append(buttons().row(options.toArray(ChatButton[]::new)));
+            } else {
+                line = line.append(Component.text(String.join(", ", close)));
+            }
+            chat().raw(sender, line);
+        }
+        sender.sendMessage(words().get("settings.look-for-it"));
     }
 
     private void usage(CommandSender sender) {
         chat().tell(sender, "<gray>/settings <dark_gray>— the menu");
-        chat().row(sender, "<dark_gray>  /settings list");
-        chat().row(sender, "<dark_gray>  /settings get <name>");
-        chat().row(sender, "<dark_gray>  /settings set <name> <value>");
-        chat().row(sender, "<dark_gray>  /settings reset <name>");
+        if (!clickable(sender)) {
+            chat().row(sender, "<dark_gray>  /settings list");
+            chat().row(sender, "<dark_gray>  /settings search <word>");
+            chat().row(sender, "<dark_gray>  /settings get <name>");
+            chat().row(sender, "<dark_gray>  /settings set <name> <value>");
+            chat().row(sender, "<dark_gray>  /settings reset <name>");
+            return;
+        }
+        // Each line puts the command in the chat box, ready to finish.
+        for (String[] line : new String[][]{
+                {"/settings list", "/settings list", "Every setting and what it is now"},
+                {"/settings search <word>", "/settings search ", "Find a setting by a word in it"},
+                {"/settings get <name>", "/settings get ", "One setting, what it is and does"},
+                {"/settings set <name> <value>", "/settings set ", "Change one"},
+                {"/settings reset <name>", "/settings reset ", "Put one back to what it shipped with"}}) {
+            chat().raw(sender, Component.text("  ").append(buttons().label("<gray>" + Text.literal(line[0]))
+                    .tooltip("<gray>" + line[2] + "<newline><dark_gray>Click to type it").suggests(line[1]).render()));
+        }
+    }
+
+    private static boolean clickable(CommandSender sender) {
+        return sender instanceof Player && RainsCore.isAvailable() && RainsCore.get().buttons() != null;
+    }
+
+    private static ChatButtons buttons() {
+        return RainsCore.get().buttons();
+    }
+
+    private static Messages words() {
+        return RainsCore.get().messages();
     }
 
     /**
@@ -195,16 +289,12 @@ public final class SettingsCommand implements BasicCommand {
             return List.of();
         }
         if (args.length <= 1) {
-            return List.of("list", "get", "set", "reset").stream()
+            return List.of("list", "search", "get", "set", "reset").stream()
                     .filter(word -> args.length == 0 || word.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
-        if (args.length == 2) {
-            String typed = args[1].toLowerCase(Locale.ROOT);
-            return navigation().registry().keys().stream()
-                    .filter(key -> key.toLowerCase(Locale.ROOT).startsWith(typed))
-                    .limit(50)
-                    .toList();
+        if (args.length == 2 && !args[0].equalsIgnoreCase("search") && !args[0].equalsIgnoreCase("find")) {
+            return keysMatching(navigation().registry().keys(), args[1]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
             return navigation().registry().setting(args[1])
@@ -212,6 +302,26 @@ public final class SettingsCommand implements BasicCommand {
                     .orElse(List.of());
         }
         return List.of();
+    }
+
+    /**
+     * Keys starting with what was typed first, then keys containing it — so "style" finds
+     * fence-style even though nobody remembers it starts with "fence".
+     */
+    static List<String> keysMatching(List<String> keys, String typedSoFar) {
+        String typed = typedSoFar == null ? "" : typedSoFar.toLowerCase(Locale.ROOT);
+        List<String> starting = new ArrayList<>();
+        List<String> containing = new ArrayList<>();
+        for (String key : keys) {
+            String lower = key.toLowerCase(Locale.ROOT);
+            if (lower.startsWith(typed)) {
+                starting.add(key);
+            } else if (!typed.isEmpty() && lower.contains(typed)) {
+                containing.add(key);
+            }
+        }
+        starting.addAll(containing);
+        return starting.stream().limit(50).toList();
     }
 
     private static List<String> valuesFor(Setting<?> setting) {

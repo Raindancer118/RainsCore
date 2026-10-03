@@ -104,4 +104,26 @@ class AnvilInputTest {
         verify(top).setItem(0, null);
         verify(player, never()).closeInventory();
     }
+
+    @Test
+    @DisplayName("the window shuts before the answer runs, so a window the answer opens stays open")
+    void shutThenAnswer() {
+        UUID id = UUID.randomUUID();
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(id);
+        AnvilView view = mock(AnvilView.class);
+        when(view.getTopInventory()).thenReturn(mock(AnvilInventory.class));
+        when(view.getRenameText()).thenReturn("base");
+        java.util.List<String> order = new java.util.ArrayList<>();
+        org.mockito.Mockito.doAnswer(invocation -> order.add("closed")).when(player).closeInventory();
+        AnvilInput.start(id, new AnvilInput.Session<>(Parsers.name(8), value -> order.add("answered"), null));
+        InventoryClickEvent click = mock(InventoryClickEvent.class);
+        when(click.getWhoClicked()).thenReturn(player);
+        when(click.getView()).thenReturn(view);
+        when(click.getRawSlot()).thenReturn(2);
+
+        new AnvilInput.Listener().onClick(click);
+
+        assertThat(order).containsExactly("closed", "answered");
+    }
 }

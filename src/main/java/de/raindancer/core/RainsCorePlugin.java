@@ -460,7 +460,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         landPolicyStore.problem().ifPresent(trouble -> log.warn("land-flags.yml: {}", trouble));
         land = new Land(landPolicies, messages, System::currentTimeMillis);
         getServer().getPluginManager().registerEvents(new BlockProtectionListener(land), this);
-        getServer().getPluginManager().registerEvents(new AnvilInput.Listener(), this);
+        getServer().getPluginManager().registerEvents(new AnvilInput.Listener(this), this);
         interactionProtection = new InteractionProtectionListener(land, messages, audit);
         getServer().getPluginManager().registerEvents(interactionProtection, this);
         EnvironmentProtectionListener environmentProtection = new EnvironmentProtectionListener(land);

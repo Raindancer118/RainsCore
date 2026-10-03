@@ -151,11 +151,27 @@ public final class SettingsStore<T> {
      * first rather than writing a fresh one.
      */
     public void save() {
+        trySave();
+    }
+
+    /** The file these settings live in. */
+    public Path file() {
+        return file;
+    }
+
+    /**
+     * {@link #save()}, saying whether it landed.
+     *
+     * @return false when the file on disk could not be read, so it was left alone for the owner to fix
+     *         rather than overwritten — the values are in effect until a restart, and the next save
+     *         after the file is fixed writes them
+     */
+    public boolean trySave() {
         // An update rather than a write: that is what keeps the unknown keys and whatever the owner
         // wrote around them. It is also atomic, so a server killed here has the old config or the
         // new one and never half of a file it needs to start. The values are read inside it, under
         // the file's lock, so of two saves racing each other the newer values land last.
-        store.update(yaml -> {
+        return store.update(yaml -> {
             T snapshot = current;
             for (Setting<?> setting : schema.settings()) {
                 yaml.set(setting.key(), SettingCodec.toYaml(setting.valueIn(snapshot)));

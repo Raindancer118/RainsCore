@@ -84,7 +84,7 @@ public final class SettingsChatInput {
 
     private void apply(Player player, Waiting waiting, String typed) {
         if (navigation.registry().set(waiting.key(), typed)) {
-            navigation.registry().saveAll();
+            SettingsSaving.saveThenTell(navigation.registry(), player);
             chat.ok(player, words().raw("settings.changed"),
                     Chat.arg("name", waiting.key()),
                     Chat.arg("value", navigation.registry().display(waiting.key())));
