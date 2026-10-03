@@ -171,17 +171,6 @@ public final class Tablists {
         // there, which reads as nothing having changed at all.
         java.util.Set<UUID> hidden = this.hidden.get();
         List<Player> allOnline = new ArrayList<>(Bukkit.getOnlinePlayers());
-        List<Player> visible = new ArrayList<>();
-        for (Player player : allOnline) {
-            if (!hidden.contains(player.getUniqueId())) {
-                visible.add(player);
-            }
-        }
-        List<TablistEntry> visibleEntries = new ArrayList<>(visible.size());
-        for (Player player : visible) {
-            visibleEntries.add(new TablistEntry(player.getUniqueId(), player.getName(),
-                    player.getWorld().getName(), player.getPing()));
-        }
 
         // Everybody, hidden included — their own line in their own tablist, and the scoreboard team
         // sorting below, are unaffected by vanish: what makes them invisible to everybody else is
@@ -190,9 +179,14 @@ public final class Tablists {
         // what a player is called and where they sort in a list they are already an entry on — their
         // own, always, and anybody else's only once BukkitVanishSink has let them stay.
         List<TablistEntry> allEntries = new ArrayList<>(allOnline.size());
+        List<TablistEntry> visibleEntries = new ArrayList<>(allOnline.size());
         for (Player player : allOnline) {
-            allEntries.add(new TablistEntry(player.getUniqueId(), player.getName(),
-                    player.getWorld().getName(), player.getPing()));
+            TablistEntry entry = new TablistEntry(player.getUniqueId(), player.getName(),
+                    player.getWorld().getName(), player.getPing());
+            allEntries.add(entry);
+            if (!hidden.contains(player.getUniqueId())) {
+                visibleEntries.add(entry);
+            }
         }
 
         long now = tick.getAndIncrement();
@@ -229,10 +223,15 @@ public final class Tablists {
         for (int index = 0; index < allOnline.size(); index++) {
             Player player = allOnline.get(index);
             TablistEntry entry = allEntries.get(index);
+            Component line = showWorldOnEachLine ? model.lineWithWorld(entry) : model.line(entry);
             try {
-                player.playerListName(showWorldOnEachLine
-                        ? model.lineWithWorld(entry)
-                        : model.line(entry));
+                // Only when it differs from what the player has now: every call is a packet to every
+                // player on the server, so setting it unchanged each refresh was N² packets saying
+                // nothing. Compared with the live name, not a cache, so a name somebody else set is
+                // still put back exactly as before.
+                if (!line.equals(player.playerListName())) {
+                    player.playerListName(line);
+                }
             } catch (RuntimeException gone) {
                 log.debug("Could not name {} in the tablist: {}", player.getName(),
                         gone.toString());

@@ -132,6 +132,25 @@ class TablistsTest {
     }
 
     @Test
+    @DisplayName("a player's line is only sent when it differs from the one they already have")
+    void anUnchangedLineIsNotResent() {
+        Player alice = fakePlayer(ALICE, "Alice");
+        ArgumentCaptor<Component> line = ArgumentCaptor.forClass(Component.class);
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(alice));
+            tablists.refresh();
+            verify(alice).playerListName(line.capture());
+            when(alice.playerListName()).thenReturn(line.getValue());
+
+            tablists.refresh();
+        }
+
+        // Each call is a packet to every player on the server; unchanged, it says nothing.
+        verify(alice, org.mockito.Mockito.times(1)).playerListName(any(Component.class));
+    }
+
+    @Test
     @DisplayName("with nobody hidden, everybody sees the real count")
     void ordinaryRefreshCountsEverybody() {
         Player alice = fakePlayer(ALICE, "Alice");
