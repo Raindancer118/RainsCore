@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.profile;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.RainsCore;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Style;
@@ -62,7 +63,7 @@ public final class ProfileMenu extends Menu {
 
     @Override
     protected Component title() {
-        return MINI.deserialize("<" + Style.titleLabel() + ">" + subjectName);
+        return MINI.deserialize("<" + Style.titleLabel() + ">" + Text.literal(subjectName));
     }
 
     @Override
@@ -72,7 +73,7 @@ public final class ProfileMenu extends Menu {
 
     @Override
     protected void render() {
-        band(MenuLayout.WHO, 4, Icons.head(subject, "<white>" + subjectName, headerLore()));
+        band(MenuLayout.WHO, 4, Icons.head(subject, "<white>" + Text.literal(subjectName), headerLore()));
 
         int band = MenuLayout.WHO;
         int column = 1;

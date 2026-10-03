@@ -1,5 +1,6 @@
 package de.raindancer.core.platform.util;
 
+import de.raindancer.core.ui.text.Text;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
@@ -92,7 +93,7 @@ public final class Templates {
                 }
                 String name = template.substring(index + 1, close).trim().toLowerCase(Locale.ROOT);
                 if (values.containsKey(name)) {
-                    result.append(MINI.escapeTags(values.get(name)));
+                    result.append(Text.literal(values.get(name)));
                 } else if (values.containsKey(name + "!")) {
                     result.append(values.get(name + "!"));
                 } else {

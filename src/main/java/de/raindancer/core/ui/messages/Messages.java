@@ -3,6 +3,8 @@ package de.raindancer.core.ui.messages;
 import net.kyori.adventure.audience.Audience;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
+import de.raindancer.core.ui.text.Markup;
+import de.raindancer.core.ui.text.Text;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -876,9 +878,10 @@ public final class Messages {
     /**
      * Puts the values where their names are.
      *
-     * <p>Escaped, every one. A value is usually something a player typed — a home's name, another
-     * player's name — and pasting that into markup is how a home called {@code <rainbow>} recolours
-     * the rest of the sentence.
+     * <p>Text, every one, unless wrapped in {@link Markup}. A value is usually something a player typed —
+     * a home's name, another player's name, an item they renamed — and pasting that into markup is how a
+     * home called {@code <rainbow>} recolours the sentence, or an item becomes a button that runs a
+     * command as whoever clicks it. A {@code Component} is inserted as the component it is.
      */
     private String fill(String message, Object... values) {
         if (values == null || values.length == 0) {
@@ -892,13 +895,11 @@ public final class Messages {
             }
             return message;
         }
-        String filled = message;
-        for (int at = 0; at + 1 < values.length; at += 2) {
-            String name = String.valueOf(values[at]);
-            String value = MINI.escapeTags(String.valueOf(values[at + 1]));
-            filled = filled.replace("<" + name + ">", value);
-        }
-        return filled;
+        // One pass, each value as exactly the text it is (Text.fill): replacing placeholders one after
+        // another re-scanned what earlier values had inserted, and a value ending in a backslash
+        // unescaped the next one — a renamed item could become a live /op button that way. A value is
+        // only markup when it is a Markup, a decision made in code.
+        return Text.fill(message, values);
     }
 
     /**

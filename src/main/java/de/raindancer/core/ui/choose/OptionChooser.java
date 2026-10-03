@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.choose;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.menu.Icons;
 import de.raindancer.core.ui.menu.Menu;
@@ -84,7 +85,7 @@ public final class OptionChooser extends PaginatedMenu<String> {
         // Lit up rather than merely ticked in the lore: on a page of otherwise identical buttons the
         // only thing anybody scans for is which one looks different.
         return Icons.of(chosen ? Material.LIME_DYE : Material.GRAY_DYE,
-                (chosen ? "<green>" : "<white>") + readable(option),
+                (chosen ? "<green>" : "<white>") + Text.literal(readable(option)),
                 chosen ? List.of("<dark_gray>This is what it is set to.")
                         : List.of("<yellow>▶ Click to use this"));
     }

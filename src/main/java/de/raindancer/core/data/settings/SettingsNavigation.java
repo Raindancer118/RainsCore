@@ -1,5 +1,6 @@
 package de.raindancer.core.data.settings;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.ui.identity.Symbols;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -161,7 +162,7 @@ public final class SettingsNavigation {
             lines.add("<gray>" + setting.description());
         }
         lines.add("");
-        lines.add("<gray>Now: <white>" + registry.display(setting.key()));
+        lines.add("<gray>Now: <white>" + Text.literal(registry.display(setting.key())));
 
         // Every material name this server has is hundreds of entries — useful in a hand-edited
         // config.yml, where it says what is valid, and unreadable as a line of lore on a button whose

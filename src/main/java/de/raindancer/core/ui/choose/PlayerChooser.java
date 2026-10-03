@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.choose;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.chat.Style;
 import de.raindancer.core.ui.menu.Icons;
@@ -152,7 +153,7 @@ public final class PlayerChooser extends PaginatedMenu<PlayerEntry> {
         lore.add("<dark_gray>" + presence.title().toLowerCase(Locale.ROOT));
         lore.add("");
         lore.add("<dark_gray>click to choose");
-        return Icons.head(person.id(), (person.online() ? "<white>" : "<gray>") + person.name(), lore);
+        return Icons.head(person.id(), (person.online() ? "<white>" : "<gray>") + Text.literal(person.name()), lore);
     }
 
     @Override

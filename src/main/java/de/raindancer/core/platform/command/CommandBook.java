@@ -1,5 +1,6 @@
 package de.raindancer.core.platform.command;
 
+import de.raindancer.core.ui.text.Text;
 import net.kyori.adventure.inventory.Book;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -191,7 +192,7 @@ public final class CommandBook {
      * and swallowing the rest of the entry at worst.
      */
     private static String escape(String text) {
-        return text == null ? "" : MINI.escapeTags(text);
+        return Text.literal(text);
     }
 
     private static Component mm(String miniMessage) {

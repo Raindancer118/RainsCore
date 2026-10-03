@@ -1,6 +1,7 @@
 package de.raindancer.core.moderation.punishment;
 
 import de.raindancer.core.ui.chat.Style;
+import de.raindancer.core.ui.text.Text;
 import net.kyori.adventure.text.Component;
 import de.raindancer.core.ui.messages.Messages;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -222,12 +223,7 @@ public final class PunishmentGuard {
      * {@code <red>} recolours the rest of the screen and an unclosed tag swallows what follows.
      */
     private static String fillIn(Messages words, String key, Object... values) {
-        String markup = words.raw(key);
-        for (int at = 0; at + 1 < values.length; at += 2) {
-            markup = markup.replace("<" + values[at] + ">",
-                    MINI.escapeTags(String.valueOf(values[at + 1])));
-        }
-        return markup;
+        return Text.fill(words.raw(key), values);
     }
 
     /** What a muted or frozen player is told, in one line of chat. */
@@ -265,6 +261,6 @@ public final class PunishmentGuard {
      * swallow the appeal line.
      */
     private static String escape(String raw) {
-        return MINI.escapeTags(raw);
+        return Text.literal(raw);
     }
 }

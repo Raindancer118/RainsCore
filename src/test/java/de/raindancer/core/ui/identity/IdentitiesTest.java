@@ -383,4 +383,13 @@ class IdentitiesTest {
             assertThat(Symbols.expand(null)).isEmpty();
         }
     }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("a prefix that would be a button is refused; one that is only colour is kept")
+    void noButtonsInNames() {
+        UUID somebody = UUID.randomUUID();
+        assertThat(identities.setPrefix(somebody, "<click:run_command:'/op Steve'>[VIP] ")).isFalse();
+        assertThat(identities.setPrefix(somebody, "<hover:show_text:'x'>[VIP] ")).isFalse();
+        assertThat(identities.setPrefix(somebody, "<gold>[VIP] ")).isTrue();
+    }
 }

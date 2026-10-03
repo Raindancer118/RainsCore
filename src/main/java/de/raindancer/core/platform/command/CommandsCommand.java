@@ -1,5 +1,6 @@
 package de.raindancer.core.platform.command;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.RainsCore;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -58,9 +59,9 @@ public final class CommandsCommand implements BasicCommand {
         sender.sendMessage(MINI.deserialize("<dark_aqua>" + visible.size() + " command(s):"));
         for (CommandNote note : visible) {
             sender.sendMessage(MINI.deserialize("<blue>" + note.slashed() + " <gray>— "
-                    + MINI.escapeTags(note.sentence())));
+                    + Text.literal(note.sentence())));
             for (String option : note.options()) {
-                sender.sendMessage(MINI.deserialize("<dark_gray>    " + MINI.escapeTags(option)));
+                sender.sendMessage(MINI.deserialize("<dark_gray>    " + Text.literal(option)));
             }
         }
     }

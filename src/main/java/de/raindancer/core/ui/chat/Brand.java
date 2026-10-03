@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.chat;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.platform.util.FontWidth;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
@@ -197,7 +198,7 @@ public final class Brand {
      * plugin sends.
      */
     private static String escape(String raw) {
-        return MiniMessage.miniMessage().escapeTags(raw);
+        return Text.literal(raw);
     }
 
     /**

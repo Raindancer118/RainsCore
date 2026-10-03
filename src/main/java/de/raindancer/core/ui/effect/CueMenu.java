@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.effect;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.choose.ParticleChooser;
 import de.raindancer.core.ui.choose.SoundChooser;
@@ -203,7 +204,7 @@ public final class CueMenu extends Menu {
                     List<String> problems = sounds
                             ? SoundSequence.problemsIn(written)
                             : ParticleSequence.problemsIn(written);
-                    problems.forEach(problem -> tell("<yellow>⚠ " + problem));
+                    problems.forEach(problem -> tell("<yellow>⚠ " + Text.literal(problem)));
 
                     if (sounds) {
                         SoundSequence parsed = SoundSequence.parseAndExpand(written);

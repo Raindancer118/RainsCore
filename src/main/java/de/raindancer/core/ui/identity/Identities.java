@@ -4,6 +4,7 @@ import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Marks;
+import de.raindancer.core.ui.text.Text;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -46,7 +47,11 @@ import java.util.regex.Pattern;
 public final class Identities {
 
     private static final LogChannel log = Log.of("identity");
-    private static final MiniMessage MINI = MiniMessage.miniMessage();
+    /**
+     * Style only — see {@link Text#styled}. A prefix, a suffix or a nickname may be coloured; it may not
+     * be a button, and a prefix with a click in it is refused on the way in rather than stored.
+     */
+    private static final MiniMessage MINI = Text.styleOnly();
     private static final PlainTextComponentSerializer PLAIN =
             PlainTextComponentSerializer.plainText();
 
@@ -445,7 +450,7 @@ public final class Identities {
 
     /** Something shaped like a tag, left over after parsing — i.e. one nothing recognised. */
     private static final Pattern UNPARSED_TAG =
-            Pattern.compile("<[a-zA-Z_][a-zA-Z0-9_:#-]*>");
+            Pattern.compile("</?[a-zA-Z_][^<>]*>");
 
     private static boolean isColour(String colour) {
         String cleaned = colour.trim().toLowerCase(Locale.ROOT);

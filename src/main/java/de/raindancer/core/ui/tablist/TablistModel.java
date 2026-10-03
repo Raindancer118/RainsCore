@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.tablist;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.RainsCore;
 import de.raindancer.core.ui.banner.BlockLetters;
 import de.raindancer.core.ui.identity.Identities;
@@ -225,7 +226,7 @@ public final class TablistModel {
 
     /** A group's heading. */
     public Component heading(TablistGroup group) {
-        return MINI.deserialize("<dark_gray>" + group.symbol() + " <gray><b>" + group.label()
+        return MINI.deserialize("<dark_gray>" + group.symbol() + " <gray><b>" + escape(group.label())
                 + "</b> <dark_gray>(" + group.size() + ")");
     }
 
@@ -431,7 +432,7 @@ public final class TablistModel {
     private volatile ToIntFunction<TablistEntry> ranks = entry -> 0;
 
     private static String escape(String raw) {
-        return MINI.escapeTags(raw);
+        return Text.literal(raw);
     }
 
     /**

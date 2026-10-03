@@ -1,5 +1,6 @@
 package de.raindancer.core.moderation.players;
 
+import de.raindancer.core.ui.text.Text;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Scheduling;
@@ -150,7 +151,7 @@ public final class BukkitPlayerAdminSink implements PlayerAdminSink {
 
     @Override
     public void kick(UUID who, String reason) {
-        Component said = MINI.deserialize("<red>" + MINI.escapeTags(reason == null ? "" : reason));
+        Component said = MINI.deserialize("<red>" + Text.literal(reason));
         onTarget(who, player -> player.kick(said));
     }
 

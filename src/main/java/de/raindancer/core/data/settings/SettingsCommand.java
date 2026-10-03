@@ -94,9 +94,8 @@ public final class SettingsCommand implements BasicCommand {
         List<String> keys = navigation().registry().keys();
         chat().tell(sender, "<gray><count> settings:", Chat.arg("count", keys.size()));
         for (String key : keys) {
-            chat().row(sender, "<dark_gray>  <white><key> <dark_gray>= <gray><value>"
-                    .replace("<key>", key)
-                    .replace("<value>", navigation().registry().display(key)));
+            chat().row(sender, "<dark_gray>  <white><key> <dark_gray>= <gray><value>",
+                    Chat.arg("key", key), Chat.arg("value", navigation().registry().display(key)));
         }
         var clashes = navigation().registry().clashes();
         if (!clashes.isEmpty()) {
