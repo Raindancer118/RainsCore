@@ -555,4 +555,26 @@ class IdentitiesTest {
             assertThat(identities.shownName(ALICE, "Raindancer118")).isEqualTo("Raindancer118");
         }
     }
+
+    @Nested
+    @DisplayName("an animated name")
+    class Animated {
+
+        @Test
+        @DisplayName("is painted differently as time passes, and the same at the same moment")
+        void movesWithTheClock() {
+            long[] now = {0};
+            Identities clocked = new Identities(database(), () -> now[0]);
+            clocked.setNameStyle(ALICE, de.raindancer.core.ui.text.NameStyle.NONE
+                    .withStop(net.kyori.adventure.text.format.NamedTextColor.RED)
+                    .withStop(net.kyori.adventure.text.format.NamedTextColor.BLUE).animated(true));
+
+            Component first = clocked.chatName(ALICE, "Raindancer118");
+            assertThat(clocked.chatName(ALICE, "Raindancer118")).isEqualTo(first);
+            now[0] = Identities.ANIMATION_PERIOD_MS / 4;
+            assertThat(clocked.chatName(ALICE, "Raindancer118")).isNotEqualTo(first);
+            assertThat(clocked.isAnimated(ALICE)).isTrue();
+            assertThat(clocked.isAnimated(BOB)).isFalse();
+        }
+    }
 }

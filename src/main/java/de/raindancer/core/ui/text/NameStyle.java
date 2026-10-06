@@ -29,10 +29,13 @@ import java.util.Set;
  * colour and no decorations packs to the bare hex code, which is exactly what the identity table held
  * before styles existed — so old rows read, and a rolled-back Core still reads new solid colours.
  */
-public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations) {
+public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations, boolean animated) {
 
     /** No colour, no decoration. */
-    public static final NameStyle NONE = new NameStyle(List.of(), Set.of());
+    public static final NameStyle NONE = new NameStyle(List.of(), Set.of(), false);
+
+    /** The marker in {@link #encode} for a gradient that flows. */
+    private static final String ANIMATED = "animated";
 
     /**
      * The most stops a style may carry.
@@ -47,8 +50,15 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
     /** Between the colours and the decorations in {@link #encode}. Never in a hex code or a name. */
     private static final String PART = "|";
 
+    /** A still style — the shape every style had before animation, and what items always are. */
+    public NameStyle(List<TextColor> colours, Set<TextDecoration> decorations) {
+        this(colours, decorations, false);
+    }
+
     public NameStyle {
         colours = List.copyOf(colours);
+        // One colour has nothing to flow; saying it is animated would only make two equal styles unequal.
+        animated = animated && colours.size() > 1;
         // EnumSet keeps declaration order, so encoding is stable and two styles built by different
         // routes compare equal. A HashSet would make both accidental.
         decorations = decorations.isEmpty()
@@ -65,20 +75,29 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
         return colours.size() > 1;
     }
 
+    /** Whether the gradient flows along the name over time. */
+    public boolean isAnimated() {
+        return animated;
+    }
+
+    public NameStyle animated(boolean on) {
+        return new NameStyle(colours, decorations, on);
+    }
+
     public boolean has(TextDecoration decoration) {
         return decorations.contains(decoration);
     }
 
     /** Replaces the colour outright with a single stop. */
     public NameStyle withColour(TextColor colour) {
-        return new NameStyle(List.of(colour), decorations);
+        return new NameStyle(List.of(colour), decorations, animated);
     }
 
     /** Adds a stop at the end of the gradient. The caller enforces {@link #MAX_STOPS}. */
     public NameStyle withStop(TextColor colour) {
         List<TextColor> next = new ArrayList<>(colours);
         next.add(colour);
-        return new NameStyle(next, decorations);
+        return new NameStyle(next, decorations, animated);
     }
 
     /** Removes the stop at {@code index}; an index that does not exist changes nothing. */
@@ -88,17 +107,17 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
         }
         List<TextColor> next = new ArrayList<>(colours);
         next.remove(index);
-        return new NameStyle(next, decorations);
+        return new NameStyle(next, decorations, animated);
     }
 
     /** The same stops, the other way round. */
     public NameStyle reversed() {
-        return new NameStyle(colours.reversed(), decorations);
+        return new NameStyle(colours.reversed(), decorations, animated);
     }
 
     /** The same decorations, no colour. */
     public NameStyle withoutColours() {
-        return new NameStyle(List.of(), decorations);
+        return new NameStyle(List.of(), decorations, false);
     }
 
     /** Adds the decoration if it is missing, removes it if it is there. */
@@ -115,7 +134,7 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
         } else {
             next.remove(decoration);
         }
-        return new NameStyle(colours, next);
+        return new NameStyle(colours, next, animated);
     }
 
     /**
@@ -169,8 +188,14 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
 
     // ------------------------------------------------------------------ one-string persistence
 
-    /** Both halves in one string: {@code #a,#b|bold,italic}, or just {@code #a} for a lone colour. */
+    /**
+     * Everything in one string: {@code #a,#b|bold,italic}, {@code #a,#b|bold|animated}, or just
+     * {@code #a} for a lone colour.
+     */
     public String encode() {
+        if (animated) {
+            return encodeColours() + PART + encodeDecorations() + PART + ANIMATED;
+        }
         if (decorations.isEmpty()) {
             return encodeColours();
         }
@@ -182,10 +207,10 @@ public record NameStyle(List<TextColor> colours, Set<TextDecoration> decorations
         if (encoded == null || encoded.isBlank()) {
             return NONE;
         }
-        int at = encoded.indexOf(PART);
-        return at < 0
-                ? decode(encoded, "")
-                : decode(encoded.substring(0, at), encoded.substring(at + PART.length()));
+        String[] parts = encoded.split(java.util.regex.Pattern.quote(PART), -1);
+        NameStyle read = decode(parts[0], parts.length > 1 ? parts[1] : "");
+        boolean flows = parts.length > 2 && parts[2].trim().equalsIgnoreCase(ANIMATED);
+        return read.animated(flows);
     }
 
     /** A named colour ({@code dark_red}) or a hex code ({@code #f38baa}); null for anything else. */

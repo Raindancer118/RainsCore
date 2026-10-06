@@ -89,8 +89,24 @@ public final class Identities {
     /** Which players have changed, so a save writes one row rather than every row. */
     private final Set<UUID> changed = ConcurrentHashMap.newKeySet();
 
+    /** How long an animated gradient takes to flow once round its colours. */
+    public static final long ANIMATION_PERIOD_MS = 3000;
+
+    private final java.util.function.LongSupplier clock;
+
     public Identities(Database database) {
+        this(database, System::currentTimeMillis);
+    }
+
+    /** With a clock of the caller's — so a test can say what moment an animated name is drawn at. */
+    public Identities(Database database, java.util.function.LongSupplier clock) {
         this.database = database;
+        this.clock = clock;
+    }
+
+    /** Whether this player's name moves, so whoever draws it knows to draw it again soon. */
+    public boolean isAnimated(UUID player) {
+        return nameStyle(player).isAnimated();
     }
 
     // ---------------------------------------------------------------------------- reading
@@ -460,10 +476,14 @@ public final class Identities {
      * <p>{@link Component#text} rather than MiniMessage, deliberately and permanently: a name is not
      * markup, and parsing it is how a player called {@code <rainbow>} recolours everybody's chat.
      */
-    private static Component colouredName(String name, String colour) {
+    private Component colouredName(String name, String colour) {
         String text = name == null ? "" : name;
         NameStyle style = NameStyle.parse(colour);
-        return style.isEmpty() ? Component.text(text) : Gradients.styled(text, style);
+        if (style.isEmpty()) {
+            return Component.text(text);
+        }
+        double phase = (double) Math.floorMod(clock.getAsLong(), ANIMATION_PERIOD_MS) / ANIMATION_PERIOD_MS;
+        return Gradients.styled(text, style, phase);
     }
 
     private static Component parse(String miniMessage) {

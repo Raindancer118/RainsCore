@@ -110,4 +110,34 @@ class GradientsTest {
         assertThat(painted.children()).hasSize(3);
         assertThat(painted.children().getLast().color()).isEqualTo(BLUE);
     }
+
+    @Test
+    @DisplayName("an animated gradient shifts with the phase, and comes round to where it started")
+    void phaseShifts() {
+        NameStyle flowing = new NameStyle(List.of(RED, BLUE), Set.of()).animated(true);
+
+        Component start = Gradients.styled("Raindancer", flowing, 0.0);
+        Component later = Gradients.styled("Raindancer", flowing, 0.25);
+        Component round = Gradients.styled("Raindancer", flowing, 1.0);
+
+        assertThat(start.children().getFirst().color()).isEqualTo(RED);
+        assertThat(later.children().getFirst().color()).isNotEqualTo(RED);
+        assertThat(round.children().getFirst().color()).isEqualTo(RED);
+    }
+
+    @Test
+    @DisplayName("a moving gradient loops: it runs back to the first colour rather than jumping")
+    void loopsSmoothly() {
+        // Cyclic: half way round, the far end of a two-colour gradient is blue.
+        assertThat(Gradients.cyclicColourAt(List.of(RED, BLUE), 0.5)).isEqualTo(BLUE);
+        assertThat(Gradients.cyclicColourAt(List.of(RED, BLUE), 0.0)).isEqualTo(RED);
+        assertThat(Gradients.cyclicColourAt(List.of(RED, BLUE), 0.999)).isNotEqualTo(BLUE);
+    }
+
+    @Test
+    @DisplayName("a still gradient ignores the phase")
+    void stillIgnoresPhase() {
+        NameStyle still = new NameStyle(List.of(RED, BLUE), Set.of());
+        assertThat(Gradients.styled("Raindancer", still, 0.4)).isEqualTo(Gradients.styled("Raindancer", still));
+    }
 }

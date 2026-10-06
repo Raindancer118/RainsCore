@@ -196,4 +196,27 @@ class NameStyleTest {
         assertThat(NameStyle.colourOf("#8e2de")).isNull();
         assertThat(NameStyle.colourOf("sideways")).isNull();
     }
+
+    // ------------------------------------------------------------------ animated
+
+    @Test
+    @DisplayName("an animated gradient survives the one-string trip, and a still one packs as before")
+    void animatedRoundTrip() {
+        NameStyle flowing = NameStyle.NONE.withStop(NamedTextColor.RED).withStop(NamedTextColor.BLUE)
+                .animated(true);
+        assertThat(flowing.isAnimated()).isTrue();
+        assertThat(NameStyle.parse(flowing.encode())).isEqualTo(flowing);
+
+        NameStyle bold = flowing.with(TextDecoration.BOLD, true);
+        assertThat(NameStyle.parse(bold.encode())).isEqualTo(bold);
+
+        NameStyle still = flowing.animated(false);
+        assertThat(still.encode()).doesNotContain("animated");
+    }
+
+    @Test
+    @DisplayName("only a gradient can move — one colour has nothing to flow")
+    void onlyGradientsMove() {
+        assertThat(NameStyle.NONE.withColour(NamedTextColor.RED).animated(true).isAnimated()).isFalse();
+    }
 }

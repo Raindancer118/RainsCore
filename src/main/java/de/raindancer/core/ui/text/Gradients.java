@@ -44,8 +44,16 @@ public final class Gradients {
         return styled(PlainTextComponentSerializer.plainText().serialize(base), style);
     }
 
-    /** {@code text} painted in {@code style}. A gradient is one child per character (code point). */
+    /** {@code text} painted in {@code style}, as it stands at the start of any animation. */
     public static Component styled(String text, NameStyle style) {
+        return styled(text, style, 0);
+    }
+
+    /**
+     * {@code text} painted in {@code style} at {@code phase} of its animation — 0 to 1, one full
+     * pass round the colours. A still style ignores the phase.
+     */
+    public static Component styled(String text, NameStyle style, double phase) {
         String content = text == null ? "" : text;
         List<TextColor> stops = style.colours();
         if (stops.isEmpty()) {
@@ -59,8 +67,10 @@ public final class Gradients {
         int[] points = content.codePoints().toArray();
         TextComponent.Builder builder = Component.text().decorations(states(style));
         for (int index = 0; index < points.length; index++) {
-            builder.append(Component.text(Character.toString(points[index]))
-                    .color(colourAt(stops, index, points.length)));
+            TextColor colour = style.isAnimated()
+                    ? cyclicColourAt(stops, (double) index / points.length + phase)
+                    : colourAt(stops, index, points.length);
+            builder.append(Component.text(Character.toString(points[index])).color(colour));
         }
         return builder.build();
     }
@@ -81,6 +91,21 @@ public final class Gradients {
             return stops.getLast();
         }
         return TextColor.lerp((float) (position - lower), stops.get(lower), stops.get(lower + 1));
+    }
+
+    /**
+     * The colour at {@code position} round a loop through the stops and back to the first — so a
+     * moving gradient flows on rather than jumping from the last colour to the first.
+     */
+    public static TextColor cyclicColourAt(List<TextColor> stops, double position) {
+        if (stops.size() == 1) {
+            return stops.getFirst();
+        }
+        double around = position - Math.floor(position);
+        double scaled = around * stops.size();
+        int lower = (int) Math.floor(scaled) % stops.size();
+        int upper = (lower + 1) % stops.size();
+        return TextColor.lerp((float) (scaled - Math.floor(scaled)), stops.get(lower), stops.get(upper));
     }
 
     private static Map<TextDecoration, TextDecoration.State> states(NameStyle style) {

@@ -42,7 +42,12 @@ public final class Nametags implements Listener {
     private static final LogChannel log = Log.of("nametags");
     private static final String OWN_TEAM = "rc-nametag";
     private static final String CORE_TEAMS = "rc-";
-    private static final long EVERY_TICKS = 10;
+    /** How often an animated name is redrawn. */
+    private static final long EVERY_TICKS = 2;
+    /** Every how many of those the slow work runs — teams, spawning, who may see whom. */
+    private static final long FULL_PASS_EVERY = 5;
+    /** As far as a nametag could be seen from; a viewer further away is not asked about. */
+    private static final double SIGHT = 128;
 
     private final Plugin plugin;
     private final Identities identities;
@@ -51,6 +56,7 @@ public final class Nametags implements Listener {
     private final Map<UUID, TextDisplay> displays = new ConcurrentHashMap<>();
 
     private volatile boolean enabled;
+    private long ticks;
     private ScheduledTask timer;
 
     public Nametags(Plugin plugin, Identities identities, Vanish vanish) {
@@ -104,12 +110,51 @@ public final class Nametags implements Listener {
 
     // ------------------------------------------------------------------ the timer
 
-    /** On the global thread: the teams, then each player's display on their own thread. */
+    /**
+     * On the global thread. Every pass redraws the names that move; every {@link #FULL_PASS_EVERY}th
+     * also does the teams, spawning and visibility for everybody.
+     */
     private void tick() {
-        Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+        boolean full = ticks++ % FULL_PASS_EVERY == 0;
+        Scoreboard board = full ? Bukkit.getScoreboardManager().getMainScoreboard() : null;
         for (Player player : Bukkit.getOnlinePlayers()) {
-            boolean foreign = hideVanillaName(board, player);
-            Scheduling.entity(plugin, player, () -> update(player, foreign));
+            if (full) {
+                boolean foreign = hideVanillaName(board, player);
+                Scheduling.entity(plugin, player, () -> update(player, foreign));
+            } else if (displays.containsKey(player.getUniqueId()) && identities.isAnimated(player.getUniqueId())) {
+                Scheduling.entity(plugin, player, () -> redraw(player));
+            }
+        }
+    }
+
+    /** Just the text, for a name that moves. Leaves spawning and removing to the full pass. */
+    private void redraw(Player player) {
+        TextDisplay display = displays.get(player.getUniqueId());
+        if (!enabled || display == null || !display.isValid()) {
+            return;
+        }
+        Component text = rule.text(identities.nametag(player.getUniqueId(), player.getName()),
+                identities.subtitle(player.getUniqueId()));
+        if (!text.equals(display.text())) {
+            display.text(text);
+        }
+    }
+
+    /**
+     * The name floats where its wearer is, so it must not show to anybody the server hides the wearer
+     * from — another plugin's {@code hidePlayer}, a minigame's spectators. Otherwise it gives away a
+     * position the hiding was meant to keep secret.
+     */
+    private void matchVisibility(Player wearer, TextDisplay display) {
+        for (Player viewer : wearer.getLocation().getNearbyPlayers(SIGHT)) {
+            if (viewer.equals(wearer)) {
+                continue;
+            }
+            if (viewer.canSee(wearer)) {
+                viewer.showEntity(plugin, display);
+            } else {
+                viewer.hideEntity(plugin, display);
+            }
         }
     }
 
@@ -163,11 +208,15 @@ public final class Nametags implements Listener {
         boolean sneaking = player.isSneaking();
         display.setSeeThrough(!sneaking);
         display.setTextOpacity(sneaking ? (byte) 0x60 : (byte) -1);
+        matchVisibility(player, display);
     }
 
     private TextDisplay spawn(Player player) {
         TextDisplay display = player.getWorld().spawn(player.getLocation(), TextDisplay.class, made -> {
             made.setPersistent(false);
+            // Shown to nobody until matchVisibility says who may — so somebody the wearer is hidden
+            // from never gets even the first frame of it.
+            made.setVisibleByDefault(false);
             made.setBillboard(Display.Billboard.CENTER);
             made.setDefaultBackground(true);
             made.setShadowed(false);
@@ -175,8 +224,9 @@ public final class Nametags implements Listener {
                     new Vector3f(1, 1, 1), new AxisAngle4f()));
         });
         player.addPassenger(display);
-        // Vanilla never shows you your own name; neither does this.
-        player.hideEntity(plugin, display);
+        // Hidden by default, so the wearer never sees their own (vanilla does not show you yours) and
+        // everybody else is let in one by one.
+        matchVisibility(player, display);
         displays.put(player.getUniqueId(), display);
         return display;
     }
