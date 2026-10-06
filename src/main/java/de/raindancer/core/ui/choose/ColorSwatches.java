@@ -96,4 +96,21 @@ public final class ColorSwatches {
         String spaced = key.replace('_', ' ');
         return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
+
+    /** The sixteen dyes, in the game's own order. */
+    public static final List<org.bukkit.DyeColor> DYES = List.of(org.bukkit.DyeColor.values());
+
+    /**
+     * The colour Minecraft itself gives a dye — the one leather armour, concrete and sheep use.
+     * Pink dye is pink here, not the chat colour nearest to it.
+     */
+    public static net.kyori.adventure.text.format.TextColor ofDye(org.bukkit.DyeColor dye) {
+        return net.kyori.adventure.text.format.TextColor.color(dye.getColor().asRGB());
+    }
+
+    /** The dye item itself; every {@code DyeColor} is named after its {@code _DYE}. */
+    public static Material dyeItem(org.bukkit.DyeColor dye) {
+        Material item = Material.getMaterial(dye.name() + "_DYE");
+        return item == null ? Material.WHITE_DYE : item;
+    }
 }

@@ -229,6 +229,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private final WorldEntryRules worldEntryRules =
             new WorldEntryRules();
     private Identities identities;
+    private de.raindancer.core.ui.identity.Nametags nametags;
     private Grants grants;
     /**
      * Who can still see a vanished moderator.
@@ -554,6 +555,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new PlayerPowerListener(powers), this);
 
         vanish = new Vanish(new BukkitVanishSink(this));
+        nametags = new de.raindancer.core.ui.identity.Nametags(this, identities, vanish);
+        getServer().getPluginManager().registerEvents(nametags, this);
         getServer().getPluginManager().registerEvents(
                 new VanishListener(this, vanish, SEE_VANISHED), this);
         // Hiding a player's entity does not take them off a *custom* tablist — that list is built from
@@ -893,6 +896,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (lootTables != null) {
             lootTables.flush();
+        }
+        if (nametags != null) {
+            nametags.shutdown();
         }
         if (tablists != null) {
             // Before anything else: the teams it makes live on the main scoreboard, and one left
@@ -1313,6 +1319,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Vanish vanish() {
         return vanish;
+    }
+
+    @Override
+    public de.raindancer.core.ui.identity.Nametags nametags() {
+        return nametags;
     }
 
     @Override

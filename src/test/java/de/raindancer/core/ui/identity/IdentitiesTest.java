@@ -392,4 +392,167 @@ class IdentitiesTest {
         assertThat(identities.setPrefix(somebody, "<hover:show_text:'x'>[VIP] ")).isFalse();
         assertThat(identities.setPrefix(somebody, "<gold>[VIP] ")).isTrue();
     }
+
+    // ------------------------------------------------------------------ styled names
+
+    @Nested
+    @DisplayName("a name style — gradients and decorations")
+    class Styles {
+
+        private final net.kyori.adventure.text.format.TextColor red =
+                net.kyori.adventure.text.format.NamedTextColor.RED;
+        private final net.kyori.adventure.text.format.TextColor blue =
+                net.kyori.adventure.text.format.NamedTextColor.BLUE;
+
+        private de.raindancer.core.ui.text.NameStyle gradient() {
+            return de.raindancer.core.ui.text.NameStyle.NONE.withStop(red).withStop(blue)
+                    .with(net.kyori.adventure.text.format.TextDecoration.BOLD, true);
+        }
+
+        /** Every coloured piece of the name, left to right. */
+        private List<net.kyori.adventure.text.format.TextColor> colours(Component component) {
+            List<net.kyori.adventure.text.format.TextColor> found = new java.util.ArrayList<>();
+            walk(component, found);
+            return found;
+        }
+
+        private void walk(Component component, List<net.kyori.adventure.text.format.TextColor> found) {
+            if (component instanceof net.kyori.adventure.text.TextComponent text
+                    && !text.content().isEmpty() && text.color() != null) {
+                found.add(text.color());
+            }
+            component.children().forEach(child -> walk(child, found));
+        }
+
+        @Test
+        @DisplayName("a gradient paints the name from its first stop to its last, in chat and in the tablist")
+        void gradientIsPainted() {
+            assertThat(identities.setNameStyle(ALICE, gradient())).isTrue();
+
+            Component chat = identities.chatName(ALICE, "Raindancer118");
+            assertThat(plain(chat)).isEqualTo("Raindancer118");
+            assertThat(colours(chat)).hasSize("Raindancer118".length());
+            assertThat(colours(chat).getFirst()).isEqualTo(red);
+            assertThat(colours(chat).getLast()).isEqualTo(blue);
+
+            assertThat(colours(identities.tablistName(ALICE, "Raindancer118")).getLast()).isEqualTo(blue);
+            assertThat(colours(identities.nametag(ALICE, "Raindancer118")).getFirst()).isEqualTo(red);
+        }
+
+        @Test
+        @DisplayName("the decorations are on the name and nowhere else")
+        void decorationsStayOnTheName() {
+            identities.setPrefix(ALICE, "<gold>[Admin] ");
+            identities.setNameStyle(ALICE, gradient());
+
+            Component chat = identities.chatName(ALICE, "Raindancer118");
+            assertThat(plain(chat)).isEqualTo("[Admin] Raindancer118");
+            Component prefix = chat.children().getFirst();
+            assertThat(prefix.decoration(net.kyori.adventure.text.format.TextDecoration.BOLD))
+                    .as("a bold name must not make the rank bold")
+                    .isNotEqualTo(net.kyori.adventure.text.format.TextDecoration.State.TRUE);
+            Component name = chat.children().get(1);
+            assertThat(name.decoration(net.kyori.adventure.text.format.TextDecoration.BOLD))
+                    .isEqualTo(net.kyori.adventure.text.format.TextDecoration.State.TRUE);
+        }
+
+        @Test
+        @DisplayName("a name is still text, never markup, however it is painted")
+        void theNameIsNeverParsed() {
+            identities.setNameStyle(ALICE, gradient());
+            assertThat(plain(identities.chatName(ALICE, "<red>x"))).isEqualTo("<red>x");
+        }
+
+        @Test
+        @DisplayName("the style is read back as it was set, and a plain colour reads as a one-stop style")
+        void readsBack() {
+            identities.setNameStyle(ALICE, gradient());
+            assertThat(identities.nameStyle(ALICE)).isEqualTo(gradient());
+
+            identities.setColour(BOB, "aqua");
+            assertThat(identities.nameStyle(BOB).colours())
+                    .containsExactly(net.kyori.adventure.text.format.NamedTextColor.AQUA);
+
+            assertThat(identities.nameStyle(UUID.randomUUID()))
+                    .isEqualTo(de.raindancer.core.ui.text.NameStyle.NONE);
+        }
+
+        @Test
+        @DisplayName("an empty style clears the colour, and leaves the prefix alone")
+        void emptyClears() {
+            identities.setPrefix(ALICE, "<gold>[Admin] ");
+            identities.setNameStyle(ALICE, gradient());
+            identities.setNameStyle(ALICE, de.raindancer.core.ui.text.NameStyle.NONE);
+
+            assertThat(identities.colour(ALICE)).isEmpty();
+            assertThat(identities.prefix(ALICE)).contains("<gold>[Admin] ");
+            assertThat(identities.nameStyle(ALICE)).isEqualTo(de.raindancer.core.ui.text.NameStyle.NONE);
+        }
+
+        @Test
+        @DisplayName("more stops than a name can carry are refused, not cut short")
+        void tooManyStopsAreRefused() {
+            de.raindancer.core.ui.text.NameStyle style = de.raindancer.core.ui.text.NameStyle.NONE;
+            for (int stop = 0; stop <= de.raindancer.core.ui.text.NameStyle.MAX_STOPS; stop++) {
+                style = style.withStop(stop % 2 == 0 ? red : blue);
+            }
+            assertThat(identities.setNameStyle(ALICE, style)).isFalse();
+            assertThat(identities.nameStyle(ALICE)).isEqualTo(de.raindancer.core.ui.text.NameStyle.NONE);
+            assertThat(identities.setNameStyle(null, gradient())).isFalse();
+        }
+
+        @Test
+        @DisplayName("a gradient survives a restart")
+        void survivesARestart() {
+            identities.setNameStyle(ALICE, gradient());
+            identities.flush();
+
+            openedDatabase.close();
+            Identities reopened = new Identities(database());
+            reopened.load();
+
+            assertThat(reopened.nameStyle(ALICE)).isEqualTo(gradient());
+        }
+    }
+
+    // ------------------------------------------------------------------ nicknames
+
+    @Nested
+    @DisplayName("a nickname, as essentials hands it over")
+    class Nicknames {
+
+        @Test
+        @DisplayName("is shown in chat, in the tablist and on the nametag instead of the real name")
+        void shownEverywhere() {
+            identities.setPrefix(ALICE, "<gold>[Admin] ");
+            identities.setNickname(ALICE, "Rain");
+
+            assertThat(plain(identities.chatName(ALICE, "Raindancer118"))).isEqualTo("[Admin] Rain");
+            assertThat(plain(identities.tablistName(ALICE, "Raindancer118"))).isEqualTo("[Admin] Rain");
+            assertThat(plain(identities.nametag(ALICE, "Raindancer118"))).isEqualTo("[Admin] Rain");
+            assertThat(identities.shownName(ALICE, "Raindancer118")).isEqualTo("Rain");
+        }
+
+        @Test
+        @DisplayName("takes the name style like the real name would")
+        void styled() {
+            identities.setNameStyle(ALICE, de.raindancer.core.ui.text.NameStyle.NONE
+                    .withStop(net.kyori.adventure.text.format.NamedTextColor.RED)
+                    .withStop(net.kyori.adventure.text.format.NamedTextColor.BLUE));
+            identities.setNickname(ALICE, "Rain");
+            assertThat(identities.chatName(ALICE, "Raindancer118").children().getFirst().children())
+                    .hasSize(4);
+        }
+
+        @Test
+        @DisplayName("is text, never markup, and clearing it brings the real name back")
+        void plainAndClearable() {
+            identities.setNickname(ALICE, "<red>Rain");
+            assertThat(plain(identities.chatName(ALICE, "Raindancer118"))).isEqualTo("<red>Rain");
+            identities.setNickname(ALICE, null);
+            assertThat(plain(identities.chatName(ALICE, "Raindancer118"))).isEqualTo("Raindancer118");
+            identities.setNickname(ALICE, "   ");
+            assertThat(identities.shownName(ALICE, "Raindancer118")).isEqualTo("Raindancer118");
+        }
+    }
 }

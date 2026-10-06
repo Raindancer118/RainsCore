@@ -389,6 +389,12 @@ public interface RainsCore {
     Vanish vanish();
 
     /**
+     * Styled names above heads — off until something that offers name styles switches it on.
+     * See {@link de.raindancer.core.ui.identity.Nametags}.
+     */
+    de.raindancer.core.ui.identity.Nametags nametags();
+
+    /**
      * Doing things to a player from a management screen — heal, feed, starve, effects, flight,
      * gamemode, kick.
      *

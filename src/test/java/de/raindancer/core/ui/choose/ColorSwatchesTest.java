@@ -38,4 +38,14 @@ class ColorSwatchesTest {
         assertThat(ColorSwatches.readable(NamedTextColor.DARK_PURPLE)).isEqualTo("Dark purple");
         assertThat(ColorSwatches.readable(NamedTextColor.RED)).isEqualTo("Red");
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("a dye's colour is the one Minecraft gives it, and its item is that dye")
+    void dyesAreTheirOwnColour() {
+        assertThat(ColorSwatches.ofDye(org.bukkit.DyeColor.PINK).asHexString())
+                .isEqualToIgnoringCase("#f38baa");
+        assertThat(ColorSwatches.dyeItem(org.bukkit.DyeColor.LIGHT_BLUE))
+                .isEqualTo(org.bukkit.Material.LIGHT_BLUE_DYE);
+        assertThat(ColorSwatches.DYES).hasSize(16);
+    }
 }

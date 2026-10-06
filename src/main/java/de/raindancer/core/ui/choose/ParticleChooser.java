@@ -148,13 +148,15 @@ public final class ParticleChooser extends PaginatedMenu<ParticleGroup> {
             } catch (IllegalArgumentException gone) {
                 return;
             }
-            if (ParticleCatalogue.needsExtraData(particle)) {
-                // Skipped rather than attempted: spawning one of these without its data throws on
-                // some versions and silently does nothing on others, and neither is a preview.
+            if (!de.raindancer.core.ui.effect.ParticleShows.canShow(particle)) {
+                // Skipped rather than attempted: one that needs a block or an item throws on some
+                // versions and silently does nothing on others, and neither is a preview.
                 return;
             }
+            // Dust and the tinted ones are previewed in white; whatever chose them picks the colour.
+            Object data = de.raindancer.core.ui.effect.ParticleShows.previewData(found);
             var at = viewer().getEyeLocation().add(viewer().getLocation().getDirection().multiply(2));
-            viewer().spawnParticle(found, at, 30, 0.4, 0.4, 0.4, 0.02);
+            viewer().spawnParticle(found, at, 30, 0.4, 0.4, 0.4, 0.02, data);
         }
     }
 }

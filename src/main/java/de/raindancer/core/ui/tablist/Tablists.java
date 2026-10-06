@@ -281,6 +281,7 @@ public final class Tablists {
                 if (team == null) {
                     team = board.registerNewTeam(wanted);
                 }
+                de.raindancer.core.ui.identity.VanillaNametags.applyTo(team);
                 team.addEntry(player.getName());
             } catch (RuntimeException failure) {
                 log.debug("Could not sort {} in the tablist: {}", entry.name(),

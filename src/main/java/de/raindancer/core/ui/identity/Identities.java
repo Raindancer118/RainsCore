@@ -4,10 +4,11 @@ import de.raindancer.core.data.sql.Database;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Marks;
+import de.raindancer.core.ui.text.Gradients;
+import de.raindancer.core.ui.text.NameStyle;
 import de.raindancer.core.ui.text.Text;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -80,6 +81,11 @@ public final class Identities {
 
     private final Database database;
     private final Map<UUID, Identity> identities = new ConcurrentHashMap<>();
+    /**
+     * Who goes by another name this session, as a plugin with a {@code /nick} told us. Not stored here:
+     * the plugin owning the nickname keeps it and hands it over again on every join.
+     */
+    private final Map<UUID, String> nicknames = new ConcurrentHashMap<>();
     /** Which players have changed, so a save writes one row rather than every row. */
     private final Set<UUID> changed = ConcurrentHashMap.newKeySet();
 
@@ -100,7 +106,7 @@ public final class Identities {
         if (!identity.prefix().isEmpty()) {
             built = built.append(parse(identity.prefix()));
         }
-        built = built.append(colouredName(name, identity.colour()));
+        built = built.append(colouredName(shownName(player, name), identity.colour()));
         if (!identity.suffix().isEmpty()) {
             built = built.append(parse(identity.suffix()));
         }
@@ -117,7 +123,7 @@ public final class Identities {
                 ? identity.prefix()
                 : identity.nametagPrefix();
         Component built = prefix.isEmpty() ? Component.empty() : parse(prefix);
-        built = built.append(colouredName(name, identity.colour()));
+        built = built.append(colouredName(shownName(player, name), identity.colour()));
         return clip(built);
     }
 
@@ -145,11 +151,33 @@ public final class Identities {
         if (!identity.prefix().isEmpty()) {
             built = built.append(parse(identity.prefix()));
         }
-        built = built.append(colouredName(name, identity.colour()));
+        built = built.append(colouredName(shownName(player, name), identity.colour()));
         if (!identity.suffix().isEmpty()) {
             built = built.append(parse(identity.suffix()));
         }
         return built;
+    }
+
+    /**
+     * The name to draw for a player: their nickname when a plugin has set one, otherwise {@code name}.
+     */
+    public String shownName(UUID player, String name) {
+        return player == null ? name : nicknames.getOrDefault(player, name);
+    }
+
+    /**
+     * What a {@code /nick} plugin says this player is called — plain text, painted in their name style
+     * like the real name would be. Null or blank goes back to the real name. Session only.
+     */
+    public void setNickname(UUID player, String plain) {
+        if (player == null) {
+            return;
+        }
+        if (plain == null || plain.isBlank()) {
+            nicknames.remove(player);
+        } else {
+            nicknames.put(player, plain.strip());
+        }
     }
 
     /** The second line under a nametag, for whoever is drawing one. */
@@ -198,6 +226,15 @@ public final class Identities {
         return notEmpty(identityOf(player).colour());
     }
 
+    /**
+     * How their name is painted — a one-stop style for a plain colour, {@link NameStyle#NONE} for
+     * nothing. The colour column and this are the same value: {@link NameStyle#encode} packs a lone
+     * colour to the bare hex code the column always held.
+     */
+    public NameStyle nameStyle(UUID player) {
+        return NameStyle.parse(identityOf(player).colour());
+    }
+
     /** Everybody who has anything set. */
     public Set<UUID> known() {
         return Set.copyOf(identities.keySet());
@@ -234,6 +271,23 @@ public final class Identities {
         // Stored as it was judged: " RED" passes the check, and stored raw it names no colour at all.
         String cleaned = colour == null ? null : colour.trim().toLowerCase(Locale.ROOT);
         return change(player, cleaned, (identity, value) -> new Identity(identity.prefix(),
+                identity.suffix(), identity.nametagPrefix(), value, identity.subtitle()));
+    }
+
+    /**
+     * Paints their name: a colour, a gradient of up to {@link NameStyle#MAX_STOPS} stops, decorations.
+     * {@link NameStyle#NONE} clears it. Replaces whatever {@link #setColour} set — they are one value.
+     *
+     * @return false for a null player or too many stops; nothing is cut short silently
+     */
+    public boolean setNameStyle(UUID player, NameStyle style) {
+        if (style == null) {
+            style = NameStyle.NONE;
+        }
+        if (style.colours().size() > NameStyle.MAX_STOPS) {
+            return false;
+        }
+        return change(player, style.encode(), (identity, value) -> new Identity(identity.prefix(),
                 identity.suffix(), identity.nametagPrefix(), value, identity.subtitle()));
     }
 
@@ -407,14 +461,9 @@ public final class Identities {
      * markup, and parsing it is how a player called {@code <rainbow>} recolours everybody's chat.
      */
     private static Component colouredName(String name, String colour) {
-        Component text = Component.text(name == null ? "" : name);
-        if (colour.isEmpty()) {
-            return text;
-        }
-        TextColor parsed = colour.startsWith("#")
-                ? TextColor.fromHexString(colour)
-                : NamedTextColor.NAMES.value(colour);
-        return parsed == null ? text : text.color(parsed);
+        String text = name == null ? "" : name;
+        NameStyle style = NameStyle.parse(colour);
+        return style.isEmpty() ? Component.text(text) : Gradients.styled(text, style);
     }
 
     private static Component parse(String miniMessage) {
