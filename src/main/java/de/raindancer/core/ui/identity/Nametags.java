@@ -19,9 +19,6 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
-import org.bukkit.util.Transformation;
-import org.joml.AxisAngle4f;
-import org.joml.Vector3f;
 
 import java.util.Map;
 import java.util.UUID;
@@ -31,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * The name above a player's head, drawn from {@link Identities#nametag} — so a gradient, decorations and
  * a nickname show there too, which the vanilla nametag cannot do.
  *
- * <p>A text display rides each player and the vanilla name is hidden through Core's teams
+ * <p>A text display follows each player (never rides — see {@link #follow}) and the vanilla name is hidden through Core's teams
  * ({@link VanillaNametags}). Off by default; whoever offers styled names switches it on. A player in
  * another plugin's team keeps their vanilla name and gets no display — two names would be worse.
  *
@@ -42,10 +39,16 @@ public final class Nametags implements Listener {
     private static final LogChannel log = Log.of("nametags");
     private static final String OWN_TEAM = "rc-nametag";
     private static final String CORE_TEAMS = "rc-";
-    /** How often an animated name is redrawn. */
-    private static final long EVERY_TICKS = 2;
-    /** Every how many of those the slow work runs — teams, spawning, who may see whom. */
-    private static final long FULL_PASS_EVERY = 5;
+    /** Every tick: the name follows its wearer. */
+    private static final long EVERY_TICKS = 1;
+    /** Every how many ticks the slow work runs — teams, spawning, who may see whom. */
+    private static final long FULL_PASS_EVERY = 10;
+    /** Every how many ticks an animated name is redrawn. */
+    private static final long REDRAW_EVERY = 2;
+    /** Further than this between two ticks is a teleport: the name is put down fresh, not dragged. */
+    private static final double JUMP = 16;
+    /** How far above the top of the wearer's head the name floats. */
+    private static final double ABOVE_HEAD = 0.3;
     /** As far as a nametag could be seen from; a viewer further away is not asked about. */
     private static final double SIGHT = 128;
 
@@ -115,16 +118,56 @@ public final class Nametags implements Listener {
      * also does the teams, spawning and visibility for everybody.
      */
     private void tick() {
-        boolean full = ticks++ % FULL_PASS_EVERY == 0;
+        long now = ticks++;
+        boolean full = now % FULL_PASS_EVERY == 0;
+        boolean redraw = now % REDRAW_EVERY == 0;
         Scoreboard board = full ? Bukkit.getScoreboardManager().getMainScoreboard() : null;
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (full) {
                 boolean foreign = hideVanillaName(board, player);
                 Scheduling.entity(plugin, player, () -> update(player, foreign));
-            } else if (displays.containsKey(player.getUniqueId()) && identities.isAnimated(player.getUniqueId())) {
-                Scheduling.entity(plugin, player, () -> redraw(player));
+            } else if (displays.containsKey(player.getUniqueId())) {
+                boolean animate = redraw && identities.isAnimated(player.getUniqueId());
+                Scheduling.entity(plugin, player, () -> {
+                    follow(player);
+                    if (animate) {
+                        redraw(player);
+                    }
+                });
             }
         }
+    }
+
+    /**
+     * Keeps the name over its wearer's head.
+     *
+     * <p>Followed, never ridden. A passenger stops every plugin teleport of the player it sits on —
+     * Paper refuses to teleport a player with a passenger — and stops portals too, so a riding name
+     * broke homes, warps, teleport requests and spawn for everybody wearing one. Following costs a
+     * move a tick; the client smooths it ({@code setTeleportDuration}) so it still looks attached.
+     */
+    private void follow(Player player) {
+        TextDisplay display = displays.get(player.getUniqueId());
+        if (!enabled || display == null || !display.isValid()) {
+            return;
+        }
+        Location target = overHead(player);
+        Location at = display.getLocation();
+        if (at.getWorld() != target.getWorld() || at.distanceSquared(target) > JUMP * JUMP) {
+            // A teleport or a world change: put a fresh one down on the next full pass rather than
+            // dragging this one across regions.
+            remove(player.getUniqueId());
+            return;
+        }
+        if (at.distanceSquared(target) > 1.0E-4) {
+            display.teleportAsync(target);
+        }
+    }
+
+    private static Location overHead(Player player) {
+        Location feet = player.getLocation();
+        return new Location(feet.getWorld(), feet.getX(), feet.getY() + player.getHeight() + ABOVE_HEAD,
+                feet.getZ());
     }
 
     /** Just the text, for a name that moves. Leaves spawning and removing to the full pass. */
@@ -188,9 +231,8 @@ public final class Nametags implements Listener {
         boolean shows = rule.shows(player.isDead(), player.getGameMode() == GameMode.SPECTATOR,
                 player.hasPotionEffect(PotionEffectType.INVISIBILITY), vanish.isVanished(id), foreignTeam);
         TextDisplay display = displays.get(id);
-        if (display != null && (!display.isValid() || !player.getPassengers().contains(display))) {
-            // Thrown off by a teleport, a world change or a dismount — a fresh one is simpler than
-            // chasing the old one across regions.
+        if (display != null && (!display.isValid() || display.getWorld() != player.getWorld()
+                || display.getLocation().distanceSquared(overHead(player)) > JUMP * JUMP)) {
             remove(id);
             display = null;
         }
@@ -212,7 +254,7 @@ public final class Nametags implements Listener {
     }
 
     private TextDisplay spawn(Player player) {
-        TextDisplay display = player.getWorld().spawn(player.getLocation(), TextDisplay.class, made -> {
+        TextDisplay display = player.getWorld().spawn(overHead(player), TextDisplay.class, made -> {
             made.setPersistent(false);
             // Shown to nobody until matchVisibility says who may — so somebody the wearer is hidden
             // from never gets even the first frame of it.
@@ -220,10 +262,9 @@ public final class Nametags implements Listener {
             made.setBillboard(Display.Billboard.CENTER);
             made.setDefaultBackground(true);
             made.setShadowed(false);
-            made.setTransformation(new Transformation(new Vector3f(0, 0.3f, 0), new AxisAngle4f(),
-                    new Vector3f(1, 1, 1), new AxisAngle4f()));
+            // Moved every tick; the client glides between the two places instead of jumping.
+            made.setTeleportDuration(1);
         });
-        player.addPassenger(display);
         // Hidden by default, so the wearer never sees their own (vanilla does not show you yours) and
         // everybody else is let in one by one.
         matchVisibility(player, display);
