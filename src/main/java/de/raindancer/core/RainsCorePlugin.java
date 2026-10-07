@@ -229,6 +229,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private final WorldEntryRules worldEntryRules =
             new WorldEntryRules();
     private Identities identities;
+    private de.raindancer.core.ui.identity.Nicknames nicknames;
+    private de.raindancer.core.ui.chat.PrefixService prefixes;
     private de.raindancer.core.ui.identity.Nametags nametags;
     private Grants grants;
     /**
@@ -273,6 +275,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Vanish vanish;
     private PlayerPowers powers;
     private PlayerAdmin players;
+    private de.raindancer.core.moderation.players.PlayerBody bodies;
     private InventoryViews inventoryViews;
     private Inventories inventories;
     private Databases databases;
@@ -381,6 +384,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         identities = new Identities(databases.core());
         identities.load();
+        prefixes = new de.raindancer.core.ui.chat.PrefixService(
+                new de.raindancer.core.ui.chat.PrefixFile(getDataFolder().toPath().resolve("prefix.yml")));
+        prefixes.reload();
+        nicknames = new de.raindancer.core.ui.identity.Nicknames(databases.core());
+        nicknames.load();
+        de.raindancer.core.platform.command.PlayerTargets.useNicknames(nicknames);
 
         // Permissions this server has granted individuals. Not a permissions plugin — see Grants —
         // but the thing a server without one needs, and the thing the moderation module's staff
@@ -562,6 +571,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         votes = new Votes(System::currentTimeMillis);
         players = new PlayerAdmin(new BukkitPlayerAdminSink(this));
+        bodies = new de.raindancer.core.moderation.players.PlayerBody(
+                new de.raindancer.core.moderation.players.BukkitPlayerBodySink(this));
 
         // God mode and instakill. Here rather than in a moderation plugin because they are answers to a
         // damage event, and there must be exactly one plugin on the server deciding what one means —
@@ -676,6 +687,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             seedHistory.flush();
             histories.values().forEach(RunHistory::flush);
             identities.flush();
+            nicknames.flush();
             grants.flush();
             punishments.flush();
             items.flush();
@@ -891,6 +903,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         histories.values().forEach(RunHistory::flush);
         if (identities != null) {
             identities.flush();
+        }
+        if (nicknames != null) {
+            nicknames.flush();
+            de.raindancer.core.platform.command.PlayerTargets.useNicknames(null);
         }
         if (grants != null) {
             grants.flush();
@@ -1162,6 +1178,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public de.raindancer.core.ui.identity.Nicknames nicknames() {
+        return nicknames;
+    }
+
+    @Override
+    public de.raindancer.core.ui.chat.PrefixService prefixes() {
+        return prefixes;
+    }
+
+    @Override
     public Grants grants() {
         return grants;
     }
@@ -1344,6 +1370,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public PlayerAdmin players() {
         return players;
+    }
+
+    @Override
+    public de.raindancer.core.moderation.players.PlayerBody bodies() {
+        return bodies;
     }
 
     @Override

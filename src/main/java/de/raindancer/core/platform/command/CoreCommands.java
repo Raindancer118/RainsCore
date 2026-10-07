@@ -134,6 +134,25 @@ public final class CoreCommands {
      * world" — a farm world's own {@code /farmworld} is farmworld-module's now, built on Core's
      * {@link de.raindancer.core.world.manage.WorldRegenerator} the same way this command is.
      */
+    private static final AtomicBoolean PREFIX_TAKEN = new AtomicBoolean();
+
+    /**
+     * {@code /prefix}: how every plugin signs its messages. Taken by the first plugin that asks and
+     * declined for the rest, like {@link #commandList}, because there is one prefix for the server.
+     */
+    public static boolean prefix(Commands registrar, String name, String... aliases) {
+        if (!PREFIX_TAKEN.compareAndSet(false, true)) {
+            return false;
+        }
+        registrar.register(name, "How every plugin signs its messages: one tag or each its own, in any colours.",
+                List.of(aliases), new de.raindancer.core.ui.chat.PrefixCommand());
+        return true;
+    }
+
+    public static boolean prefix(Commands registrar) {
+        return prefix(registrar, "prefix");
+    }
+
     public static void worlds(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Switch to a loaded world, or wipe one and make it again.",
                 List.of(aliases), new WorldCommand());

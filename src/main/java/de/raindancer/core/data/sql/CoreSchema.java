@@ -194,7 +194,21 @@ public final class CoreSchema {
                 PRIMARY KEY (run, kind, name)
             )""",
             "CREATE INDEX run_by_category ON run (game, category, score)",
-            "CREATE INDEX run_player_by_player ON run_player (player)");
+            "CREATE INDEX run_player_by_player ON run_player (player)",
+
+            // ------------------------------------------------------------------ nicknames
+            //
+            // What a player goes by instead of their name, kept so a command can be pointed at
+            // somebody by their nickname while they are offline too — see Nicknames. `typed` is the
+            // nickname as a command argument would spell it (lower case, spaces as underscores), so
+            // looking somebody up is an index hit rather than a scan that normalises every row.
+            """
+            CREATE TABLE nickname (
+                player TEXT PRIMARY KEY,
+                plain  TEXT NOT NULL,
+                typed  TEXT NOT NULL
+            )""",
+            "CREATE INDEX nickname_by_typed ON nickname (typed)");
 
     /**
      * What was done.

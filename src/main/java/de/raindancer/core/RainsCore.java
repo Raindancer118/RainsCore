@@ -172,6 +172,19 @@ public interface RainsCore {
     Identities identities();
 
     /**
+     * Who goes by what nickname, kept across restarts — the directory {@code PlayerTargets} looks names
+     * up in, so every command accepts a nickname wherever it accepts a name. A plugin owning
+     * {@code /nick} writes here as well as to {@link Identities#setNickname}.
+     */
+    de.raindancer.core.ui.identity.Nicknames nicknames();
+
+    /**
+     * How every plugin signs its messages — one shared tag or each its own, painted like a name.
+     * {@code plugins/RainsCore/prefix.yml}, edited in game through {@code CoreCommands.prefix}.
+     */
+    de.raindancer.core.ui.chat.PrefixService prefixes();
+
+    /**
      * Permissions this server has granted individuals, remembered across restarts.
      *
      * <p><b>Not a permissions plugin</b>, and not a replacement for one: no groups, no inheritance, no
@@ -403,6 +416,13 @@ public interface RainsCore {
      * logged out a moment ago.
      */
     PlayerAdmin players();
+
+    /**
+     * A player's body beyond health and food: breath, size, walk and fly speed, a launch, a wipe, an
+     * explosion, fire — every range the game throws at decided once. See also {@code PlayerSnapshot}
+     * for reading all of it at once.
+     */
+    de.raindancer.core.moderation.players.PlayerBody bodies();
 
     /**
      * Who cannot be hurt, and who hurts everything in one hit.

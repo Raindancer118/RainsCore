@@ -31,8 +31,6 @@ import java.util.function.Supplier;
  */
 public final class Brand {
 
-    /** The gradient, the clipping and the chevron are shared; only the tag differs. */
-    private static final String CHEVRON = " <dark_gray>»</dark_gray> ";
     /** Between a page and the page it was opened from, so the two separators read as levels. */
     private static final String SUB_CHEVRON = " <dark_gray>\u203a</dark_gray> ";
     private static final String SUB_CHEVRON_PLAIN = " \u203a ";
@@ -76,6 +74,7 @@ public final class Brand {
     public Brand(String defaultTag) {
         String cleaned = defaultTag == null ? "" : defaultTag.trim();
         this.defaultTag = cleaned.isEmpty() ? "Rain" : cleaned;
+        Prefixes.introduce(this.defaultTag);
         this.tag = () -> this.defaultTag;
         this.show = () -> true;
     }
@@ -117,7 +116,7 @@ public final class Brand {
         if (!shown()) {
             return "";
         }
-        return gradientTag() + CHEVRON;
+        return Prefixes.chatPrefix(defaultTag, tag());
     }
 
     /** The same, ready to prepend to a component. */
@@ -185,8 +184,7 @@ public final class Brand {
 
     /** The tag in the server's gradient — the branded half of a window title or a chat prefix. */
     private String gradientTag() {
-        return "<gradient:" + Style.brandFrom() + ":" + Style.brandTo() + "><bold>" + escape(tag())
-                + "</bold></gradient>";
+        return Prefixes.paintedTag(defaultTag, tag());
     }
 
     /**
