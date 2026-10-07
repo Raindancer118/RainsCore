@@ -36,4 +36,13 @@ class ParticleShowsTest {
         assertThat(ParticleShows.canShow(null)).isFalse();
         assertThat(ParticleShows.takesColour("sparkles")).isFalse();
     }
+
+    @Test
+    @DisplayName("a gradient runs from the first colour to the second along the shape; without a second it is one colour")
+    void gradient() {
+        assertThat(ParticleShows.colourAlong(0xFF0000, 0x0000FF, 0)).isEqualTo(0xFF0000);
+        assertThat(ParticleShows.colourAlong(0xFF0000, 0x0000FF, 1)).isEqualTo(0x0000FF);
+        assertThat(ParticleShows.colourAlong(0xFF0000, 0x0000FF, 0.5)).isEqualTo(0x800080);
+        assertThat(ParticleShows.colourAlong(0x00FF00, null, 0.7)).isEqualTo(0x00FF00);
+    }
 }

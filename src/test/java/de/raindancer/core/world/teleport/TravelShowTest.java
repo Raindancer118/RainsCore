@@ -244,6 +244,15 @@ class TravelShowTest {
     }
 
     @Test
+    @DisplayName("a traveller's gradient end reaches the waiting particles too")
+    void ownGradient() {
+        show.looks(who -> new TravelLook(null, null, "DUST", ParticleShape.WINGS, null, 0xFF0000, null, 0x0000FF));
+
+        assertThat(show.waitColourTo(BO)).contains(0x0000FF);
+        assertThat(show.waitShape(BO)).isEqualTo(ParticleShape.WINGS);
+    }
+
+    @Test
     @DisplayName("a traveller's density is held to the same bounds as the server's")
     void ownDensityClamped() {
         show.looks(who -> new TravelLook(null, null, "DUST", null, null, null, 500));

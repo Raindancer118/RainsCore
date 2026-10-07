@@ -128,6 +128,11 @@ public final class TravelShow {
         return Optional.ofNullable(lookFor(traveller).waitColour());
     }
 
+    /** The other end of the traveller's gradient, or empty for one colour. */
+    public Optional<Integer> waitColourTo(UUID traveller) {
+        return Optional.ofNullable(lookFor(traveller).waitColourTo());
+    }
+
     /** Particles per draw while this traveller waits: their own, held to the server's bounds, or the server's. */
     public int waitDensity(UUID traveller) {
         Integer chosen = lookFor(traveller).waitDensity();

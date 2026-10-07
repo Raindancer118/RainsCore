@@ -17,17 +17,24 @@ import de.raindancer.core.ui.effect.SoundCue;
  * @param tick         heard by them alone at each second of the countdown
  * @param waitColour   0xRRGGBB for a particle that takes a colour (dust and the tinted ones)
  * @param waitDensity  particles per draw while they wait
+ * @param waitColourTo the other end of a gradient from {@code waitColour}, along the shape; null for one colour
  */
 public record TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape,
-                         SoundCue tick, Integer waitColour, Integer waitDensity) {
+                         SoundCue tick, Integer waitColour, Integer waitDensity, Integer waitColourTo) {
 
     /** Everything as the server has it. */
-    public static final TravelLook SERVERS = new TravelLook(null, null, null, null, null, null, null);
+    public static final TravelLook SERVERS = new TravelLook(null, null, null, null, null, null, null, null);
+
+    /** The shape plugins built against 1.57 were compiled against: one colour. */
+    public TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape,
+                      SoundCue tick, Integer waitColour, Integer waitDensity) {
+        this(depart, arrive, waitParticle, waitShape, tick, waitColour, waitDensity, null);
+    }
 
     /** The shape plugins built against 1.55.0 were compiled against: no colour, the server's density. */
     public TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape,
                       SoundCue tick) {
-        this(depart, arrive, waitParticle, waitShape, tick, null, null);
+        this(depart, arrive, waitParticle, waitShape, tick, null, null, null);
     }
 
     /** The shape plugins built against 1.54.0 were compiled against: the countdown stays the server's. */

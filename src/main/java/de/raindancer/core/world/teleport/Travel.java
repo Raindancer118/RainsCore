@@ -564,11 +564,13 @@ public final class Travel {
         Optional<String> particle;
         de.raindancer.core.ui.effect.ParticleShape shape;
         Integer colour;
+        Integer colourTo;
         int density;
         try {
             particle = show.waitParticle(who);
             shape = show.waitShape(who);
             colour = show.waitColour(who).orElse(null);
+            colourTo = show.waitColourTo(who).orElse(null);
             density = show.waitDensity(who);
         } catch (RuntimeException broken) {
             log.warn("The waiting particles for {} failed: {}", traveller.getName(), broken.toString());
@@ -583,7 +585,7 @@ public final class Travel {
                 task.cancel();
                 return;
             }
-            de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), colour, density, shape,
+            de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), colour, colourTo, density, shape,
                     drawn[0]++, SHIMMER_RANGE, viewer -> true);
         });
     }

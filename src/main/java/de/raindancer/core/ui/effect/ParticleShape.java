@@ -20,7 +20,48 @@ public enum ParticleShape {
     /** At the heels, just behind. */
     TRAIL("Behind you"),
     /** One point climbing round the body, feet to head, again and again. */
-    SPIRAL("Spiralling up");
+    SPIRAL("Spiralling up"),
+    /** Feathered angel wings on the back, turning with the wearer and slowly flapping. */
+    WINGS("Angel wings"),
+    /** Pointed bat wings: a membrane stretched between finger bones. */
+    BAT_WINGS("Bat wings"),
+    /** Two lobes a side, fluttering quickly. */
+    BUTTERFLY_WINGS("Butterfly wings"),
+    /** Long narrow blades, beating so fast they blur. */
+    HUMMINGBIRD_WINGS("Hummingbird wings");
+
+    /*
+     * One wing's outline per kind, seen from behind: {sideways from the spine, height}. Walked from the
+     * shoulder up and out to the tip, then back in along the lower edge to the waist.
+     */
+    private static final double[][] ANGEL_WING = {
+            {0.12, 1.45}, {0.35, 1.80}, {0.65, 2.10}, {1.00, 2.32}, {1.40, 2.45},
+            {1.22, 2.15}, {1.32, 1.95}, {1.08, 1.82}, {1.16, 1.58}, {0.90, 1.50},
+            {0.94, 1.24}, {0.66, 1.20}, {0.62, 0.96}, {0.38, 1.02}, {0.12, 1.15}};
+    private static final double[][] BAT_WING = {
+            {0.12, 1.50}, {0.45, 1.92}, {0.85, 2.18}, {1.35, 2.32}, {1.12, 1.95},
+            {1.22, 1.55}, {0.95, 1.50}, {0.88, 1.12}, {0.64, 1.28}, {0.46, 0.92},
+            {0.30, 1.18}, {0.12, 1.22}};
+    private static final double[][] BUTTERFLY_WING = {
+            {0.10, 1.50}, {0.28, 1.95}, {0.58, 2.28}, {0.95, 2.35}, {1.18, 2.12},
+            {1.12, 1.80}, {0.80, 1.55}, {0.98, 1.38}, {0.95, 1.05}, {0.68, 0.82},
+            {0.36, 0.92}, {0.10, 1.30}};
+    private static final double[][] HUMMINGBIRD_WING = {
+            {0.10, 1.48}, {0.40, 1.72}, {0.75, 1.98}, {1.10, 2.22}, {1.30, 2.36},
+            {1.20, 2.18}, {0.95, 1.92}, {0.70, 1.68}, {0.42, 1.48}, {0.10, 1.36}};
+
+    /*
+     * Lines inside a wing: {from, to} as indices into its outline. A bat's finger bones run from the
+     * wrist to each spike; an angel's quills from the shoulder to each feather tip; a butterfly's veins
+     * from the body out across both lobes.
+     */
+    private static final int[][] NO_BONES = {};
+    private static final int[][] BAT_BONES = {{1, 3}, {1, 5}, {1, 7}, {1, 9}};
+    private static final int[][] ANGEL_QUILLS = {{0, 4}, {0, 6}, {0, 8}, {0, 10}, {0, 12}};
+    private static final int[][] BUTTERFLY_VEINS = {{0, 3}, {0, 5}, {0, 8}, {0, 9}};
+
+    /** From this density up, wings are drawn with their inside lines as well — what ops get as Ultra. */
+    public static final int ULTRA = 10;
 
     public static final double AURA_RADIUS = 0.6;
     private static final double HALO_RADIUS = 0.35;
@@ -46,7 +87,8 @@ public enum ParticleShape {
      * @param density how many points the shape is drawn with, 1 the lightest. Denser is more points
      *                <em>along</em> the shape — a ring of three looks like a triangle, a ring of
      *                twenty-four like a ring — never more particles piled on the same point
-     * @return {x, y, z} offsets from the wearer's feet, one particle each
+     * @return {x, y, z, along} — offsets from the wearer's feet, one particle each, and how far along
+     *         the shape the point is (0 to 1), which is where it sits in a gradient. Wings run spine to tip
      */
     public List<double[]> offsets(long tick, float yaw, int density) {
         int d = Math.clamp(density, 1, 20);
@@ -59,7 +101,8 @@ public enum ParticleShape {
                 for (int side = 0; side < 2; side++) {
                     for (int k = 0; k < d; k++) {
                         double at = angle + side * Math.PI - k * 0.22;
-                        points.add(new double[]{Math.cos(at) * AURA_RADIUS, height, Math.sin(at) * AURA_RADIUS});
+                        points.add(new double[]{Math.cos(at) * AURA_RADIUS, height, Math.sin(at) * AURA_RADIUS,
+                                d == 1 ? 0 : k / (double) (d - 1)});
                     }
                 }
             }
@@ -67,15 +110,18 @@ public enum ParticleShape {
                 int around = 6 * d;
                 for (int point = 0; point < around; point++) {
                     double at = tick * 0.3 + point * (2 * Math.PI / around);
-                    points.add(new double[]{Math.cos(at) * HALO_RADIUS, 2.2, Math.sin(at) * HALO_RADIUS});
+                    // There and back round the ring, so a gradient meets itself without a seam.
+                    double there = 1 - Math.abs(2.0 * point / around - 1);
+                    points.add(new double[]{Math.cos(at) * HALO_RADIUS, 2.2, Math.sin(at) * HALO_RADIUS, there});
                 }
             }
             case AMBIENT -> {
                 for (int point = 0; point < 2 * d; point++) {
                     // Scattered, but the same scatter for the same tick: a test can pin it.
                     long seed = tick * 31 + point * 17;
-                    points.add(new double[]{(unit(seed) - 0.5) * 0.8, 0.2 + unit(seed + 7) * 1.6,
-                            (unit(seed + 13) - 0.5) * 0.8});
+                    double up = unit(seed + 7);
+                    points.add(new double[]{(unit(seed) - 0.5) * 0.8, 0.2 + up * 1.6,
+                            (unit(seed + 13) - 0.5) * 0.8, up});
                 }
             }
             case SPIRAL -> {
@@ -89,18 +135,104 @@ public enum ParticleShape {
                         climbed += 1;
                     }
                     points.add(new double[]{Math.cos(at) * AURA_RADIUS, 0.1 + climbed * 1.9,
-                            Math.sin(at) * AURA_RADIUS});
+                            Math.sin(at) * AURA_RADIUS, Math.min(1, climbed)});
                 }
             }
+            // Quills and veins only at the highest densities: with few points the inside lines would
+            // take them from the outline, and the outline is what reads as a wing.
+            case WINGS -> wings(points, ANGEL_WING, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw, d,
+                    0.25, 0.45, 0.35);
+            case BAT_WINGS -> wings(points, BAT_WING, BAT_BONES, tick, yaw, d, 0.3, 0.4, 0.4);
+            case BUTTERFLY_WINGS -> wings(points, BUTTERFLY_WING, d >= ULTRA ? BUTTERFLY_VEINS : NO_BONES, tick,
+                    yaw, d, 0.55, 0.35, 0.45);
+            // About a beat every two ticks — as fast as anything drawn this often can show.
+            case HUMMINGBIRD_WINGS -> wings(points, HUMMINGBIRD_WING, NO_BONES, tick, yaw, d, 2.6, 0.55, 0.5);
             case TRAIL -> {
                 // A short arc behind the heels, widening with density.
                 double radians = Math.toRadians(yaw);
                 for (int k = 0; k < d; k++) {
                     double spread = d == 1 ? 0 : (k / (double) (d - 1) - 0.5) * 0.9;
                     double at = radians + spread;
-                    points.add(new double[]{Math.sin(at) * 0.5, 0.15, -Math.cos(at) * 0.5});
+                    points.add(new double[]{Math.sin(at) * 0.5, 0.15, -Math.cos(at) * 0.5,
+                            d == 1 ? 0 : k / (double) (d - 1)});
                 }
             }
+        }
+        return points;
+    }
+
+    /** Whether this is one of the kinds of wings, which a menu offers together. */
+    public boolean isWings() {
+        return this == WINGS || this == BAT_WINGS || this == BUTTERFLY_WINGS || this == HUMMINGBIRD_WINGS;
+    }
+
+    /** Every kind of wings, in the order a menu lists them. */
+    public static List<ParticleShape> wings() {
+        return java.util.Arrays.stream(values()).filter(ParticleShape::isWings).toList();
+    }
+
+    /**
+     * Both wings of one kind, mirrored on the wearer's back.
+     *
+     * @param flapRate how fast they beat; {@code sweep ± swing} radians is how far back they fold
+     */
+    private static void wings(List<double[]> points, double[][] outline, int[][] bones, long tick, float yaw,
+                              int density, double flapRate, double sweep, double swing) {
+        double radians = Math.toRadians(yaw);
+        double backX = Math.sin(radians);
+        double backZ = -Math.cos(radians);
+        double rightX = -Math.cos(radians);
+        double rightZ = -Math.sin(radians);
+        double folded = sweep + swing * Math.sin(tick * flapRate);
+        List<double[]> drawn = new ArrayList<>(alongOutline(outline, 12 * density));
+        for (int[] bone : bones) {
+            // Ends left out: they are already on the outline, and a point drawn twice is the
+            // "more particles on one spot" density is not supposed to mean.
+            double[] from = outline[bone[0]];
+            double[] to = outline[bone[1]];
+            int along = 2 * density;
+            for (int k = 1; k <= along; k++) {
+                double t = k / (double) (along + 1);
+                drawn.add(new double[]{from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t});
+            }
+        }
+        double spine = Double.MAX_VALUE;
+        double tip = 0;
+        for (double[] corner : outline) {
+            spine = Math.min(spine, corner[0]);
+            tip = Math.max(tip, corner[0]);
+        }
+        for (double[] at : drawn) {
+            double outward = (at[0] - spine) / (tip - spine);
+            double out = at[0] * Math.cos(folded);
+            double back = 0.3 + at[0] * Math.sin(folded);
+            for (int side = -1; side <= 1; side += 2) {
+                points.add(new double[]{side * out * rightX + back * backX, at[1],
+                        side * out * rightZ + back * backZ, Math.clamp(outward, 0, 1)});
+            }
+        }
+    }
+
+    /** {@code count} points spread evenly along a polyline, by length — an outline drawn, not its corners. */
+    private static List<double[]> alongOutline(double[][] outline, int count) {
+        double[] lengths = new double[outline.length - 1];
+        double total = 0;
+        for (int i = 0; i < lengths.length; i++) {
+            lengths[i] = Math.hypot(outline[i + 1][0] - outline[i][0], outline[i + 1][1] - outline[i][1]);
+            total += lengths[i];
+        }
+        List<double[]> points = new ArrayList<>(count);
+        for (int k = 0; k < count; k++) {
+            double wanted = total * k / Math.max(1, count - 1);
+            int segment = 0;
+            while (segment < lengths.length - 1 && wanted > lengths[segment]) {
+                wanted -= lengths[segment];
+                segment++;
+            }
+            double t = lengths[segment] == 0 ? 0 : Math.min(1, wanted / lengths[segment]);
+            double[] from = outline[segment];
+            double[] to = outline[segment + 1];
+            points.add(new double[]{from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t});
         }
         return points;
     }
