@@ -113,7 +113,7 @@ class ParticleShapeTest {
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
-            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS"})
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS", "DRAGON_WINGS", "PHOENIX_WINGS", "FAIRY_WINGS", "SERAPH_WINGS", "GRAND_WINGS"})
     @DisplayName("every kind of wings is on your back: behind you, spread to both sides alike, waist to above the head")
     void wings(ParticleShape kind) {
         assertThat(kind.isWings()).isTrue();
@@ -122,7 +122,7 @@ class ParticleShapeTest {
 
         assertThat(wings).allSatisfy(p -> {
             assertThat(p[2]).isNegative();
-            assertThat(p[1]).isBetween(0.7, 2.6);
+            assertThat(p[1]).as("from the feet to well above the head").isBetween(0.0, 3.0);
         });
         assertThat(wings.stream().mapToDouble(p -> p[0]).min().orElseThrow()).isLessThan(-0.8);
         assertThat(wings.stream().mapToDouble(p -> p[0]).max().orElseThrow()).isGreaterThan(0.8);
@@ -148,7 +148,9 @@ class ParticleShapeTest {
         assertThat(lowest(butterfly)).isNotCloseTo(lowest(angel), within(0.05));
         assertThat(ParticleShape.HALO.isWings()).isFalse();
         assertThat(ParticleShape.wings()).containsExactly(ParticleShape.WINGS, ParticleShape.BAT_WINGS,
-                ParticleShape.BUTTERFLY_WINGS, ParticleShape.HUMMINGBIRD_WINGS);
+                ParticleShape.BUTTERFLY_WINGS, ParticleShape.HUMMINGBIRD_WINGS, ParticleShape.DRAGON_WINGS,
+                ParticleShape.PHOENIX_WINGS, ParticleShape.FAIRY_WINGS, ParticleShape.SERAPH_WINGS,
+                ParticleShape.GRAND_WINGS);
     }
 
     @Test
@@ -176,7 +178,7 @@ class ParticleShapeTest {
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
-            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS"})
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS", "DRAGON_WINGS", "PHOENIX_WINGS", "FAIRY_WINGS", "SERAPH_WINGS", "GRAND_WINGS"})
     @DisplayName("wings are filled, not only outlined: the middle of a wing has particles in it")
     void wingsAreFilled(ParticleShape kind) {
         assertThat(middle(kind.offsets(0, 0, 4))).as(kind.name()).isPositive();
@@ -201,7 +203,7 @@ class ParticleShapeTest {
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
-            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS"})
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS", "DRAGON_WINGS", "PHOENIX_WINGS", "FAIRY_WINGS", "SERAPH_WINGS", "GRAND_WINGS"})
     @DisplayName("at Normal the points of a wing are close enough to read as one surface, and never two on one spot")
     void wingSpacing(ParticleShape kind) {
         assertThat(ParticleShape.wingStep(2)).isLessThanOrEqualTo(0.12);

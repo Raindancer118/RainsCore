@@ -28,7 +28,17 @@ public enum ParticleShape {
     /** Two lobes a side, fluttering quickly. */
     BUTTERFLY_WINGS("Butterfly wings"),
     /** Long narrow blades, beating so fast they blur. */
-    HUMMINGBIRD_WINGS("Hummingbird wings");
+    HUMMINGBIRD_WINGS("Hummingbird wings"),
+    /** Big, bony and spiked: a membrane between long finger bones, a claw at the top. */
+    DRAGON_WINGS("Dragon wings"),
+    /** Wide feathers that flare up into long tips — made to be drawn in flame. */
+    PHOENIX_WINGS("Phoenix wings"),
+    /** Two slim pairs: a long upper wing and a small lower one, fluttering. */
+    FAIRY_WINGS("Fairy wings"),
+    /** Two pairs of angel wings, one above the other. */
+    SERAPH_WINGS("Seraph wings"),
+    /** Big angel wings arching over the head, their long feathers hanging almost to the feet. */
+    GRAND_WINGS("Grand angel wings");
 
     /*
      * One wing's outline per kind, seen from behind: {sideways from the spine, height}. Walked from the
@@ -55,7 +65,83 @@ public enum ParticleShape {
      * wrist to each spike; an angel's quills from the shoulder to each feather tip; a butterfly's veins
      * from the body out across both lobes.
      */
+    private static final double[][] DRAGON_WING = {
+            {0.12, 1.55}, {0.45, 2.05}, {0.85, 2.50}, {1.25, 2.75}, {1.65, 2.85},
+            {1.50, 2.45}, {1.75, 2.00}, {1.35, 1.95}, {1.50, 1.45}, {1.10, 1.50},
+            {1.15, 1.00}, {0.75, 1.15}, {0.60, 0.75}, {0.35, 1.05}, {0.12, 1.20}};
+    private static final double[][] PHOENIX_WING = {
+            {0.12, 1.50}, {0.40, 1.80}, {0.70, 2.05}, {0.95, 2.45}, {1.00, 2.85},
+            {1.12, 2.40}, {1.30, 2.62}, {1.32, 2.20}, {1.55, 2.32}, {1.45, 1.95},
+            {1.62, 1.72}, {1.30, 1.55}, {1.36, 1.25}, {1.00, 1.30}, {0.95, 1.00},
+            {0.65, 1.10}, {0.55, 0.80}, {0.35, 1.00}, {0.12, 1.20}};
+    private static final double[][] FAIRY_UPPER = {
+            {0.10, 1.55}, {0.30, 1.95}, {0.55, 2.35}, {0.85, 2.60}, {1.10, 2.55},
+            {1.12, 2.25}, {0.85, 1.85}, {0.45, 1.58}, {0.10, 1.45}};
+    private static final double[][] FAIRY_LOWER = {
+            {0.10, 1.35}, {0.40, 1.30}, {0.72, 1.12}, {0.90, 0.85}, {0.78, 0.68},
+            {0.50, 0.80}, {0.25, 1.05}, {0.10, 1.25}};
+
+    /**
+     * Lunar Client's wings, traced from a picture players sent rather than drawn by hand: one wing seen from
+     * behind, one character per 0.04 blocks — {@code .} is open air, a digit is wing, 0 the darkest shade of
+     * its feathers and 9 the brightest. Row 0 is {@link #GRAND_TOP} blocks above the feet, column 0 the spine.
+     * The shading becomes the place in the gradient, so the feathers keep their texture in any two colours.
+     */
+    private static final String[] GRAND_MASK = {
+".............1332",
+".............1443210",
+"............34554321",
+"...........25437775421",
+"..........135447886542",
+".........2457999998886532",
+"........03458998999997743210",
+".......123459998899998855332",
+".......13467987665789997754310",
+".......24589987555689997765421",
+".......34999854999567899876532",
+".......359986669987766687678542",
+".......569875899879854376589553",
+".......7876689976578888569999852",
+".......8875599976677888579999852",
+"....23477744777589555788878897433",
+"...2347665666557897777655678887540",
+"...34696538853499999965345788896510",
+"...57877889998878988877899655796532",
+"..245677898889878977788999766696532",
+".343125777555788875557778999975893310",
+".785348655664567767776657899876885520",
+"..8645964366356765877553579978988983",
+"..975698753599854398777577777664497432",
+"...976.7764579964488888667777653497543",
+"...975..97555897657899886577543555554300",
+"...9....9975.798776795687666654665544410",
+".........986.67777578..98756777985434532",
+"..........97....79753...7855478.36545532",
+"...........87....6853...5655378..76555331",
+"............9.....964.....87543...47654421",
+"............9.....997.....56643....6555532",
+"............6.....888......694332...67331",
+"...................68......696542...673310",
+"...................69.......98753...88331",
+"...................7996......7875...88432",
+".....................97......8975...78543",
+".....................96......89789....543",
+".....................96.......5899....543",
+".....................5.........999....753",
+"...............................999....863",
+"...............................987....975",
+"...............................9......965",
+"...............................6......965",
+".......................................68",
+".......................................79",
+".......................................89",
+"........................................6",
+    };
+    private static final double GRAND_TOP = 1.94;
+    private static final double MASK_CELL = 0.04;
+
     private static final int[][] NO_BONES = {};
+    private static final int[][] DRAGON_BONES = {{1, 4}, {1, 6}, {1, 8}, {1, 10}, {1, 12}};
     private static final int[][] BAT_BONES = {{1, 3}, {1, 5}, {1, 7}, {1, 9}};
     private static final int[][] ANGEL_QUILLS = {{0, 4}, {0, 6}, {0, 8}, {0, 10}, {0, 12}};
     private static final int[][] BUTTERFLY_VEINS = {{0, 3}, {0, 5}, {0, 8}, {0, 9}};
@@ -151,6 +237,23 @@ public enum ParticleShape {
                     tick, yaw, d, 0.55, 0.35, 0.25);
             // About a beat every two ticks — as fast as anything drawn this often can show.
             case HUMMINGBIRD_WINGS -> wings(points, HUMMINGBIRD_WING, 2, NO_BONES, tick, yaw, d, 2.6, 0.55, 0.5);
+            // Slow and heavy: a dragon's wing is big, and a fast beat on it reads as a bird.
+            case DRAGON_WINGS -> wings(points, DRAGON_WING, 1, DRAGON_BONES, tick, yaw, d, 0.18, 0.4, 0.15);
+            // One pass of rounding only, so the flame tips stay pointed.
+            case PHOENIX_WINGS -> wings(points, PHOENIX_WING, 1, NO_BONES, tick, yaw, d, 0.22, 0.45, 0.15);
+            case FAIRY_WINGS -> {
+                wings(points, FAIRY_UPPER, 3, NO_BONES, tick, yaw, d, 0.9, 0.35, 0.25);
+                wings(points, FAIRY_LOWER, 3, NO_BONES, tick, yaw, d, 0.9, 0.5, 0.25);
+            }
+            // Slow and wide, as Lunar's beat them.
+            case GRAND_WINGS -> traced(points, GRAND_MASK, GRAND_TOP, tick, yaw, d, 0.2, 0.3, 0.12);
+            case SERAPH_WINGS -> {
+                // The upper pair raised and spread, the lower one smaller and folded further back,
+                // so the two never draw over each other.
+                wings(points, moved(ANGEL_WING, 1.0, 0.35), 3, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw,
+                        d, 0.25, 0.35, 0.12);
+                wings(points, moved(ANGEL_WING, 0.75, -0.7), 3, NO_BONES, tick + 6, yaw, d, 0.25, 0.8, 0.12);
+            }
             case TRAIL -> {
                 // A short arc behind the heels, widening with density.
                 double radians = Math.toRadians(yaw);
@@ -175,6 +278,17 @@ public enum ParticleShape {
         return density >= ULTRA ? 0.06 : Math.max(0.075, 0.16 / Math.sqrt(Math.max(1, density)));
     }
 
+    /** An outline scaled out from the spine and moved up or down — a second pair of the same wing. */
+    private static double[][] moved(double[][] outline, double scale, double up) {
+        double[][] moved = new double[outline.length][];
+        for (int i = 0; i < outline.length; i++) {
+            double[] at = outline[i];
+            // Scaled about the shoulder height, so a smaller pair still meets the back where it should.
+            moved[i] = new double[]{at[0] * scale, 1.45 + (at[1] - 1.45) * scale + up};
+        }
+        return moved;
+    }
+
     private static double length(double[][] polyline) {
         double total = 0;
         for (int i = 0; i < polyline.length - 1; i++) {
@@ -185,7 +299,9 @@ public enum ParticleShape {
 
     /** Whether this is one of the kinds of wings, which a menu offers together. */
     public boolean isWings() {
-        return this == WINGS || this == BAT_WINGS || this == BUTTERFLY_WINGS || this == HUMMINGBIRD_WINGS;
+        return this == WINGS || this == BAT_WINGS || this == BUTTERFLY_WINGS || this == HUMMINGBIRD_WINGS
+                || this == DRAGON_WINGS || this == PHOENIX_WINGS || this == FAIRY_WINGS || this == SERAPH_WINGS
+                || this == GRAND_WINGS;
     }
 
     /** Every kind of wings, in the order a menu lists them. */
@@ -199,15 +315,91 @@ public enum ParticleShape {
      * @param flapRate how fast they beat; {@code sweep ± swing} radians is how far back they fold.
      *                 Kept small: dust lingers up to two seconds, so a wide beat smears a wing into a cloud
      */
+    /**
+     * Each wing's points, laid out flat, by its outline and density — worked out once, since only the beat
+     * and the wearer's facing change from one tick to the next, and the fill alone is hundreds of tests.
+     */
+    private static final java.util.Map<String, List<double[]>> LAYOUTS = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static void wings(List<double[]> points, double[][] corners, int smoothing, int[][] bones, long tick,
                               float yaw, int density, double flapRate, double sweep, double swing) {
-        double[][] outline = rounded(corners, smoothing);
+        String key = System.identityHashCode(corners) + ":" + smoothing + ":" + System.identityHashCode(bones)
+                + ":" + density;
+        List<double[]> flat = LAYOUTS.computeIfAbsent(key, ignored -> layout(corners, smoothing, bones, density));
+        double spine = Double.MAX_VALUE;
+        double tip = 0;
+        for (double[] corner : corners) {
+            spine = Math.min(spine, corner[0]);
+            tip = Math.max(tip, corner[0]);
+        }
+        List<double[]> shaded = new ArrayList<>(flat.size());
+        for (double[] at : flat) {
+            shaded.add(new double[]{at[0], at[1] - LOWERED, (at[0] - spine) / (tip - spine)});
+        }
+        onTheBack(points, shaded, tick, yaw, flapRate, sweep, swing);
+    }
+
+    /** A traced wing: its cells sampled at the density's spacing, every feather's edges always kept. */
+    private static void traced(List<double[]> points, String[] mask, double top, long tick, float yaw, int density,
+                               double flapRate, double sweep, double swing) {
+        String key = System.identityHashCode(mask) + ":" + density;
+        List<double[]> flat = LAYOUTS.computeIfAbsent(key, ignored -> sampled(mask, top, density));
+        onTheBack(points, flat, tick, yaw, flapRate, sweep, swing);
+    }
+
+    private static List<double[]> sampled(String[] mask, double top, int density) {
+        // Ultra takes every traced cell; below it the density's spacing in whole cells — Normal every
+        // third, Dense every second — so each step up is visibly finer.
+        int every = density >= ULTRA ? 1 : (int) Math.max(1, Math.round(wingStep(density) / MASK_CELL));
+        List<double[]> cells = new ArrayList<>();
+        for (int row = 0; row < mask.length; row++) {
+            if (row % every != 0) {
+                continue;
+            }
+            String line = mask[row];
+            // Rows offset by half a step, so the points make a mesh of triangles rather than a chessboard.
+            int offset = (row / every) % 2 == 0 ? 0 : every / 2;
+            for (int column = 0; column < line.length(); column++) {
+                char shade = line.charAt(column);
+                if (shade == '.') {
+                    continue;
+                }
+                boolean edge = column == 0 || line.charAt(column - 1) == '.'
+                        || column == line.length() - 1 || line.charAt(column + 1) == '.';
+                if (edge || Math.floorMod(column - offset, every) == 0) {
+                    cells.add(new double[]{(column + 0.5) * MASK_CELL, top - row * MASK_CELL,
+                            (9 - (shade - '0')) / 9.0});
+                }
+            }
+        }
+        return List.copyOf(cells);
+    }
+
+    /**
+     * Flat points — {outward, height, along} — set on the wearer's back as both wings, beating.
+     */
+    private static void onTheBack(List<double[]> points, List<double[]> flat, long tick, float yaw, double flapRate,
+                                  double sweep, double swing) {
         double radians = Math.toRadians(yaw);
         double backX = Math.sin(radians);
         double backZ = -Math.cos(radians);
         double rightX = -Math.cos(radians);
         double rightZ = -Math.sin(radians);
         double folded = sweep + swing * Math.sin(tick * flapRate);
+        for (double[] at : flat) {
+            double out = at[0] * Math.cos(folded);
+            // Not closer: the head reaches 0.25 behind the centre, and a turning head would cut through the wings.
+            double back = 0.3 + at[0] * Math.sin(folded);
+            for (int side = -1; side <= 1; side += 2) {
+                points.add(new double[]{side * out * rightX + back * backX, at[1],
+                        side * out * rightZ + back * backZ, Math.clamp(at[2], 0, 1)});
+            }
+        }
+    }
+
+    /** One wing laid out flat: its edge, its fill and its bones, with no two points on top of each other. */
+    private static List<double[]> layout(double[][] corners, int smoothing, int[][] bones, int density) {
+        double[][] outline = rounded(corners, smoothing);
         double step = wingStep(density);
         List<double[]> drawn = new ArrayList<>(alongOutline(outline, (int) Math.ceil(length(outline) / step)));
         List<double[][]> boneLines = new ArrayList<>();
@@ -231,22 +423,23 @@ public enum ParticleShape {
                 }
             }
         }
-        double spine = Double.MAX_VALUE;
-        double tip = 0;
-        for (double[] corner : corners) {
-            spine = Math.min(spine, corner[0]);
-            tip = Math.max(tip, corner[0]);
-        }
-        for (double[] at : drawn) {
-            double outward = (at[0] - spine) / (tip - spine);
-            double out = at[0] * Math.cos(folded);
-            // Not closer: the head reaches 0.25 behind the centre, and a turning head would cut through the wings.
-            double back = 0.3 + at[0] * Math.sin(folded);
-            for (int side = -1; side <= 1; side += 2) {
-                points.add(new double[]{side * out * rightX + back * backX, at[1] - LOWERED,
-                        side * out * rightZ + back * backZ, Math.clamp(outward, 0, 1)});
+        // Where two edges meet in a narrow notch their points come close; one of them is enough.
+        double nearest = step * 0.4;
+        List<double[]> kept = new ArrayList<>(drawn.size());
+        for (double[] candidate : drawn) {
+            boolean crowded = false;
+            for (double[] other : kept) {
+                if (Math.abs(other[0] - candidate[0]) < nearest && Math.abs(other[1] - candidate[1]) < nearest
+                        && Math.hypot(other[0] - candidate[0], other[1] - candidate[1]) < nearest) {
+                    crowded = true;
+                    break;
+                }
+            }
+            if (!crowded) {
+                kept.add(candidate);
             }
         }
+        return List.copyOf(kept);
     }
 
     /**

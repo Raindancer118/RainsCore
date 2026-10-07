@@ -68,6 +68,17 @@ public final class ParticleShows {
     public static void around(Player wearer, String particle, Integer colour, Integer colourTo, int count,
                               ParticleShape shape, long tick, double range, Predicate<Player> sees,
                               Integer lifetimeTicks) {
+        around(wearer, particle, colour, colourTo, count, shape, tick, range, sees, lifetimeTicks, 1);
+    }
+
+    /**
+     * The same, drawing only every {@code share}-th point, a different share each time — for a particle
+     * left to behave as Minecraft's own (a flame rising, a leaf falling), which lingers: drawn whole every
+     * time it piles into a solid block, drawn in turns it flickers like the real thing.
+     */
+    public static void around(Player wearer, String particle, Integer colour, Integer colourTo, int count,
+                              ParticleShape shape, long tick, double range, Predicate<Player> sees,
+                              Integer lifetimeTicks, int share) {
         Particle found = particleOf(particle);
         if (found == null || !canShow(particle)) {
             return;
@@ -83,7 +94,12 @@ public final class ParticleShows {
         int from = colour == null ? 0xFFFFFF : colour;
         Object single = BukkitEffectSink.dataFor(found.getDataType(), from, dustSize(count));
         boolean blended = colourTo != null && takesColour(particle);
-        for (double[] offset : shape.offsets(tick, facing(wearer), count)) {
+        List<double[]> offsets = shape.offsets(tick, facing(wearer), count);
+        for (int index = 0; index < offsets.size(); index++) {
+            if (!isDrawnNow(index, tick, share)) {
+                continue;
+            }
+            double[] offset = offsets.get(index);
             double x = feet.getX() + offset[0];
             double y = feet.getY() + offset[1];
             double z = feet.getZ() + offset[2];
@@ -100,6 +116,11 @@ public final class ParticleShows {
      */
     public static float facing(Player wearer) {
         return wearer.getBodyYaw();
+    }
+
+    /** Whether point {@code index} is in this draw's share: every point once in {@code share} draws. */
+    public static boolean isDrawnNow(int index, long tick, int share) {
+        return share <= 1 || Math.floorMod(index + tick, share) == 0;
     }
 
     /** What is actually spawned: a coloured particle given a lifetime becomes a trail point, which has one. */

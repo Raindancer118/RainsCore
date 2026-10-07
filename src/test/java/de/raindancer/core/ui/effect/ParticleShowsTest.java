@@ -80,4 +80,20 @@ class ParticleShowsTest {
 
         assertThat(ParticleShows.facing(wearer)).isEqualTo(30f);
     }
+
+    @Test
+    @DisplayName("drawn naturally, a shape shows a rotating share of its points each time, and every point gets its turn")
+    void share() {
+        int share = 3;
+        for (int index = 0; index < 10; index++) {
+            int turns = 0;
+            for (long tick = 0; tick < share; tick++) {
+                if (ParticleShows.isDrawnNow(index, tick, share)) {
+                    turns++;
+                }
+            }
+            assertThat(turns).as("point %d", index).isEqualTo(1);
+        }
+        assertThat(ParticleShows.isDrawnNow(7, 5, 1)).as("a share of one is every point").isTrue();
+    }
 }
