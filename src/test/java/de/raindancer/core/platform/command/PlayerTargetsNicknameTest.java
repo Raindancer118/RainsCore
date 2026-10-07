@@ -87,6 +87,20 @@ class PlayerTargetsNicknameTest {
     }
 
     @Test
+    @DisplayName("a nickname can never stand in for a real player who is offline: their real name wins")
+    void offlineRealNameWins() {
+        OfflinePlayer griefer = mock(OfflinePlayer.class);
+        when(griefer.getUniqueId()).thenReturn(UUID.nameUUIDFromBytes("griefer".getBytes()));
+        when(server.getOfflinePlayerIfCached("Griefer")).thenReturn(griefer);
+        nicknames.remember(sam.getUniqueId(), "Griefer");
+
+        assertThat(PlayerTargets.find(server, "Griefer")).contains(griefer);
+        assertThat(PlayerTargets.resolve(server, sender, "Griefer")).isEmpty();
+        assertThat(PlayerTargets.online(server, "Griefer")).isEmpty();
+        assertThat(PlayerTargets.isRealName(server, "Griefer")).isTrue();
+    }
+
+    @Test
     @DisplayName("an offline owner is not 'resolved' — resolve is for acting on somebody who is here")
     void offlineIsNotResolved() {
         UUID gone = UUID.nameUUIDFromBytes("gone".getBytes());

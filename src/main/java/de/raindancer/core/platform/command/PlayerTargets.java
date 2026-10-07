@@ -63,12 +63,27 @@ public final class PlayerTargets {
         if (exact != null) {
             return Optional.of(exact);
         }
+        if (isRealName(server, typed)) {
+            // Somebody real is called that and is not here. A nickname must never redirect a command
+            // meant for them: /ban Griefer with Griefer offline would otherwise ban whoever took
+            // "Griefer" as a nickname.
+            return Optional.empty();
+        }
         return nicknameOwner(typed).map(server::getPlayer);
     }
 
+    /** Whether {@code text} is the real name of anybody this server has seen, online or not. */
+    public static boolean isRealName(Server server, String text) {
+        if (server == null || text == null || text.isBlank()) {
+            return false;
+        }
+        String typed = text.trim();
+        return server.getPlayerExact(typed) != null || server.getOfflinePlayerIfCached(typed) != null;
+    }
+
     /**
-     * Anybody {@code text} names, online or not: a real name online, a nickname, then a name the server
-     * has seen before. Never a lookup against Mojang — a typo must not stall the server thread.
+     * Anybody {@code text} names, online or not: a real name online, a real name the server has seen,
+     * then a nickname. Never a lookup against Mojang — a typo must not stall the server thread.
      */
     public static Optional<OfflinePlayer> find(Server server, String text) {
         if (server == null || text == null || text.isBlank()) {
@@ -79,12 +94,17 @@ public final class PlayerTargets {
         if (exact != null) {
             return Optional.of(exact);
         }
+        // A real name, even of somebody offline, before any nickname — see online().
+        OfflinePlayer known = server.getOfflinePlayerIfCached(typed);
+        if (known != null) {
+            return Optional.of(known);
+        }
         Optional<UUID> owner = nicknameOwner(typed);
         if (owner.isPresent()) {
             Player here = server.getPlayer(owner.get());
             return Optional.of(here != null ? here : server.getOfflinePlayer(owner.get()));
         }
-        return Optional.ofNullable(server.getOfflinePlayerIfCached(typed));
+        return Optional.empty();
     }
 
     /** The UUID {@code text} names, the same way as {@link #find}. */
