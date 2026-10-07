@@ -89,6 +89,11 @@ public record CoreConfig(
         @Describe("What goes between the parts of a window title.")
         String titleSeparator,
 
+        @In("appearance") @Title("Message tone")
+        @Describe("PLAYFUL adds a dry remark to refusals and errors; SERIOUS says only what happened. "
+                + "Lines you reworded in messages.yml stay yours either way.")
+        de.raindancer.core.ui.messages.Messages.Tone messageTone,
+
         @In("config/logging") @Title("Console level")
         @Describe("The least important thing the console shows.")
         LogLevel consoleLevel,
@@ -344,6 +349,7 @@ public record CoreConfig(
             Theme.DEFAULT,
             "", "", "", "", "", "", "", "", "", "",
             "▸",
+            de.raindancer.core.ui.messages.Messages.Tone.PLAYFUL,
             LogLevel.INFO, LogLevel.INFO, 14,
             15,
             true, true, false, "", "", "", "", false, true, "", "", 4, 40,

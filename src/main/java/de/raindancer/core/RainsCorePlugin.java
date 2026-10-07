@@ -367,6 +367,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             de.raindancer.core.platform.log.Log.of("core").warn("The list of older message wordings could not be read: {}", unreadable.toString());
         }
         messages.load(getResource("messages.yml"));
+        // The same lines without the jokes, for a server that set the tone to serious. Modules hand
+        // theirs over the same way, next to their messages.yml.
+        messages.seriousFrom(getResource("messages-serious.yml"));
+        messages.tone(settings.current().messageTone());
         if (!messages.problems().isEmpty()) {
             log.warn("messages.yml: {}", String.join("; ", messages.problems()));
         }
@@ -753,6 +757,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * about.
      */
     private void applyNewSettings(CoreConfig config) {
+        if (messages != null) {
+            messages.tone(config.messageTone());
+        }
         if (combat != null) {
             // A change in the menu takes hold without a restart, which is the difference between a
             // setting somebody uses and one they read about.

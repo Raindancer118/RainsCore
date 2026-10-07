@@ -1,5 +1,6 @@
 package de.raindancer.core.content.items;
 
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.ui.chat.Brand;
 import de.raindancer.core.ui.choose.ItemChooser;
 import de.raindancer.core.ui.menu.Icons;
@@ -210,9 +211,12 @@ public final class RecipeMenu extends Menu {
         }
         // Named honestly: Bukkit registers recipes at start-up, so a changed one is stored now and crafted
         // after a restart. Claiming otherwise would send somebody to a crafting table to be disappointed.
-        tell(cropped.isEmpty()
-                ? "<yellow>" + item.id() + " has no recipe any more. Uncraftable, like a good mystery."
-                : "<green>✔ Recipe saved. <gray>It can be crafted after the next restart.</gray>");
+        if (cropped.isEmpty()) {
+            viewer.sendMessage(Messages.spoken("items.no-recipe",
+                    "<yellow><item> has no recipe any more. Uncraftable, like a good mystery.", "item", item.id()));
+        } else {
+            tell("<green>✔ Recipe saved. <gray>It can be crafted after the next restart.</gray>");
+        }
         backToWhoeverOpenedThis();
     }
 

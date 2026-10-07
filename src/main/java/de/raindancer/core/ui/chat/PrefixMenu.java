@@ -1,5 +1,6 @@
 package de.raindancer.core.ui.chat;
 
+import de.raindancer.core.ui.messages.Messages;
 import de.raindancer.core.ui.choose.StyleEditor;
 import de.raindancer.core.ui.menu.ConfirmMenu;
 import de.raindancer.core.ui.menu.Icons;
@@ -133,7 +134,7 @@ public final class PrefixMenu extends Menu {
     /** Saves without redrawing this page — for the pages opened from it, which redraw themselves. */
     private void save(UnaryOperator<PrefixDesign> edit) {
         if (!service.change(edit)) {
-            viewer.sendMessage(MINI.deserialize(
+            viewer.sendMessage(Messages.spoken("prefix-design.not-saved",
                     "<red>prefix.yml could not be written, so this lasts until the next restart or reload. Enjoy it while it lasts."));
         }
     }

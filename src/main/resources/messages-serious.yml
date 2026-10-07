@@ -1,0 +1,112 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Rain's Core — the serious wording.
+#
+#  Used instead of messages.yml when the Message tone setting is SERIOUS: the same
+#  keys, said plainly, without the remark after a refusal. Only lines that differ
+#  are here; every other key keeps its one wording in both tones.
+#
+#  A line you changed in plugins/RainsCore/messages.yml wins in both tones. To
+#  reword one of these, put it in that file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+punishment:
+  banned:
+    permanent: "<dark_gray>This ban does not expire."
+    temporary: "<dark_gray>Time left: <time>"
+  muted: "<red>You are muted: <gray><reason>"
+  muted-temporary: "<red>You are muted: <gray><reason> <dark_gray>(<time> left)"
+  frozen: "<red>You cannot build right now: <gray><reason>"
+  frozen-temporary: "<red>You cannot build right now: <gray><reason> <dark_gray>(<time> left)"
+
+button:
+  not-yours: "<red>That is not your button."
+  already-answered: "<yellow>You have already answered that."
+  no-longer-offered: "<yellow>That is no longer on offer."
+  failed: "<red>That did not work. The server has written down why."
+  not-a-player: "<red>Only a player can click a button."
+  not-typed: "<yellow>That is not something to type."
+
+settings:
+  changed: "<green><name> is now <value>."
+  reset: "<green><name> is back to <value>."
+  refused: "<red><value> is not something <name> can be."
+  finish-first: "<gray>Finish what you were asked first."
+  gone: "<gray>That setting is not there any more."
+  unknown: "<red>Nothing on this server is called <name>."
+  look-for-it: "<gray>Or look for it with <white>/settings search</white> and a word."
+  search-none: "<gray>No setting mentions <query>. Try a shorter word."
+  search-found: "<gray><count> settings mention <query>:"
+
+invsee:
+  opened: "<gray>Looking inside <who>."
+  yourself: "<gray>Your own inventory is a key rather than a menu."
+  being-edited: "<yellow>Somebody else is editing that inventory."
+  never-seen: "<red>This server has never seen that player."
+  unreadable: "<red>Their inventory could not be read — the log says why."
+  not-allowed: "<red>You may not do that."
+  switched-off: "<red>Looking inside inventories is switched off on this server."
+  not-saved: "<red>Their inventory was not saved — nothing was changed, and what you added is back with you."
+  owner-returned: "<gold><who> logged in before you closed the window, so your changes were not saved — their file is untouched. Open their inventory again to change it live."
+
+menu:
+  close-lore: "<gray>Shut this menu"
+
+combat:
+  no-pvp: "<red>Players cannot hurt each other here."
+  no-pve: "<red>Fighting creatures is off here."
+  protected: "<red>Something is protecting that."
+  fists-only: "<red>Only fists here — put down what you are holding."
+
+navigation:
+  started: "<green>Navigating to <white><target></white>. Follow the trail."
+  arrived: "<green>You have reached <white><target></white>."
+
+items:
+  cooling-down: "<yellow><item> is not ready yet — <white><seconds>s</white>."
+  used-up: "<yellow><item> has nothing left in it."
+  went-wrong: "<red><item> did not work. Somebody should look at the log."
+  no-recipe: "<yellow><item> has no recipe any more."
+
+tablist:
+  nobody-on: "<dark_gray>nobody is on"
+
+land:
+  denied: "<red>You may not <white><permission></white> in <white><claim></white>."
+  pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
+  potions-refused: "<red>Potions are not allowed in <white><claim></white>."
+  redstone-refused: "<red>Redstone does not work in <white><claim></white>."
+  riptide-refused: "<red>Riptide is not allowed in <white><claim></white>."
+  leads-refused: "<red>You may not lead animals about in <white><claim></white>."
+  boats-refused: "<red>Boats and minecarts may not be put down in <white><claim></white>."
+  walk-in-refused: "<red>You may not go into <white><claim></white>."
+  hit-mobs-refused: "<red>You may not hurt the animals in <white><claim></white>."
+  hit-monsters-refused: "<red>You may not fight monsters in <white><claim></white>."
+  interact-mobs-refused: "<red>You may not handle the animals in <white><claim></white>."
+  bypass-reminder: "<gold>Your protection bypass has been on for a while. <gray>Still working?"
+  bypass-reminder-extended: "<gray>Alright — asked again in ten minutes."
+  bypass-reminder-silenced: "<gray>Won't ask again until you toggle bypass off and back on."
+
+prompt:
+  how: "<dark_gray>Type your answer in chat — or <white>cancel</white>. <seconds>s to answer."
+  again: "<red><problem> <gray>Try again — <left> <tries> left."
+  gave-up: "<red><problem> That was the last try; nothing was changed."
+  timed-out: "<gray>No answer came, so nothing was changed."
+  cancelled: "<gray>Cancelled — nothing was changed."
+  busy: "<yellow>Something else is already waiting for your answer — answer or cancel that first."
+
+vanish-chat:
+  held: "<yellow>You are vanished. Saying <white><line></white> would show everybody that you are here."
+  not-asking: "<gray>Sent. You will not be asked again until you reappear."
+  kept: "<gray>Not sent."
+
+prefix-design:
+  which-mode: "<red>Either <white>shared</white> or <white>per-plugin</white>."
+  no-style: "<red>No colour or decoration in that. Like <white>#ff8800,#ffee00|bold</white>."
+  file-broken: "<red>prefix.yml is broken; the defaults are used until it is fixed. The console says where."
+  changed-not-saved: "<yellow>Prefix changed, but prefix.yml could not be written — this lasts until the next restart or reload."
+  not-saved: "<red>prefix.yml could not be written, so this lasts until the next restart or reload."
+
+cues:
+  not-a-sound: "<red>Nothing in that could be read as a sound, so nothing changed."
+  not-a-particle: "<red>Nothing in that could be read as a particle, so nothing changed."
+  busy: "<red>You are already being asked something else — answer or cancel that first."

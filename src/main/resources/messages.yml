@@ -72,6 +72,8 @@ button:
 settings:
   # <name> is the setting, <value> what it became.
   changed: "<green><name> is now <value>. Done and dusted."
+  # /settings reset <name>: back to the default, which is <value>.
+  reset: "<green><name> is back to <value>. As if nothing ever happened."
   refused: "<red><value> is not something <name> can be. Nice try, though."
   finish-first: "<gray>Finish what you were asked first. One question at a time."
   gone: "<gray>That setting has left the building."
@@ -189,6 +191,8 @@ items:
   # The ability threw. The reason is in the log with its stack trace; the
   # player gets a sentence rather than an item that silently does nothing.
   went-wrong: "<red><item> did not work. Somebody should look at the log, preferably not you."
+  # Saving an empty crafting grid in /items. <item> is the item's id.
+  no-recipe: "<yellow><item> has no recipe any more. Uncraftable, like a good mystery."
 
 # ─────────────────────────────────────────────────────────────── the tablist
 tablist:
@@ -338,3 +342,18 @@ vanish-chat:
   held: "<yellow>Psst — you're vanished. Saying <white><line></white> would tell everybody you're here."
   not-asking: "<gray>Sent. I'll stop asking until you reappear."
   kept: "<gray>Kept it to yourself. Nobody knows a thing."
+
+# ─────────────────────────────────────────────── /prefix and its menu
+prefix-design:
+  which-mode: "<red>Either <white>shared</white> or <white>per-plugin</white>. There is no secret third option."
+  no-style: "<red>No colour or decoration in that, which rather defeats the point. Like <white>#ff8800,#ffee00|bold</white>."
+  file-broken: "<red>prefix.yml is broken; the defaults are used until it is fixed. The console knows where it hurts."
+  # The change is in effect, it just will not survive a restart.
+  changed-not-saved: "<yellow>Prefix changed, but prefix.yml could not be written — this lasts until the next restart or reload. Enjoy it while it lasts."
+  not-saved: "<red>prefix.yml could not be written, so this lasts until the next restart or reload. Enjoy it while it lasts."
+
+# ─────────────────────────────────────────────── editing a sound or particle cue
+cues:
+  not-a-sound: "<red>Nothing in that could be read as a sound, so nothing changed. Silence it is."
+  not-a-particle: "<red>Nothing in that could be read as a particle, so nothing changed. Very minimalist."
+  busy: "<red>You are already being asked something else — answer or cancel that first. One question at a time."

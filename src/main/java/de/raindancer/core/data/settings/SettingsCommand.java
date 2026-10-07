@@ -149,12 +149,12 @@ public final class SettingsCommand implements BasicCommand {
         }
         if (navigation().registry().set(args[1], value)) {
             SettingsSaving.saveThenTell(navigation().registry(), sender);
-            chat().ok(sender, "<name> is now <value>.",
+            chat().ok(sender, words().raw("settings.changed"),
                     Chat.arg("name", args[1]),
                     Chat.arg("value", navigation().registry().display(args[1])));
             return;
         }
-        chat().no(sender, "<value> is not something <name> can be.",
+        chat().no(sender, words().raw("settings.refused"),
                 Chat.arg("value", value), Chat.arg("name", args[1]));
         navigation().registry().setting(args[1]).ifPresent(setting -> {
             if (setting.min() != null) {
@@ -187,7 +187,7 @@ public final class SettingsCommand implements BasicCommand {
         }
         navigation().registry().reset(args[1]);
         SettingsSaving.saveThenTell(navigation().registry(), sender);
-        chat().ok(sender, "<name> is back to <value>.",
+        chat().ok(sender, words().raw("settings.reset"),
                 Chat.arg("name", args[1]),
                 Chat.arg("value", navigation().registry().display(args[1])));
     }

@@ -145,6 +145,74 @@ public final class Messages {
         old.forEach((key, value) -> retired.computeIfAbsent(key, any -> ConcurrentHashMap.newKeySet()).add(value));
     }
 
+    // ------------------------------------------------------------------------------- tone
+
+    /** How the server talks: with a dry joke after a refusal, or without one. */
+    public enum Tone { PLAYFUL, SERIOUS }
+
+    private volatile Tone tone = Tone.PLAYFUL;
+
+    /** The plain-spoken version of the lines that have a joke in them, from Core and every module. */
+    private final Map<String, Object> serious = new ConcurrentHashMap<>();
+
+    public Tone tone() {
+        return tone;
+    }
+
+    /** Takes hold on the next message; nothing is cached anywhere that would need telling. */
+    public void tone(Tone tone) {
+        this.tone = tone == null ? Tone.PLAYFUL : tone;
+    }
+
+    /**
+     * Takes a {@code messages-serious.yml}: the same keys as the playful file, said plainly.
+     *
+     * <p>Only the lines that need it — a key missing here keeps its one wording in both tones. Like
+     * {@link #defineFrom}, the first file to name a key keeps it, so load order between modules cannot
+     * reword somebody else's lines.
+     *
+     * @param bundled the serious file, from {@code getResourceAsStream}; closed here, null is nothing
+     * @return how many lines were taken up
+     */
+    public int seriousFrom(InputStream bundled) {
+        if (bundled == null) {
+            return 0;
+        }
+        Map<String, Object> wording = new LinkedHashMap<>();
+        try (InputStream stream = bundled) {
+            YamlConfiguration yaml = new YamlConfiguration();
+            yaml.loadFromString(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+            flatten(yaml, "", wording);
+        } catch (Exception broken) {
+            problems.add("a serious wording file could not be read (" + broken.getMessage() + ")");
+            log.warn("A serious wording file could not be read ({}); those lines keep their playful "
+                    + "wording in serious mode. This is a fault in the plugin, not in your configuration.",
+                    broken.getMessage());
+            return 0;
+        }
+        int taken = 0;
+        for (Map.Entry<String, Object> line : wording.entrySet()) {
+            if (serious.putIfAbsent(line.getKey(), line.getValue()) == null) {
+                taken++;
+            }
+        }
+        return taken;
+    }
+
+    /**
+     * A line with a built-in fallback, through the running Core's wording when there is one — for the
+     * few places that say something before, or without, a Messages of their own.
+     */
+    public static Component spoken(String key, String builtIn, Object... values) {
+        if (de.raindancer.core.RainsCore.isAvailable()) {
+            Messages messages = de.raindancer.core.RainsCore.get().messages();
+            if (messages.has(key)) {
+                return messages.get(key, values);
+            }
+        }
+        return Text.render(builtIn, values);
+    }
+
     // ---------------------------------------------------------------------------- loading
 
     /**
@@ -612,6 +680,54 @@ public final class Messages {
         }
     }
 
+    /** Per list key: the order its lines are dealt in this round, and what was said last. */
+    private final Map<String, Deck> decks = new ConcurrentHashMap<>();
+
+    private static final class Deck {
+        private List<?> dealtFrom = List.of();
+        private final java.util.ArrayDeque<Integer> left = new java.util.ArrayDeque<>();
+        private int last = -1;
+    }
+
+    /**
+     * One line of a list, dealt rather than drawn: every line is said once before any is said twice,
+     * and a round never starts with the line the last one ended on.
+     *
+     * <p>For lists people ask for on purpose and notice repeats in — jokes, roasts. Plain random picks
+     * repeat one of sixty within about ten tries. Not prefixed: the caller decides what goes in front,
+     * or sends it as somebody's chat line. A key that is not a list behaves like {@link #get}.
+     */
+    public Component fresh(String key, Object... values) {
+        Object found = lookUp(key);
+        if (!(found instanceof List<?> options) || options.isEmpty()) {
+            return get(key, values);
+        }
+        int index;
+        Deck deck = decks.computeIfAbsent(key, any -> new Deck());
+        synchronized (deck) {
+            if (!deck.dealtFrom.equals(options)) {
+                // Reloaded, reworded or switched tone: a new list is a new game.
+                deck.dealtFrom = List.copyOf(options);
+                deck.left.clear();
+                deck.last = -1;
+            }
+            if (deck.left.isEmpty()) {
+                List<Integer> order = new ArrayList<>();
+                for (int line = 0; line < options.size(); line++) {
+                    order.add(line);
+                }
+                java.util.Collections.shuffle(order, ThreadLocalRandom.current());
+                if (order.size() > 1 && order.getFirst() == deck.last) {
+                    java.util.Collections.swap(order, 0, 1 + ThreadLocalRandom.current().nextInt(order.size() - 1));
+                }
+                deck.left.addAll(order);
+            }
+            index = deck.left.poll();
+            deck.last = index;
+        }
+        return render(fill(String.valueOf(options.get(index)), values));
+    }
+
     /**
      * One of several wordings for the same thing, chosen at random.
      *
@@ -662,10 +778,19 @@ public final class Messages {
             return insisted;
         }
         Object owner = theirs.get(key);
+        Object bundled = shipped.get(key);
+        if (tone == Tone.SERIOUS) {
+            Object plain = serious.get(key);
+            // The owner's file holds every line we shipped, written out on the first start, so a line
+            // there is only theirs if it differs from ours. One that still reads like the playful
+            // default was never chosen by anybody, and serious mode is the owner choosing now.
+            if (plain != null && (owner == null || owner.equals(bundled) || owner.equals(defined.get(key)))) {
+                return plain;
+            }
+        }
         if (owner != null) {
             return owner;
         }
-        Object bundled = shipped.get(key);
         // The bundled file last but one, above a define rather than below it. A define is a *floor*:
         // it fills a key nobody else has. Letting it beat the jar would make every line in the
         // shipped messages.yml a suggestion the code could silently ignore — and that file is the one
