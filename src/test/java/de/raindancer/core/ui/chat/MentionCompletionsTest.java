@@ -19,19 +19,34 @@ class MentionCompletionsTest {
     private static final UUID GONE = UUID.nameUUIDFromBytes("gone".getBytes());
 
     @Test
-    @DisplayName("every visible online name and nickname, the offline after them, never yourself or the hidden")
+    @DisplayName("every visible online name and nickname, then the offline — never yourself")
     void offered() {
         MentionCompletions.Known online = new MentionCompletions.Known(
                 Map.of(ME, "Me", LILLY, "lillyyxoxo", HIDDEN, "Sneaky"));
         Map<UUID, String> nicknames = Map.of(LILLY, "Lilly_Pad", HIDDEN, "Shadow", GONE, "Casper");
-        List<String> offline = List.of("OldGhost");
+        List<String> offline = List.of("OldGhost", "Sneaky", "Me");
 
         List<String> offered = MentionCompletions.completionsFor(ME, online, who -> !who.equals(HIDDEN),
                 nicknames, offline);
 
-        assertThat(offered).contains("@lillyyxoxo", "@Lilly_Pad", "@Casper", "@OldGhost")
-                .doesNotContain("@Me", "@Sneaky", "@Shadow");
+        assertThat(offered).contains("@lillyyxoxo", "@Lilly_Pad", "@Casper", "@OldGhost").doesNotContain("@Me");
         assertThat(offered.indexOf("@lillyyxoxo")).isLessThan(offered.indexOf("@OldGhost"));
+    }
+
+    @Test
+    @DisplayName("a hidden player is offered exactly as if they were offline — their absence would give them away")
+    void hiddenLooksOffline() {
+        MentionCompletions.Known hiddenOnline = new MentionCompletions.Known(Map.of(ME, "Me", HIDDEN, "Sneaky"));
+        MentionCompletions.Known hiddenOffline = new MentionCompletions.Known(Map.of(ME, "Me"));
+        Map<UUID, String> nicknames = Map.of(HIDDEN, "Shadow");
+        List<String> offline = List.of("Sneaky");
+
+        List<String> whileHidden = MentionCompletions.completionsFor(ME, hiddenOnline, who -> !who.equals(HIDDEN),
+                nicknames, offline);
+        List<String> whileAway = MentionCompletions.completionsFor(ME, hiddenOffline, who -> true,
+                nicknames, offline);
+
+        assertThat(whileHidden).containsExactlyInAnyOrderElementsOf(whileAway).contains("@Sneaky", "@Shadow");
     }
 
     @Test

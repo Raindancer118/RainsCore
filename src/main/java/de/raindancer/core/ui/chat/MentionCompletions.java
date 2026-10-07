@@ -39,8 +39,7 @@ public final class MentionCompletions {
     private static final long REFRESH_TICKS = 40L;
     /** How long the offline names are kept before the server's player files are walked again. */
     private static final Duration OFFLINE_REREAD = Duration.ofMinutes(5);
-    private static final Duration RECENTLY = Duration.ofDays(30);
-    private static final int MOST_OFFLINE = 200;
+    private static final int MOST_OFFLINE = 500;
 
     /** The online players, by id and name. */
     public record Known(Map<UUID, String> online) {
@@ -143,19 +142,18 @@ public final class MentionCompletions {
             return offlineNames;
         }
         offlineReadAt = now;
-        List<String> names = new ArrayList<>();
+        // Every known name in alphabetical order, cut at a fixed count — never by when somebody was last
+        // seen, which a hidden player who just joined would change and so give themselves away.
+        java.util.TreeSet<String> sorted = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         OfflinePlayer[] everybody = server.getOfflinePlayers();
         if (everybody != null) {
-            long since = now - RECENTLY.toMillis();
             for (OfflinePlayer who : everybody) {
-                if (names.size() >= MOST_OFFLINE) {
-                    break;
-                }
-                if (who.getName() != null && who.getLastSeen() >= since) {
-                    names.add(who.getName());
+                if (who.getName() != null) {
+                    sorted.add(who.getName());
                 }
             }
         }
+        List<String> names = sorted.stream().limit(MOST_OFFLINE).toList();
         offlineNames = List.copyOf(names);
         return offlineNames;
     }
@@ -174,10 +172,10 @@ public final class MentionCompletions {
     public static List<String> completionsFor(UUID viewer, Known known, Predicate<UUID> canSee,
                                               Map<UUID, String> nicknames, List<String> offline) {
         Set<String> offered = new LinkedHashSet<>();
-        Set<String> onlineNames = new java.util.HashSet<>();
+        Set<UUID> visible = new java.util.HashSet<>();
         known.online().forEach((id, name) -> {
-            onlineNames.add(name.toLowerCase(java.util.Locale.ROOT));
             if (!id.equals(viewer) && canSee.test(id)) {
+                visible.add(id);
                 offered.add("@" + name);
                 String nick = nicknames.get(id);
                 if (nick != null) {
@@ -185,14 +183,16 @@ public final class MentionCompletions {
                 }
             }
         });
+        // Everybody else exactly as the offline are offered — a hidden player missing from this part
+        // would tell anybody watching their suggestions that they are online.
         nicknames.forEach((id, nick) -> {
-            if (!known.online().containsKey(id)) {
+            if (!id.equals(viewer) && !visible.contains(id)) {
                 offered.add("@" + nick);
             }
         });
+        String own = known.online().get(viewer);
         for (String name : offline) {
-            // An online player's name stays out of the offline part, so a hidden one is not offered here.
-            if (!onlineNames.contains(name.toLowerCase(java.util.Locale.ROOT))) {
+            if (own == null || !own.equalsIgnoreCase(name)) {
                 offered.add("@" + name);
             }
         }
