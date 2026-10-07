@@ -166,6 +166,14 @@ public interface RainsCore {
     PoiStore places();
 
     /**
+     * Claims' warp points and players' main homes — written by a claims plugin, read by a warps plugin.
+     * A view over {@link #places()}, so it needs nothing of its own.
+     */
+    default de.raindancer.core.world.poi.ClaimWarps claimWarps() {
+        return new de.raindancer.core.world.poi.ClaimWarps(places());
+    }
+
+    /**
      * Who a player is as everybody else sees them: their chat prefix and suffix, the prefix above
      * their head, and the colour of their name.
      */

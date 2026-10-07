@@ -45,6 +45,12 @@ final class FakeArea implements ProtectedArea {
         return this;
     }
 
+    /** Lets a visitor do these things without making them trusted — "not banned", for ENTER. */
+    FakeArea admitting(UUID who, LandAction... actions) {
+        granted.put(who, List.of(actions));
+        return this;
+    }
+
     FakeArea with(LandFlag flag, LandAudience audience, boolean value) {
         overrides.computeIfAbsent(flag, key -> new EnumMap<>(LandAudience.class)).put(audience, value);
         return this;

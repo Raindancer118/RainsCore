@@ -409,6 +409,35 @@ public final class Land {
     // ------------------------------------------------------------------------ flags
 
     /** The flag resolver, for the screens that show a flag rather than enforce it. */
+    /**
+     * Whether a teleport here would let this player in, as the protection sees it: nobody's land, a
+     * bypass, or an area that admits them, lets teleporting be a way in for their tier and — where walking
+     * in is enforced — lets them walk in too. Asked before offering somewhere, so a list does not show a
+     * door they would only be turned away at. The arrival itself is still checked when it happens.
+     */
+    public boolean mayTeleportInto(Player player, Location to) {
+        if (player == null || to == null) {
+            return false;
+        }
+        if (isBypassing(player)) {
+            return true;
+        }
+        Optional<ProtectedArea> area = areaAt(to);
+        if (area.isEmpty()) {
+            return true;
+        }
+        ProtectedArea there = area.get();
+        if (!there.mayEnter(player.getUniqueId())) {
+            return false;
+        }
+        for (LandFlag way : new LandFlag[]{LandFlag.TELEPORT_IN, LandFlag.WALK_IN}) {
+            if (landFlags().isEnforced(way) && !flags().isAllowedFor(there, way, player)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public FlagRules flags() {
         return flags;
     }
