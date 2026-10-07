@@ -131,13 +131,28 @@ public final class CustomItemListener implements Listener {
     /** A grid holding an item marked {@link CustomItem#isIngredient not an ingredient} makes nothing. */
     @EventHandler(priority = EventPriority.HIGH)
     public void onPrepareCraft(PrepareItemCraftEvent event) {
-        for (ItemStack ingredient : event.getInventory().getMatrix()) {
-            if (ingredient != null && factory.keyOf(ingredient).flatMap(items::byKey)
+        if (holdsNonIngredient(event.getInventory().getMatrix())) {
+            event.getInventory().setResult(null);
+        }
+    }
+
+    /** The crafter block never fires {@link PrepareItemCraftEvent}, so it is asked here as well. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onCrafterCraft(org.bukkit.event.block.CrafterCraftEvent event) {
+        if (event.getBlock().getState() instanceof org.bukkit.block.Crafter crafter
+                && holdsNonIngredient(crafter.getInventory().getContents())) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean holdsNonIngredient(ItemStack[] stacks) {
+        for (ItemStack stack : stacks) {
+            if (stack != null && factory.keyOf(stack).flatMap(items::byKey)
                     .map(item -> !item.isIngredient()).orElse(false)) {
-                event.getInventory().setResult(null);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     /** The ability this stack performs, if it is a custom item and its plugin has registered one. */
