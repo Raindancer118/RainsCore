@@ -238,4 +238,22 @@ class ParticleShapeTest {
 
         assertThat(Math.hypot(now[0] - later[0], now[2] - later[2])).isGreaterThan(0.05);
     }
+
+    @Test
+    @DisplayName("the layout cache stays bounded however long wings are worn — one entry per wing, part and density")
+    void cacheIsBounded() {
+        for (ParticleShape kind : ParticleShape.wings()) {
+            for (int density = 1; density <= 20; density++) {
+                kind.offsets(0, 0, density);
+            }
+        }
+        int filled = ParticleShape.cachedLayouts();
+        for (long tick = 0; tick < 500; tick++) {
+            for (ParticleShape kind : ParticleShape.wings()) {
+                kind.offsets(tick, tick % 360, 4);
+            }
+        }
+        assertThat(ParticleShape.cachedLayouts()).as("drawing again must not grow it").isEqualTo(filled);
+        assertThat(filled).isLessThanOrEqualTo(ParticleShape.wings().size() * 2 * 20);
+    }
 }

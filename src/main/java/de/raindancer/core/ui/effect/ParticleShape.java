@@ -140,6 +140,13 @@ public enum ParticleShape {
     private static final double GRAND_TOP = 1.94;
     private static final double MASK_CELL = 0.04;
 
+    /*
+     * Seraph's two pairs, worked out once. They used to be moved on every draw, which made a new outline —
+     * and a new entry in the layout cache — every tick for as long as anybody wore them.
+     */
+    private static final double[][] SERAPH_UPPER = moved(ANGEL_WING, 1.0, 0.35);
+    private static final double[][] SERAPH_LOWER = moved(ANGEL_WING, 0.75, -0.7);
+
     private static final int[][] NO_BONES = {};
     private static final int[][] DRAGON_BONES = {{1, 4}, {1, 6}, {1, 8}, {1, 10}, {1, 12}};
     private static final int[][] BAT_BONES = {{1, 3}, {1, 5}, {1, 7}, {1, 9}};
@@ -250,9 +257,9 @@ public enum ParticleShape {
             case SERAPH_WINGS -> {
                 // The upper pair raised and spread, the lower one smaller and folded further back,
                 // so the two never draw over each other.
-                wings(points, moved(ANGEL_WING, 1.0, 0.35), 3, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw,
+                wings(points, SERAPH_UPPER, 3, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw,
                         d, 0.25, 0.35, 0.12);
-                wings(points, moved(ANGEL_WING, 0.75, -0.7), 3, NO_BONES, tick + 6, yaw, d, 0.25, 0.8, 0.12);
+                wings(points, SERAPH_LOWER, 3, NO_BONES, tick + 6, yaw, d, 0.25, 0.8, 0.12);
             }
             case TRAIL -> {
                 // A short arc behind the heels, widening with density.
@@ -319,13 +326,24 @@ public enum ParticleShape {
      * Each wing's points, laid out flat, by its outline and density — worked out once, since only the beat
      * and the wearer's facing change from one tick to the next, and the fill alone is hundreds of tests.
      */
-    private static final java.util.Map<String, List<double[]>> LAYOUTS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Layout, List<double[]>> LAYOUTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * What a layout is worked out from. Arrays compare by identity in a record, which is the point: every
+     * outline here is a constant, so the cache holds one entry per wing, part and density, and no more.
+     */
+    private record Layout(Object outline, int smoothing, Object bones, int density) {
+    }
+
+    /** How many layouts are cached — for a test that holds the cache to its bound. */
+    static int cachedLayouts() {
+        return LAYOUTS.size();
+    }
 
     private static void wings(List<double[]> points, double[][] corners, int smoothing, int[][] bones, long tick,
                               float yaw, int density, double flapRate, double sweep, double swing) {
-        String key = System.identityHashCode(corners) + ":" + smoothing + ":" + System.identityHashCode(bones)
-                + ":" + density;
-        List<double[]> flat = LAYOUTS.computeIfAbsent(key, ignored -> layout(corners, smoothing, bones, density));
+        List<double[]> flat = LAYOUTS.computeIfAbsent(new Layout(corners, smoothing, bones, density),
+                ignored -> layout(corners, smoothing, bones, density));
         double spine = Double.MAX_VALUE;
         double tip = 0;
         for (double[] corner : corners) {
@@ -342,8 +360,8 @@ public enum ParticleShape {
     /** A traced wing: its cells sampled at the density's spacing, every feather's edges always kept. */
     private static void traced(List<double[]> points, String[] mask, double top, long tick, float yaw, int density,
                                double flapRate, double sweep, double swing) {
-        String key = System.identityHashCode(mask) + ":" + density;
-        List<double[]> flat = LAYOUTS.computeIfAbsent(key, ignored -> sampled(mask, top, density));
+        List<double[]> flat = LAYOUTS.computeIfAbsent(new Layout(mask, 0, null, density),
+                ignored -> sampled(mask, top, density));
         onTheBack(points, flat, tick, yaw, flapRate, sweep, swing);
     }
 
