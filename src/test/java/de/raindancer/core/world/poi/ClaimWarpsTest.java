@@ -51,25 +51,28 @@ class ClaimWarpsTest {
         assertThat(warps.all()).hasSize(1);
         Poi point = warps.forClaim("c1").orElseThrow();
         assertThat(point.x()).isEqualTo(9);
-        assertThat(ClaimWarps.isMain(point)).isTrue();
+        assertThat(ClaimWarps.isHomeOf(point, LILLY)).isTrue();
         assertThat(ClaimWarps.claimOf(point)).isEqualTo("c1");
     }
 
     @Test
-    @DisplayName("a player has at most one main home, and only among their own claims")
+    @DisplayName("a player has at most one main home; co-owners of one claim may each call it home")
     void oneMainHome() {
         warps.set("c1", "Farm", LILLY, "world", 1, 64, 1, 0, 0);
         warps.set("c2", "Tower", LILLY, "world", 2, 64, 2, 0, 0);
-        warps.set("c3", "Ben's", BEN, "world", 3, 64, 3, 0, 0);
 
         assertThat(warps.markMain(LILLY, "c1")).isTrue();
         assertThat(warps.markMain(LILLY, "c2")).isTrue();
-        assertThat(warps.markMain(LILLY, "c3")).as("Ben's claim is not hers to make her home").isFalse();
+        assertThat(warps.markMain(BEN, "c2")).as("Ben, her co-owner, may call it home too").isTrue();
         assertThat(warps.markMain(LILLY, "nope")).as("a claim with no warp point").isFalse();
 
         assertThat(warps.mainOf(LILLY).map(ClaimWarps::claimOf)).contains("c2");
+        assertThat(warps.mainOf(BEN).map(ClaimWarps::claimOf)).contains("c2");
         assertThat(warps.ownedBy(LILLY)).hasSize(2);
-        assertThat(warps.mainOf(BEN)).isEmpty();
+
+        warps.forget(BEN, "c2");
+        assertThat(warps.mainOf(BEN)).as("no longer an owner of it").isEmpty();
+        assertThat(warps.mainOf(LILLY)).isPresent();
     }
 
     @Test
@@ -84,7 +87,7 @@ class ClaimWarpsTest {
         Poi point = warps.forClaim("c1").orElseThrow();
         assertThat(point.name()).isEqualTo("Big Farm");
         assertThat(point.owner()).isEqualTo(BEN);
-        assertThat(ClaimWarps.isMain(point)).isFalse();
+        assertThat(ClaimWarps.isHomeOf(point, LILLY)).isFalse();
         assertThat(warps.mainOf(LILLY)).isEmpty();
     }
 

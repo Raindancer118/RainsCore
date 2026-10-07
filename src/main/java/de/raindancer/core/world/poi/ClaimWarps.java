@@ -2,9 +2,12 @@ package de.raindancer.core.world.poi;
 
 import org.bukkit.Material;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * A claim's warp point, and which of a player's claims is their main home.
@@ -22,7 +25,10 @@ public final class ClaimWarps {
     public static final String KIND = "claim-warp";
     /** The id of the claim the point belongs to. */
     public static final String TAG_CLAIM = "claim";
-    /** Present, as "true", on the one point that is its owner's main home. */
+    /**
+     * The players who call this claim their main home, as comma-separated UUIDs — several, because a claim
+     * may have co-owners. Whether somebody may is the claims plugin's to check: only it knows the owners.
+     */
     public static final String TAG_MAIN = "main";
 
     private final PoiStore places;
@@ -49,8 +55,9 @@ public final class ClaimWarps {
     }
 
     /** The claim this player calls home, if they have chosen one. */
-    public Optional<Poi> mainOf(UUID owner) {
-        return ownedBy(owner).stream().filter(ClaimWarps::isMain).findFirst();
+    public Optional<Poi> mainOf(UUID player) {
+        return player == null ? Optional.empty()
+                : all().stream().filter(point -> isHomeOf(point, player)).findFirst();
     }
 
     /**
@@ -68,34 +75,39 @@ public final class ClaimWarps {
                 .facing(yaw, pitch)
                 .tag(TAG_CLAIM, claimId);
         before.ifPresent(old -> point.id(old.id()));
-        if (before.map(ClaimWarps::isMain).orElse(false)) {
-            point.tag(TAG_MAIN, "true");
-        }
+        before.flatMap(old -> old.tag(TAG_MAIN)).ifPresent(homeOf -> point.tag(TAG_MAIN, homeOf));
         Poi saved = point.build();
         places.save(saved);
         return saved;
     }
 
-    /** Makes this claim its owner's main home, and no other of theirs. False when it is not theirs or has no point. */
-    public boolean markMain(UUID owner, String claimId) {
+    /**
+     * Makes this claim {@code player}'s main home, and no other claim. Whether they own it is the caller's
+     * to have checked. False when the claim has no warp point.
+     */
+    public boolean markMain(UUID player, String claimId) {
         Optional<Poi> chosen = forClaim(claimId);
-        if (owner == null || chosen.isEmpty() || !owner.equals(chosen.get().owner())) {
+        if (player == null || chosen.isEmpty()) {
             return false;
         }
-        for (Poi other : ownedBy(owner)) {
-            if (isMain(other) && !other.id().equals(chosen.get().id())) {
-                places.save(other.withTag(TAG_MAIN, null));
-            }
-        }
-        places.save(chosen.get().withTag(TAG_MAIN, "true"));
+        mainOf(player).filter(other -> !other.id().equals(chosen.get().id()))
+                .ifPresent(other -> places.save(withHome(other, player, false)));
+        places.save(withHome(chosen.get(), player, true));
         return true;
     }
 
     /** Takes away this player's main home, leaving the claim's warp point where it is. */
-    public boolean clearMain(UUID owner) {
-        Optional<Poi> main = mainOf(owner);
-        main.ifPresent(point -> places.save(point.withTag(TAG_MAIN, null)));
+    public boolean clearMain(UUID player) {
+        Optional<Poi> main = mainOf(player);
+        main.ifPresent(point -> places.save(withHome(point, player, false)));
         return main.isPresent();
+    }
+
+    /** Forgets that this player called this claim home — they no longer own it. */
+    public boolean forget(UUID player, String claimId) {
+        Optional<Poi> point = forClaim(claimId).filter(found -> isHomeOf(found, player));
+        point.ifPresent(found -> places.save(withHome(found, player, false)));
+        return point.isPresent();
     }
 
     /** Follows the claim's new name. */
@@ -105,7 +117,7 @@ public final class ClaimWarps {
         return point.isPresent();
     }
 
-    /** Follows the claim to a new owner — who has not chosen it as their home, so it is not. */
+    /** Follows the claim to a new owner — who has not chosen it as their home, and nobody else may now. */
     public boolean reassign(String claimId, UUID owner) {
         Optional<Poi> point = forClaim(claimId);
         point.ifPresent(found -> places.save(found.withOwner(owner).withTag(TAG_MAIN, null)));
@@ -121,7 +133,33 @@ public final class ClaimWarps {
         return point.tag(TAG_CLAIM).orElse(null);
     }
 
-    public static boolean isMain(Poi point) {
-        return point.tag(TAG_MAIN).map("true"::equals).orElse(false);
+    /** The players who call it their main home. A name that is not a UUID is skipped. */
+    public static Set<UUID> homeOf(Poi point) {
+        Set<UUID> players = new LinkedHashSet<>();
+        for (String written : point.tag(TAG_MAIN).orElse("").split(",")) {
+            try {
+                if (!written.isBlank()) {
+                    players.add(UUID.fromString(written.trim()));
+                }
+            } catch (IllegalArgumentException notAUuid) {
+                // A hand-edited entry. One bad one must not take the others with it.
+            }
+        }
+        return players;
+    }
+
+    public static boolean isHomeOf(Poi point, UUID player) {
+        return player != null && homeOf(point).contains(player);
+    }
+
+    private static Poi withHome(Poi point, UUID player, boolean home) {
+        Set<UUID> players = homeOf(point);
+        if (home) {
+            players.add(player);
+        } else {
+            players.remove(player);
+        }
+        return point.withTag(TAG_MAIN, players.isEmpty() ? null
+                : players.stream().map(UUID::toString).collect(Collectors.joining(",")));
     }
 }
