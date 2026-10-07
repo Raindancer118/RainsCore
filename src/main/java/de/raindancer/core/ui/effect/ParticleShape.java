@@ -140,13 +140,14 @@ public enum ParticleShape {
             }
             // Quills and veins only at the highest densities: with few points the inside lines would
             // take them from the outline, and the outline is what reads as a wing.
-            case WINGS -> wings(points, ANGEL_WING, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw, d,
-                    0.25, 0.45, 0.35);
-            case BAT_WINGS -> wings(points, BAT_WING, BAT_BONES, tick, yaw, d, 0.3, 0.4, 0.4);
-            case BUTTERFLY_WINGS -> wings(points, BUTTERFLY_WING, d >= ULTRA ? BUTTERFLY_VEINS : NO_BONES, tick,
-                    yaw, d, 0.55, 0.35, 0.45);
+            case WINGS -> wings(points, ANGEL_WING, 3, d >= ULTRA ? ANGEL_QUILLS : NO_BONES, tick, yaw, d,
+                    0.25, 0.45, 0.15);
+            // One pass only: a bat's spikes are the point of it.
+            case BAT_WINGS -> wings(points, BAT_WING, 1, BAT_BONES, tick, yaw, d, 0.3, 0.4, 0.18);
+            case BUTTERFLY_WINGS -> wings(points, BUTTERFLY_WING, 3, d >= ULTRA ? BUTTERFLY_VEINS : NO_BONES,
+                    tick, yaw, d, 0.55, 0.35, 0.25);
             // About a beat every two ticks — as fast as anything drawn this often can show.
-            case HUMMINGBIRD_WINGS -> wings(points, HUMMINGBIRD_WING, NO_BONES, tick, yaw, d, 2.6, 0.55, 0.5);
+            case HUMMINGBIRD_WINGS -> wings(points, HUMMINGBIRD_WING, 2, NO_BONES, tick, yaw, d, 2.6, 0.55, 0.5);
             case TRAIL -> {
                 // A short arc behind the heels, widening with density.
                 double radians = Math.toRadians(yaw);
@@ -174,10 +175,12 @@ public enum ParticleShape {
     /**
      * Both wings of one kind, mirrored on the wearer's back.
      *
-     * @param flapRate how fast they beat; {@code sweep ± swing} radians is how far back they fold
+     * @param flapRate how fast they beat; {@code sweep ± swing} radians is how far back they fold.
+     *                 Kept small: dust lingers up to two seconds, so a wide beat smears a wing into a cloud
      */
-    private static void wings(List<double[]> points, double[][] outline, int[][] bones, long tick, float yaw,
-                              int density, double flapRate, double sweep, double swing) {
+    private static void wings(List<double[]> points, double[][] corners, int smoothing, int[][] bones, long tick,
+                              float yaw, int density, double flapRate, double sweep, double swing) {
+        double[][] outline = rounded(corners, smoothing);
         double radians = Math.toRadians(yaw);
         double backX = Math.sin(radians);
         double backZ = -Math.cos(radians);
@@ -185,11 +188,12 @@ public enum ParticleShape {
         double rightZ = -Math.sin(radians);
         double folded = sweep + swing * Math.sin(tick * flapRate);
         List<double[]> drawn = new ArrayList<>(alongOutline(outline, 12 * density));
+        drawn.addAll(filling(outline, density));
         for (int[] bone : bones) {
             // Ends left out: they are already on the outline, and a point drawn twice is the
             // "more particles on one spot" density is not supposed to mean.
-            double[] from = outline[bone[0]];
-            double[] to = outline[bone[1]];
+            double[] from = corners[bone[0]];
+            double[] to = corners[bone[1]];
             int along = 2 * density;
             for (int k = 1; k <= along; k++) {
                 double t = k / (double) (along + 1);
@@ -198,7 +202,7 @@ public enum ParticleShape {
         }
         double spine = Double.MAX_VALUE;
         double tip = 0;
-        for (double[] corner : outline) {
+        for (double[] corner : corners) {
             spine = Math.min(spine, corner[0]);
             tip = Math.max(tip, corner[0]);
         }
@@ -211,6 +215,81 @@ public enum ParticleShape {
                         side * out * rightZ + back * backZ, Math.clamp(outward, 0, 1)});
             }
         }
+    }
+
+    /**
+     * Rounds an outline by cutting every corner {@code passes} times (Chaikin): each edge keeps its
+     * middle half, so a zigzag becomes a curve. The first and last points stay — they sit on the spine.
+     */
+    private static double[][] rounded(double[][] outline, int passes) {
+        double[][] current = outline;
+        for (int pass = 0; pass < passes; pass++) {
+            List<double[]> next = new ArrayList<>();
+            next.add(current[0]);
+            for (int i = 0; i < current.length - 1; i++) {
+                double[] a = current[i];
+                double[] b = current[i + 1];
+                next.add(new double[]{0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]});
+                next.add(new double[]{0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]});
+            }
+            next.add(current[current.length - 1]);
+            current = next.toArray(double[][]::new);
+        }
+        return current;
+    }
+
+    /**
+     * An even grid of points inside the outline (closed back to its first point), finer as density
+     * rises — about the same spacing as along the edge, so the fill and the outline read as one.
+     */
+    private static List<double[]> filling(double[][] outline, int density) {
+        double step = 0.24 / Math.sqrt(density);
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (double[] p : outline) {
+            minX = Math.min(minX, p[0]);
+            maxX = Math.max(maxX, p[0]);
+            minY = Math.min(minY, p[1]);
+            maxY = Math.max(maxY, p[1]);
+        }
+        List<double[]> inside = new ArrayList<>();
+        // Rows offset by half a step, so the fill is a mesh of triangles rather than a chessboard.
+        int row = 0;
+        for (double y = minY + step / 2; y < maxY; y += step * 0.87, row++) {
+            for (double x = minX + (row % 2 == 0 ? step / 2 : step); x < maxX; x += step) {
+                if (isInside(outline, x, y) && distanceToEdge(outline, x, y) > step * 0.45) {
+                    inside.add(new double[]{x, y});
+                }
+            }
+        }
+        return inside;
+    }
+
+    /** Even-odd ray test against the closed outline. */
+    private static boolean isInside(double[][] outline, double x, double y) {
+        boolean in = false;
+        for (int i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+            double[] a = outline[i];
+            double[] b = outline[j];
+            if ((a[1] > y) != (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) {
+                in = !in;
+            }
+        }
+        return in;
+    }
+
+    /** How far a point is from the nearest edge, so the fill leaves the outline its own row. */
+    private static double distanceToEdge(double[][] outline, double x, double y) {
+        double nearest = Double.MAX_VALUE;
+        for (int i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+            double[] a = outline[j];
+            double[] b = outline[i];
+            double dx = b[0] - a[0];
+            double dy = b[1] - a[1];
+            double length = dx * dx + dy * dy;
+            double t = length == 0 ? 0 : Math.clamp(((x - a[0]) * dx + (y - a[1]) * dy) / length, 0, 1);
+            nearest = Math.min(nearest, Math.hypot(x - (a[0] + t * dx), y - (a[1] + t * dy)));
+        }
+        return nearest;
     }
 
     /** {@code count} points spread evenly along a polyline, by length — an outline drawn, not its corners. */

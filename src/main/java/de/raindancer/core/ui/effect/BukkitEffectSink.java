@@ -188,6 +188,11 @@ public final class BukkitEffectSink implements EffectSink {
      * one that takes a colour or a dust, and {@link #MISSING} when it needs something this cannot give.
      */
     static Object dataFor(Class<?> dataType, Integer colour) {
+        return dataFor(dataType, colour, 1.0f);
+    }
+
+    /** The same, with dust drawn {@code size} big (1 is vanilla's usual). */
+    static Object dataFor(Class<?> dataType, Integer colour, float size) {
         if (dataType == null || dataType == Void.class) {
             return null;
         }
@@ -196,7 +201,7 @@ public final class BukkitEffectSink implements EffectSink {
         }
         Color rgb = Color.fromRGB(colour);
         if (dataType == Particle.DustOptions.class) {
-            return new Particle.DustOptions(rgb, 1.0f);
+            return new Particle.DustOptions(rgb, size);
         }
         if (dataType == Color.class) {
             return rgb;

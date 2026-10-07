@@ -45,4 +45,15 @@ class ParticleShowsTest {
         assertThat(ParticleShows.colourAlong(0xFF0000, 0x0000FF, 0.5)).isEqualTo(0x800080);
         assertThat(ParticleShows.colourAlong(0x00FF00, null, 0.7)).isEqualTo(0x00FF00);
     }
+
+    @Test
+    @DisplayName("denser is finer: the dust shrinks as the points come closer, so a dense shape is sharp, not a cloud")
+    void dustSize() {
+        assertThat(ParticleShows.dustSize(1)).isEqualTo(1.0f);
+        assertThat(ParticleShows.dustSize(4)).isLessThan(ParticleShows.dustSize(2));
+        assertThat(ParticleShows.dustSize(16)).isLessThan(ParticleShows.dustSize(4)).isGreaterThanOrEqualTo(0.35f);
+        org.bukkit.Particle.DustOptions dust = (org.bukkit.Particle.DustOptions)
+                BukkitEffectSink.dataFor(org.bukkit.Particle.DustOptions.class, 0xff0000, 0.5f);
+        assertThat(dust.getSize()).isEqualTo(0.5f);
+    }
 }

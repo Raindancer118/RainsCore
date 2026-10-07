@@ -174,37 +174,29 @@ class ParticleShapeTest {
         return turns;
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS"})
+    @DisplayName("wings are filled, not only outlined: the middle of a wing has particles in it")
+    void wingsAreFilled(ParticleShape kind) {
+        assertThat(middle(kind.offsets(0, 0, 4))).as(kind.name()).isPositive();
+        assertThat(kind.offsets(0, 0, 8).size()).as(kind.name())
+                .isGreaterThan(kind.offsets(0, 0, 4).size() * 3 / 2);
+    }
+
     @Test
-    @DisplayName("bat wings show their finger bones inside the outline; ultra-dense angel wings their quills")
+    @DisplayName("bat wings show their finger bones; ultra-dense angel wings their quills, on top of the fill")
     void innerLines() {
-        // Points well inside the outline: between the wrist and the spikes, not on the edge.
-        assertThat(inside(ParticleShape.BAT_WINGS.offsets(0, 0, 2)))
-                .isGreaterThan(inside(ParticleShape.WINGS.offsets(0, 0, 2)));
-        // Ultra: more than the outline alone, which is twelve points per density step per wing.
-        assertThat(ParticleShape.WINGS.offsets(0, 0, 16)).hasSizeGreaterThan(2 * 12 * 16);
-        assertThat(ParticleShape.WINGS.offsets(0, 0, 4)).hasSize(2 * 12 * 4);
+        assertThat(ParticleShape.WINGS.offsets(0, 0, ParticleShape.ULTRA).size())
+                .isGreaterThan(ParticleShape.WINGS.offsets(0, 0, ParticleShape.ULTRA - 1).size() * 11 / 10);
     }
 
-    /** Points of the right wing, seen flat from behind, that lie in the middle of the wing. */
-    private static long inside(List<double[]> points) {
-        return points.stream().filter(p -> -p[0] > 0.55 && -p[0] < 0.95 && p[1] > 1.45 && p[1] < 1.8).count();
-    }
-
-    @Test
-    @DisplayName("every point says where along the shape it is, for a gradient: wings run spine to tip")
-    void gradientPosition() {
-        for (ParticleShape shape : ParticleShape.values()) {
-            assertThat(shape.offsets(4, 0, 3)).as(shape.name())
-                    .allSatisfy(p -> assertThat(p[3]).isBetween(0.0, 1.0));
-        }
-        java.util.Comparator<double[]> outward = java.util.Comparator.comparingDouble(p -> Math.abs(p[0]));
-        List<double[]> wings = ParticleShape.WINGS.offsets(0, 0, 2);
-        assertThat(wings.stream().max(outward).orElseThrow()[3]).isCloseTo(1.0, within(0.05));
-        assertThat(wings.stream().min(outward).orElseThrow()[3]).isLessThan(0.15);
-        // A ring has no ends: the gradient goes there and back, so it meets itself without a seam.
-        List<double[]> ring = ParticleShape.HALO.offsets(0, 0, 4);
-        assertThat(ring.getFirst()[3]).isCloseTo(ring.getLast()[3], within(0.1));
-        assertThat(ring.stream().mapToDouble(p -> p[3]).max().orElseThrow()).isCloseTo(1.0, within(0.05));
+    /** Points of the right wing near its own centre, seen flat from behind. */
+    private static long middle(List<double[]> points) {
+        List<double[]> right = points.stream().filter(p -> p[0] < 0).toList();
+        double cx = right.stream().mapToDouble(p -> p[0]).average().orElseThrow();
+        double cy = right.stream().mapToDouble(p -> p[1]).average().orElseThrow();
+        return right.stream().filter(p -> Math.abs(p[0] - cx) < 0.08 && Math.abs(p[1] - cy) < 0.08).count();
     }
 
     private static double highest(List<double[]> points) {

@@ -68,15 +68,24 @@ public final class ParticleShows {
         }
         World world = wearer.getWorld();
         int from = colour == null ? 0xFFFFFF : colour;
-        Object single = BukkitEffectSink.dataFor(found.getDataType(), from);
+        Object single = BukkitEffectSink.dataFor(found.getDataType(), from, dustSize(count));
         boolean blended = colourTo != null && takesColour(particle);
         for (double[] offset : shape.offsets(tick, feet.getYaw(), count)) {
             Object data = blended
-                    ? BukkitEffectSink.dataFor(found.getDataType(), colourAlong(from, colourTo, offset[3]))
+                    ? BukkitEffectSink.dataFor(found.getDataType(), colourAlong(from, colourTo, offset[3]),
+                            dustSize(count))
                     : single;
             world.spawnParticle(found, viewers, wearer, feet.getX() + offset[0], feet.getY() + offset[1],
                     feet.getZ() + offset[2], 1, 0, 0, 0, 0, data);
         }
+    }
+
+    /**
+     * How big dust is drawn at this density: full size alone, smaller as the points come closer —
+     * a dense shape drawn in big dust is a cloud, not a shape.
+     */
+    public static float dustSize(int density) {
+        return (float) Math.max(0.35, Math.min(1.0, 1.0 / Math.sqrt(Math.max(1, density)) * 1.1));
     }
 
     /** The colour {@code along} (0 to 1) of the way from {@code from} to {@code to}; {@code from} when there is no {@code to}. */
@@ -112,7 +121,7 @@ public final class ParticleShows {
             return;
         }
         int from = colour == null ? 0xFFFFFF : colour;
-        Object single = BukkitEffectSink.dataFor(found.getDataType(), from);
+        Object single = BukkitEffectSink.dataFor(found.getDataType(), from, dustSize(count));
         boolean blended = colourTo != null && takesColour(particle);
         long rounds = Math.max(1, seconds) * 10L;
         long[] drawn = {0};
@@ -126,7 +135,8 @@ public final class ParticleShows {
             long frame = (long) Math.floor(drawn[0] * Math.max(0.1, speed));
             for (double[] offset : shape.offsets(frame, eye.getYaw() + 180, count)) {
                 Object data = blended
-                        ? BukkitEffectSink.dataFor(found.getDataType(), colourAlong(from, colourTo, offset[3]))
+                        ? BukkitEffectSink.dataFor(found.getDataType(), colourAlong(from, colourTo, offset[3]),
+                            dustSize(count))
                         : single;
                 viewer.spawnParticle(found, feet.getX() + offset[0], feet.getY() + offset[1],
                         feet.getZ() + offset[2], 1, 0, 0, 0, 0, data);
