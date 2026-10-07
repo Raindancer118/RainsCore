@@ -70,7 +70,7 @@ class ClaimWarpsTest {
         assertThat(warps.mainOf(BEN).map(ClaimWarps::claimOf)).contains("c2");
         assertThat(warps.ownedBy(LILLY)).hasSize(2);
 
-        warps.forget(BEN, "c2");
+        warps.dropHomeOf(BEN, "c2");
         assertThat(warps.mainOf(BEN)).as("no longer an owner of it").isEmpty();
         assertThat(warps.mainOf(LILLY)).isPresent();
     }

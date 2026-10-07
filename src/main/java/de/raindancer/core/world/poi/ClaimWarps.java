@@ -104,7 +104,7 @@ public final class ClaimWarps {
     }
 
     /** Forgets that this player called this claim home — they no longer own it. */
-    public boolean forget(UUID player, String claimId) {
+    public boolean dropHomeOf(UUID player, String claimId) {
         Optional<Poi> point = forClaim(claimId).filter(found -> isHomeOf(found, player));
         point.ifPresent(found -> places.save(withHome(found, player, false)));
         return point.isPresent();
