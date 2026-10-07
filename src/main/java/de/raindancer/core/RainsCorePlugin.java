@@ -583,6 +583,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
         vanish = new Vanish(new BukkitVanishSink(this));
         mentionCompletions = new de.raindancer.core.ui.chat.MentionCompletions(this, getServer(), vanish, nicknames);
+        // A vanished player's line is held and they are asked first — one chat line undoes vanish.
+        getServer().getPluginManager().registerEvents(new de.raindancer.core.moderation.vanish.VanishChatGuard(
+                this, vanish, new de.raindancer.core.moderation.vanish.VanishedSpeech(), messages, buttons), this);
         nametags = new de.raindancer.core.ui.identity.Nametags(this, identities, vanish);
         getServer().getPluginManager().registerEvents(nametags, this);
         getServer().getPluginManager().registerEvents(
