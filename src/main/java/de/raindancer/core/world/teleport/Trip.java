@@ -13,12 +13,18 @@ package de.raindancer.core.world.teleport;
  * @param searchRadius how far to look, when it does; also how much world is pulled in to find out,
  *                    so a large one is a stall on somebody else's machine
  * @param companions  what travels with them — see {@link Companions}
+ * @param silent      no departure sound, waiting particles or arrival effect — see {@link TravelShow}
  */
 public record Trip(String what, int warmupSeconds, boolean safeArrival, int searchRadius,
-                   Companions companions) {
+                   Companions companions, boolean silent) {
 
     public Trip {
         companions = companions == null ? Companions.NOBODY : companions;
+    }
+
+    /** The shape plugins built before {@code quiet} existed were compiled against. */
+    public Trip(String what, int warmupSeconds, boolean safeArrival, int searchRadius, Companions companions) {
+        this(what, warmupSeconds, safeArrival, searchRadius, companions, false);
     }
 
     /** The sane defaults: no waiting, never dropped into lava, and nothing dragged along. */
@@ -28,7 +34,7 @@ public record Trip(String what, int warmupSeconds, boolean safeArrival, int sear
 
     /** The same, after standing still for this many seconds. */
     public Trip after(int seconds) {
-        return new Trip(what, Math.max(0, seconds), safeArrival, searchRadius, companions);
+        return new Trip(what, Math.max(0, seconds), safeArrival, searchRadius, companions, silent);
     }
 
     /**
@@ -38,7 +44,7 @@ public record Trip(String what, int warmupSeconds, boolean safeArrival, int sear
      * finishes, and a warm-up is what gives somebody time to notice they have dropped it.
      */
     public Trip bringing(Companions bring) {
-        return new Trip(what, warmupSeconds, safeArrival, searchRadius, bring);
+        return new Trip(what, warmupSeconds, safeArrival, searchRadius, bring, silent);
     }
 
     /**
@@ -49,12 +55,21 @@ public record Trip(String what, int warmupSeconds, boolean safeArrival, int sear
      * should keep the check.
      */
     public Trip exactly() {
-        return new Trip(what, warmupSeconds, false, searchRadius, companions);
+        return new Trip(what, warmupSeconds, false, searchRadius, companions, silent);
     }
 
     /** How far to look for somewhere safe. */
     public Trip searching(int radius) {
-        return new Trip(what, warmupSeconds, safeArrival, Math.max(1, radius), companions);
+        return new Trip(what, warmupSeconds, safeArrival, Math.max(1, radius), companions, silent);
+    }
+
+    /** Without the teleport's sounds and particles — for a plugin that plays its own, or wants none. */
+    public Trip quiet() {
+        return new Trip(what, warmupSeconds, safeArrival, searchRadius, companions, true);
+    }
+
+    public boolean isQuiet() {
+        return silent;
     }
 
     public boolean hasWarmup() {

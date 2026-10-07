@@ -61,6 +61,12 @@ public final class Cues {
     /** Somebody arrived somewhere. */
     public static final String TELEPORT = "core:teleport";
 
+    /** Somebody set off — the start of a warm-up, or an instant teleport. */
+    public static final String TELEPORT_DEPART = "core:teleport-depart";
+
+    /** Drawn around somebody standing still for a teleport; only its particle is used, in a shape. */
+    public static final String TELEPORT_WAIT = "core:teleport-wait";
+
     /** Something is being counted down — one tick of it. */
     public static final String COUNTDOWN = "core:countdown";
 
@@ -106,7 +112,7 @@ public final class Cues {
     public static List<String> all() {
         return List.of(OK, NO, WARN, ERROR, NOTIFY,
                 CLICK, OPEN, CLOSE, PAGE,
-                TELEPORT, COUNTDOWN, COUNTDOWN_DONE, ENTER, LEAVE,
+                TELEPORT, TELEPORT_DEPART, TELEPORT_WAIT, COUNTDOWN, COUNTDOWN_DONE, ENTER, LEAVE,
                 EARNED, REWARD, HEAL, HURT, SUMMON, VANISH, MAGIC, ABILITY, COOLDOWN);
     }
 }

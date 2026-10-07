@@ -271,6 +271,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private ChunkHolds chunks;
     private Safety safety;
     private Effects effects;
+    private de.raindancer.core.world.teleport.TravelShow travelShow;
     private Votes votes;
     private Vanish vanish;
     private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
@@ -569,6 +570,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         new SettingsChatInput(this, navigation, chat, chat.brand(), prompts);
 
         effects = new Effects(new BukkitEffectSink(this), System::currentTimeMillis);
+        travelShow = new de.raindancer.core.world.teleport.TravelShow(effects);
         // Without this every '>delay' of a layered cue played at once. Waited out off-thread; the sink
         // then plays it on the thread that owns the player or the place.
         effects.delayedPlaybackVia((millis, what) ->
@@ -1367,6 +1369,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Effects effects() {
         return effects;
+    }
+
+    @Override
+    public de.raindancer.core.world.teleport.TravelShow travelShow() {
+        return travelShow;
     }
 
     @Override

@@ -197,6 +197,7 @@ Everything below hangs off `RainsCore.get()`.
 | **`resourcePacks()`** | Plugins *contribute* assets; Core decides what is sent, builds it reproducibly, serves it and applies it. [See below](#-resource-packs). |
 | **`prompts()`** | Asking a player to type something. The next line a player types is a thing only one plugin can have — three chat listeners each claiming it is three plugins fighting over one answer. |
 | **`messages()`** | Every word the server says, in a file an owner can edit. Four layers, lowest first: your code default, the wording in the jar, the owner's `messages.yml`, and — above even that — anything a plugin insists on. A key missing from their file falls back instead of blanking, player text is escaped, and broken markup still renders. Two tones: refusals come with a dry remark by default; the *Message tone* setting switches to `SERIOUS`, which says the same lines from `messages-serious.yml` (a module ships its own beside its `messages.yml` and hands it over with `seriousFrom`). Lines the owner reworded stay theirs in both. |
+| **`travelShow()`** | The sound and sparkle of every teleport, whichever plugin's `Travel` sent it: a departure sound, particles while somebody stands still for the warm-up, an arrival. Three cues an owner can rebind (`core:teleport-depart`, `core:teleport-wait`, `core:teleport`); a cosmetics plugin registers `TravelLooks` so a player's own choice follows them everywhere. `Trip.quiet()` for a trip with none. |
 
 </details>
 

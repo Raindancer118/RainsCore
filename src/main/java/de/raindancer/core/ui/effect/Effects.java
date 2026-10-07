@@ -124,6 +124,8 @@ public final class Effects {
         // Moving about
         bound.put(Cues.TELEPORT, new Effect(new SoundCue("entity.enderman.teleport", 0.6f, 1.2f),
                 new ParticleCue("PORTAL", 24, 0.4, 0.6, 0.4, 0.06)));
+        bound.put(Cues.TELEPORT_DEPART, Effect.of(new SoundCue("block.beacon.power_select", 0.4f, 1.6f)));
+        bound.put(Cues.TELEPORT_WAIT, Effect.of(ParticleCue.of("PORTAL", 1)));
         bound.put(Cues.COUNTDOWN, Effect.of(new SoundCue("block.note_block.hat", 0.5f, 1.2f)));
         bound.put(Cues.COUNTDOWN_DONE,
                 Effect.of(new SoundCue("block.note_block.bell", 0.7f, 1.6f)));
@@ -269,10 +271,18 @@ public final class Effects {
      * event from your own teleport, and folding them together would swallow one of them.
      */
     public void playAt(String world, double x, double y, double z, String cue) {
+        playAt(world, x, y, z, lookUp(cue));
+    }
+
+    /**
+     * Plays an effect that is not a cue — one a player chose for themselves — at a place.
+     *
+     * <p>Still subject to {@link #enabled}: an owner who switched effects off meant everybody's.
+     */
+    public void playAt(String world, double x, double y, double z, Effect effect) {
         if (world == null || !enabled) {
             return;
         }
-        Effect effect = lookUp(cue);
         if (effect == null || effect.isSilent()) {
             return;
         }

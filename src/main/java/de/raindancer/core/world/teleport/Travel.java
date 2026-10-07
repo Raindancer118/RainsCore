@@ -63,6 +63,10 @@ public final class Travel {
     /** What a repeating tick is worth: one second. */
     private static final long A_SECOND_IN_TICKS = 20L;
 
+    /** How often the waiting particles are drawn, and how far away they can be seen. */
+    private static final long SHIMMER_EVERY_TICKS = 2L;
+    private static final double SHIMMER_RANGE = 32;
+
     /** Everything about one journey, in one entry — three maps keyed alike is three to get wrong. */
     /**
      * @param groundwork the search for somewhere safe, started at departure rather than on arrival —
@@ -176,6 +180,7 @@ public final class Travel {
         }
         if (!trip.hasWarmup()) {
             // Nothing to prepare during: there is no warm-up to do it in.
+            departing(traveller, trip);
             arrive(traveller, destination, trip, told, null);
             return;
         }
@@ -188,6 +193,7 @@ public final class Travel {
             return;
         }
         told.counting(traveller, trip.warmupSeconds(), trip);
+        departing(traveller, trip);
 
         // The player's own scheduler: on Folia that is the region thread that owns them, and it
         // follows them if they cross into another region while they wait.
@@ -209,6 +215,7 @@ public final class Travel {
         // nothing into an arrival that happens when it says it does.
         journeys.put(who, new Journey(destination.clone(), trip, told, countdown,
                 prepare(destination, trip)));
+        shimmer(traveller, trip);
 
         // The window this closes: between begin() above and the put() on the line before, a movement
         // or a quit on another thread finds the departure and cancels it, but finds no journey — so
@@ -491,8 +498,80 @@ public final class Travel {
                                         ? null : destination.getWorld().getName())
                                 .saying("to " + trip.what()));
                     }
+                    if (!trip.isQuiet()) {
+                        show(traveller, "arrival", show -> {
+                            Location landed = traveller.getLocation();
+                            show.arrived(traveller.getUniqueId(), landed.getWorld().getName(),
+                                    landed.getX(), landed.getY(), landed.getZ());
+                        });
+                    }
                     watcher.arrived(traveller, destination, trip);
                 }));
+    }
+
+    // ------------------------------------------------------------------------ how it looks
+
+    /** Core's, when it is running — a Travel built in a test or without Core plays nothing. */
+    private static TravelShow show() {
+        return de.raindancer.core.RainsCore.isAvailable() ? de.raindancer.core.RainsCore.get().travelShow() : null;
+    }
+
+    /** Runs {@code play} against the show, and never lets a sound stop somebody travelling. */
+    private static void show(Player traveller, String what, java.util.function.Consumer<TravelShow> play) {
+        TravelShow show = show();
+        if (show == null) {
+            return;
+        }
+        try {
+            play.accept(show);
+        } catch (RuntimeException broken) {
+            log.warn("The {} effect for {} failed: {}", what, traveller.getName(), broken.toString());
+        }
+    }
+
+    private void departing(Player traveller, Trip trip) {
+        if (trip.isQuiet()) {
+            return;
+        }
+        show(traveller, "departure", show -> {
+            Location at = traveller.getLocation();
+            show.departed(traveller.getUniqueId(), at.getWorld().getName(), at.getX(), at.getY(), at.getZ());
+        });
+    }
+
+    /**
+     * Particles around somebody standing still for a teleport, until they leave or stop waiting.
+     *
+     * <p>Stops itself: it checks the departure every time it draws, so none of the five ways a warm-up
+     * ends has to remember to cancel it.
+     */
+    private void shimmer(Player traveller, Trip trip) {
+        TravelShow show = show();
+        if (show == null || trip.isQuiet()) {
+            return;
+        }
+        UUID who = traveller.getUniqueId();
+        Optional<String> particle;
+        de.raindancer.core.ui.effect.ParticleShape shape;
+        try {
+            particle = show.waitParticle(who);
+            shape = show.waitShape(who);
+        } catch (RuntimeException broken) {
+            log.warn("The waiting particles for {} failed: {}", traveller.getName(), broken.toString());
+            return;
+        }
+        if (particle.isEmpty()) {
+            return;
+        }
+        long[] drawn = {0};
+        Scheduling.entityTimer(plugin, traveller, 1L, SHIMMER_EVERY_TICKS, task -> {
+            if (!traveller.isOnline() || !departures.isLeaving(who)) {
+                task.cancel();
+                return;
+            }
+            de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), null, 2, shape,
+                    drawn[0]++, SHIMMER_RANGE, viewer -> true);
+        });
     }
 
     // ------------------------------------------------------------------------ what comes along

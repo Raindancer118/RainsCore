@@ -391,6 +391,14 @@ public interface RainsCore {
     Effects effects();
 
     /**
+     * The sound and particles of every teleport, whichever plugin's {@code Travel} sent it.
+     *
+     * <p>A cosmetics plugin registers {@link de.raindancer.core.world.teleport.TravelLooks} here so a
+     * player's choice follows them through homes, warps and teleport requests alike.
+     */
+    de.raindancer.core.world.teleport.TravelShow travelShow();
+
+    /**
      * Asking everybody — or a named few — a question, and counting the answers.
      *
      * <p>One ballot per person, changeable until the deadline, and a tie stays a tie. Also what a
