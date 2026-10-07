@@ -136,20 +136,20 @@ class PlayerTargetsNicknameTest {
     }
 
     @Test
-    @DisplayName("an offline player's nickname is not offered where only online players make sense")
-    void onlineSuggestionsSkipOffline() {
+    @DisplayName("an offline player's nickname is offered too — resolution always reaches the offline")
+    void onlineSuggestionsIncludeOffline() {
         nicknames.remember(UUID.nameUUIDFromBytes("gone".getBytes()), "Ghost");
 
-        assertThat(PlayerTargets.suggest(server, "gh")).isEmpty();
+        assertThat(PlayerTargets.suggest(server, "gh")).containsExactly("Ghost");
         assertThat(PlayerTargets.suggestKnown(server, "gh", who -> true)).containsExactly("Ghost");
     }
 
     @Test
-    @DisplayName("a hidden player is offered by neither name nor nickname")
-    void hiddenIsNotOffered() {
-        assertThat(PlayerTargets.suggest(server, "", who -> !who.equals(lilly)))
-                .doesNotContain("lillyyxoxo", "Lilly_Pad")
-                .contains("Sam");
+    @DisplayName("a hidden player is offered only the way an offline one is: after everybody visible")
+    void hiddenIsNotOfferedAsOnline() {
+        List<String> offered = PlayerTargets.suggest(server, "", who -> !who.equals(lilly));
+
+        assertThat(offered.indexOf("Sam")).isLessThan(offered.indexOf("Lilly_Pad"));
     }
 
     @Test

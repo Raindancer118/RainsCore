@@ -577,4 +577,14 @@ class IdentitiesTest {
             assertThat(clocked.isAnimated(BOB)).isFalse();
         }
     }
+
+    @Test
+    @DisplayName("painted: any text in a player's own name style, plain when they have none")
+    void painted() {
+        Identities fresh = new Identities(database());
+        assertThat(fresh.hasNameStyle(ALICE)).isFalse();
+        assertThat(PlainTextComponentSerializer.plainText().serialize(fresh.painted(ALICE, "@Alice")))
+                .isEqualTo("@Alice");
+        assertThat(fresh.painted(ALICE, "@Alice").color()).isNull();
+    }
 }

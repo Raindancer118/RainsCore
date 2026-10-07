@@ -185,6 +185,12 @@ public interface RainsCore {
     de.raindancer.core.ui.chat.PrefixService prefixes();
 
     /**
+     * {@code @Name} and {@code @Nickname} in every player's chat box, for everybody they could mention.
+     * Off until a chat plugin that renders mentions calls {@code enable(true)}.
+     */
+    de.raindancer.core.ui.chat.MentionCompletions mentionCompletions();
+
+    /**
      * Permissions this server has granted individuals, remembered across restarts.
      *
      * <p><b>Not a permissions plugin</b>, and not a replacement for one: no groups, no inheritance, no

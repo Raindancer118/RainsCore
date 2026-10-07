@@ -164,18 +164,90 @@ public final class PlayerTargets {
         return List.copyOf(players);
     }
 
-    /** The selectors, then every online name and nickname, that begin with what has been typed. */
+    /** The vanilla node that lets somebody use {@code @a} and the rest in a command at all. */
+    public static final String SELECTOR_NODE = "minecraft.command.selector";
+
+    /**
+     * Who {@code text} means: a selector, a real name, or a nickname — online <em>and</em> offline, with how
+     * it was understood. The one call a command should make; the others are shorthands of it.
+     *
+     * @param sender who typed it — a selector is parsed as them and needs {@link #SELECTOR_NODE}; null is the
+     *               server itself, which may use any
+     */
+    public static PlayerLookup lookup(Server server, CommandSender sender, String text) {
+        if (server == null || text == null || text.isBlank()) {
+            return PlayerLookup.none(text == null ? "" : text, PlayerLookup.Kind.NONE);
+        }
+        String typed = text.trim();
+        if (isSelector(typed)) {
+            if (sender != null && !sender.hasPermission(SELECTOR_NODE)) {
+                return PlayerLookup.none(typed, PlayerLookup.Kind.SELECTOR_REFUSED);
+            }
+            List<Entity> matched;
+            try {
+                matched = server.selectEntities(sender == null ? server.getConsoleSender() : sender, typed);
+            } catch (IllegalArgumentException malformed) {
+                return PlayerLookup.none(typed, PlayerLookup.Kind.SELECTOR_REFUSED);
+            }
+            Set<OfflinePlayer> players = new LinkedHashSet<>();
+            if (matched != null) {
+                for (Entity entity : matched) {
+                    if (entity instanceof Player player) {
+                        players.add(player);
+                    }
+                }
+            }
+            return new PlayerLookup(typed, PlayerLookup.Kind.SELECTOR, new ArrayList<>(players));
+        }
+        Player exact = server.getPlayerExact(typed);
+        if (exact != null) {
+            return new PlayerLookup(typed, PlayerLookup.Kind.NAME, List.of(exact));
+        }
+        OfflinePlayer known = server.getOfflinePlayerIfCached(typed);
+        if (known != null) {
+            return new PlayerLookup(typed, PlayerLookup.Kind.NAME, List.of(known));
+        }
+        Optional<UUID> owner = nicknameOwner(typed);
+        if (owner.isPresent()) {
+            Player here = server.getPlayer(owner.get());
+            return new PlayerLookup(typed, PlayerLookup.Kind.NICKNAME,
+                    List.of(here != null ? here : server.getOfflinePlayer(owner.get())));
+        }
+        return PlayerLookup.none(typed, PlayerLookup.Kind.NONE);
+    }
+
+    /** The one online player {@code text} means — a selector matching exactly one counts. */
+    public static Optional<Player> online(Server server, CommandSender sender, String text) {
+        return lookup(server, sender, text).singleOnline();
+    }
+
+    /** The one player {@code text} means, online or not — a selector matching exactly one counts. */
+    public static Optional<OfflinePlayer> find(Server server, CommandSender sender, String text) {
+        return lookup(server, sender, text).single();
+    }
+
+    /** Selectors, then every name and nickname — online first, then offline — beginning with what was typed. */
     public static List<String> suggest(Server server, String typed) {
-        return suggest(server, typed, who -> true);
+        return suggest(server, null, typed, who -> true);
+    }
+
+    /** The same, with only the online players {@code visible} lets through offered as online. */
+    public static List<String> suggest(Server server, String typed, Predicate<Player> visible) {
+        return suggest(server, null, typed, visible);
     }
 
     /**
-     * The same, of only the online players {@code visible} lets through — so a vanished player is
-     * given away neither by name nor by nickname.
+     * Everything that can be typed where a player is wanted: the selectors (only to a sender who may use
+     * them), every visible online name and their nicknames, then everybody offline by name and nickname.
+     * Offline is always offered: a command can then say "they are offline" rather than the player having
+     * to remember how a name they cannot see was spelled.
      */
-    public static List<String> suggest(Server server, String typed, Predicate<Player> visible) {
+    public static List<String> suggest(Server server, CommandSender sender, String typed, Predicate<Player> visible) {
         String start = typed == null ? "" : typed.toLowerCase(Locale.ROOT);
-        Set<String> names = new LinkedHashSet<>(SELECTORS);
+        Set<String> names = new LinkedHashSet<>();
+        if (sender == null || sender.hasPermission(SELECTOR_NODE)) {
+            names.addAll(SELECTORS);
+        }
         Set<UUID> shown = new java.util.HashSet<>();
         if (server != null) {
             for (Player player : server.getOnlinePlayers()) {
@@ -189,14 +261,14 @@ public final class PlayerTargets {
         if (directory != null) {
             names.addAll(directory.suggest(start, shown::contains));
         }
-        return cap(names.stream()
-                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(start))
-                .toList());
+        List<String> online = names.stream().filter(name -> name.toLowerCase(Locale.ROOT).startsWith(start)).toList();
+        Set<String> all = new LinkedHashSet<>(online);
+        all.addAll(suggestKnown(server, typed, who -> false));
+        return cap(new ArrayList<>(all));
     }
 
     /**
-     * Names and nicknames of everybody the server knows — online first — for commands that also act
-     * on somebody who is not here. No selectors: they only ever match the online.
+     * Names and nicknames of everybody the server knows — online first — without selectors.
      *
      * @param visibleOnline which online players may be offered as online; the rest are still offered
      *                      as the offline players everybody else would see them as

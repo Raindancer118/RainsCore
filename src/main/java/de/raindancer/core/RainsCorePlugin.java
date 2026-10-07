@@ -273,6 +273,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Effects effects;
     private Votes votes;
     private Vanish vanish;
+    private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
     private PlayerPowers powers;
     private PlayerAdmin players;
     private de.raindancer.core.moderation.players.PlayerBody bodies;
@@ -581,6 +582,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new PlayerPowerListener(powers), this);
 
         vanish = new Vanish(new BukkitVanishSink(this));
+        mentionCompletions = new de.raindancer.core.ui.chat.MentionCompletions(this, getServer(), vanish, nicknames);
         nametags = new de.raindancer.core.ui.identity.Nametags(this, identities, vanish);
         getServer().getPluginManager().registerEvents(nametags, this);
         getServer().getPluginManager().registerEvents(
@@ -1188,6 +1190,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public de.raindancer.core.ui.chat.MentionCompletions mentionCompletions() {
+        return mentionCompletions;
+    }
+
+    @Override
     public Grants grants() {
         return grants;
     }
@@ -1496,6 +1503,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         offerOwnerHint(event.getPlayer());
+        if (mentionCompletions != null) {
+            mentionCompletions.refresh();
+        }
         if (!settings.current().auditEnabled()) {
             return;
         }
@@ -1562,6 +1572,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        if (mentionCompletions != null) {
+            mentionCompletions.forget(event.getPlayer().getUniqueId());
+        }
         Player player = event.getPlayer();
         if (settings.current().auditEnabled()) {
             audit.record(AuditEntry.of("player", "quit")

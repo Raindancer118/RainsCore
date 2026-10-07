@@ -251,6 +251,19 @@ public final class Identities {
         return NameStyle.parse(identityOf(player).colour());
     }
 
+    /** Whether this player's name is painted at all — a colour, a gradient or a decoration. */
+    public boolean hasNameStyle(UUID player) {
+        return !nameStyle(player).isEmpty();
+    }
+
+    /**
+     * {@code text} painted the way this player's name is — for an @-mention of them, a name in a list, a
+     * signature. Plain text when they have no style. Never markup: {@code text} is shown as written.
+     */
+    public Component painted(UUID player, String text) {
+        return colouredName(text, identityOf(player).colour());
+    }
+
     /** Everybody who has anything set. */
     public Set<UUID> known() {
         return Set.copyOf(identities.keySet());
