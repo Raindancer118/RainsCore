@@ -135,7 +135,7 @@ public final class PrefixMenu extends Menu {
     private void save(UnaryOperator<PrefixDesign> edit) {
         if (!service.change(edit)) {
             viewer.sendMessage(Messages.spoken("prefix-design.not-saved",
-                    "<red>prefix.yml could not be written, so this lasts until the next restart or reload. Enjoy it while it lasts."));
+                    "<red>prefix.yml could not be written, so this lasts until the next restart or reload."));
         }
     }
 

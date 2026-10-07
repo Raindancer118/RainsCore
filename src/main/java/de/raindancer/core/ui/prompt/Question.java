@@ -162,14 +162,14 @@ public final class Question<T> {
             boolean asked = prompts.ask(player, owner, wait, typed -> answered(typed, triesLeft), this::stopped);
             if (!asked) {
                 say.accept(words("prompt.busy",
-                        "<yellow>Something else is already waiting for your answer. Answer or cancel that first, one thing at a time."));
+                        "<yellow>Something else is already waiting for your answer — answer or cancel that first."));
                 return false;
             }
             if (!promptMarkup.isEmpty()) {
                 say.accept(Text.render("<gold>" + promptMarkup));
             }
             say.accept(words("prompt.how",
-                    "<dark_gray>Type your answer in chat, or <white>cancel</white>. The clock is ticking: <seconds>s to answer.",
+                    "<dark_gray>Type your answer in chat — or <white>cancel</white>. <seconds>s to answer.",
                     "seconds", wait.toSeconds()));
             if (!suggestions.isEmpty()) {
                 say.accept(suggestionRow());
@@ -190,12 +190,12 @@ public final class Question<T> {
             }
             int left = triesLeft - 1;
             if (left <= 0) {
-                say.accept(words("prompt.gave-up", "<red><problem> That was the last try; nothing was changed. Better luck next time.",
+                say.accept(words("prompt.gave-up", "<red><problem> That was the last try; nothing was changed.",
                         "problem", parsed.problem()));
                 onCancel.run();
                 return;
             }
-            say.accept(words("prompt.again", "<red><problem> <gray>Try again, <left> <tries> left. No pressure.",
+            say.accept(words("prompt.again", "<red><problem> <gray>Try again — <left> <tries> left.",
                     "problem", parsed.problem(), "left", left, "tries", left == 1 ? "try" : "tries"));
             ask(left);
         }
@@ -204,7 +204,7 @@ public final class Question<T> {
             boolean timedOut = clock.getAsLong() >= deadline;
             say.accept(timedOut
                     ? words("prompt.timed-out", "<gray>No answer came, so nothing was changed. The silence was deafening.")
-                    : words("prompt.cancelled", "<gray>Cancelled. Nothing was changed, nobody is judging."));
+                    : words("prompt.cancelled", "<gray>Cancelled — nothing was changed."));
             onCancel.run();
         }
 

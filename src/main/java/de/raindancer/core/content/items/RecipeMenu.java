@@ -213,7 +213,7 @@ public final class RecipeMenu extends Menu {
         // after a restart. Claiming otherwise would send somebody to a crafting table to be disappointed.
         if (cropped.isEmpty()) {
             viewer.sendMessage(Messages.spoken("items.no-recipe",
-                    "<yellow><item> has no recipe any more. Uncraftable, like a good mystery.", "item", item.id()));
+                    "<yellow><item> has no recipe any more.", "item", item.id()));
         } else {
             tell("<green>✔ Recipe saved. <gray>It can be crafted after the next restart.</gray>");
         }

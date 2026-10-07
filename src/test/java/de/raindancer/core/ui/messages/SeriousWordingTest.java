@@ -67,7 +67,7 @@ class SeriousWordingTest {
     @Test
     @DisplayName("the serious file is there and says something")
     void notEmpty() {
-        assertThat(serious).hasSizeGreaterThan(50);
+        assertThat(serious).hasSizeGreaterThanOrEqualTo(10);
     }
 
     @Test

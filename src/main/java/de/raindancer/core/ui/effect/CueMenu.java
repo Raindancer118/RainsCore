@@ -210,7 +210,7 @@ public final class CueMenu extends Menu {
                     if (sounds) {
                         SoundSequence parsed = SoundSequence.parseAndExpand(written);
                         if (parsed.isSilent()) {
-                            viewer.sendMessage(Messages.spoken("cues.not-a-sound", "<red>Nothing in that could be read as a sound, so nothing changed. Silence it is."));
+                            viewer.sendMessage(Messages.spoken("cues.not-a-sound", "<red>Nothing in that could be read as a sound, so nothing changed."));
                             open();
                             return;
                         }
@@ -218,7 +218,7 @@ public final class CueMenu extends Menu {
                     } else {
                         ParticleSequence parsed = ParticleSequence.parse(written);
                         if (parsed.isNothing()) {
-                            viewer.sendMessage(Messages.spoken("cues.not-a-particle", "<red>Nothing in that could be read as a particle, so nothing changed. Very minimalist."));
+                            viewer.sendMessage(Messages.spoken("cues.not-a-particle", "<red>Nothing in that could be read as a particle, so nothing changed."));
                             open();
                             return;
                         }
@@ -232,7 +232,7 @@ public final class CueMenu extends Menu {
         if (!asked) {
             // Somebody else is already waiting on this player's next line; told to type here, it
             // would have gone to public chat.
-            viewer.sendMessage(Messages.spoken("cues.busy", "<red>You are already being asked something else — answer or cancel that first. One question at a time."));
+            viewer.sendMessage(Messages.spoken("cues.busy", "<red>You are already being asked something else — answer or cancel that first."));
             open();
         }
     }

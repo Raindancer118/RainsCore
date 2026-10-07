@@ -80,7 +80,7 @@ public final class PrefixCommand implements BasicCommand {
                     default -> null;
                 };
                 if (mode == null) {
-                    say(sender, Messages.spoken("prefix-design.which-mode", "<red>Either <white>shared</white> or <white>per-plugin</white>. There is no secret third option."));
+                    say(sender, Messages.spoken("prefix-design.which-mode", "<red>Either <white>shared</white> or <white>per-plugin</white>."));
                     return;
                 }
                 apply(sender, "mode " + rest, d -> d.withMode(mode));
@@ -95,7 +95,7 @@ public final class PrefixCommand implements BasicCommand {
             case "style" -> {
                 NameStyle style = NameStyle.parse(rest);
                 if (!rest.isBlank() && style.isEmpty()) {
-                    say(sender, Messages.spoken("prefix-design.no-style", "<red>No colour or decoration in that, which rather defeats the point. Like <white>#ff8800,#ffee00|bold</white>."));
+                    say(sender, Messages.spoken("prefix-design.no-style", "<red>No colour or decoration in that. Like <white>#ff8800,#ffee00|bold</white>."));
                     return;
                 }
                 apply(sender, "style " + rest, d -> d.withStyle(style));
@@ -113,7 +113,7 @@ public final class PrefixCommand implements BasicCommand {
             case "reload" -> {
                 prefixes.reload();
                 say(sender, prefixes.isFileBroken()
-                        ? Messages.spoken("prefix-design.file-broken", "<red>prefix.yml is broken; the defaults are used until it is fixed. The console knows where it hurts.")
+                        ? Messages.spoken("prefix-design.file-broken", "<red>prefix.yml is broken; the defaults are used until it is fixed. The console says where.")
                         : MINI.deserialize("<green>prefix.yml read again."));
                 preview(sender);
             }
@@ -157,7 +157,7 @@ public final class PrefixCommand implements BasicCommand {
         audit(sender, what);
         say(sender, saved ? MINI.deserialize("<green>Prefix changed.") : Messages.spoken("prefix-design.changed-not-saved",
                 "<yellow>Prefix changed, but prefix.yml could not be written — this lasts until the next restart or "
-                        + "reload. Enjoy it while it lasts."));
+                        + "reload."));
         preview(sender);
     }
 
