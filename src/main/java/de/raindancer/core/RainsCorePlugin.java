@@ -347,6 +347,21 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // costs the owner the chance to reword the new lines rather than the lines themselves.
         messages = new Messages(getDataFolder().toPath().resolve("messages.yml"));
         messages.mergeMissing(getResource("messages.yml"));
+        // Every earlier wording of messages.yml (listed in the index), so a server's untouched lines
+        // upgrade instead of keeping the words of whichever version first wrote its file. When the
+        // wording changes again, copy the old file in and add it to the index.
+        try (java.io.InputStream index = getResource("messages-retired/index.txt")) {
+            if (index != null) {
+                for (String name : new String(index.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                        .split("\\R")) {
+                    if (!name.isBlank()) {
+                        messages.retired(getResource("messages-retired/" + name.strip()));
+                    }
+                }
+            }
+        } catch (java.io.IOException unreadable) {
+            de.raindancer.core.platform.log.Log.of("core").warn("The list of older message wordings could not be read: {}", unreadable.toString());
+        }
         messages.load(getResource("messages.yml"));
         if (!messages.problems().isEmpty()) {
             log.warn("messages.yml: {}", String.join("; ", messages.problems()));

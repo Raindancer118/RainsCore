@@ -34,18 +34,18 @@ punishment:
     heading: "<red><bold>You are banned from this server.</bold>"
     # <reason> is what the moderator typed.
     reason: "<gray><reason>"
-    permanent: "<dark_gray>This ban does not expire. Not even for good behaviour."
+    permanent: "<dark_gray>This ban does not expire."
     # <time> reads like "2 days, 4 hours".
-    temporary: "<dark_gray>Time left: <time>. Good time to reflect."
+    temporary: "<dark_gray>Time left: <time>"
 
   # One line in chat when a muted player tries to talk.
   # <reason> is the moderator's; <time> only appears in the temporary version.
-  muted: "<red>You are muted, so the chat stays blissfully quiet: <gray><reason>"
-  muted-temporary: "<red>You are muted, so the chat stays blissfully quiet: <gray><reason> <dark_gray>(<time> left)"
+  muted: "<red>You are muted: <gray><reason>"
+  muted-temporary: "<red>You are muted: <gray><reason> <dark_gray>(<time> left)"
 
   # And when a frozen player tries to build.
-  frozen: "<red>Hands off the blocks, you are frozen: <gray><reason>"
-  frozen-temporary: "<red>Hands off the blocks, you are frozen: <gray><reason> <dark_gray>(<time> left)"
+  frozen: "<red>You cannot build right now: <gray><reason>"
+  frozen-temporary: "<red>You cannot build right now: <gray><reason> <dark_gray>(<time> left)"
 
   # Shown under the ban reason, if the owner set an appeal address in the
   # settings. Left out entirely when they have not.
@@ -61,46 +61,36 @@ punishment:
 
 # ────────────────────────────────────────────────────── clickable chat buttons
 button:
-  not-yours: "<red>That button belongs to somebody else. Hands off."
-  already-answered: "<yellow>You already answered that. No take-backs."
-  no-longer-offered: "<yellow>That offer has expired. Gone, like free diamonds."
-  failed: "<red>That did not work. The server has written down why, and it is not smug about it."
-  not-a-player: "<red>Only a player can click a button. Consoles have to watch."
-  not-typed: "<yellow>That is not something to type. Try clicking it instead."
+  not-yours: "<red>That is not your button."
+  already-answered: "<yellow>You have already answered that."
+  no-longer-offered: "<yellow>That is no longer on offer."
+  failed: "<red>That did not work. The server has written down why."
+  not-a-player: "<red>Only a player can click a button."
+  not-typed: "<yellow>That is not something to type."
 
 # ─────────────────────────────────────────────────────────── the settings menu
 settings:
   # <name> is the setting, <value> what it became.
-  changed: "<green><name> is now <value>. Done and dusted."
-  refused: "<red><value> is not something <name> can be. Nice try, though."
-  finish-first: "<gray>Finish what you were asked first. One question at a time."
-  gone: "<gray>That setting has left the building."
-  # A change that is in effect but could not be written, because the file has a mistake in it.
-  not-saved: "<yellow>Changed for now, but <file> could not be saved — it has a mistake in it (the console says where). Fix it and the next change is kept; until then a restart undoes this."
-  # /settings <name> for a name nothing has. <name> is what was typed.
-  unknown: "<red>Nothing on this server is called <name>. Believe us, we looked."
-  did-you-mean: "<gray>Did you mean "
-  look-for-it: "<gray>Or hunt for it with <white>/settings search</white> and a word."
-  # Searching the settings. <query> is what was searched for.
-  search-title: "Search the settings"
-  search-none: "<gray>No setting mentions <query>. Try a shorter word, or a less exotic one."
-  search-found: "<gray><count> settings mention <query>, so you are in luck:"
+  changed: "<green><name> is now <value>."
+  refused: "<red><value> is not something <name> can be."
+  finish-first: "<gray>Finish what you were asked first."
+  gone: "<gray>That setting is not there any more."
 
 # ─────────────────────────────────────── looking inside somebody's inventory
 invsee:
   # What a moderator is told when opening one does not work.
-  opened: "<gray>Having a good look inside <who>."
-  yourself: "<gray>Your own inventory is a key rather than a menu. Check your pockets instead."
-  being-edited: "<yellow>Somebody else is already rummaging through that inventory. Wait your turn."
-  never-seen: "<red>This server has never seen that player. Are you sure they exist?"
-  unreadable: "<red>Their inventory could not be read. The log says why."
-  not-allowed: "<red>You may not do that. Nosy, though."
-  switched-off: "<red>Looking inside inventories is switched off on this server. Privacy wins today."
+  opened: "<gray>Looking inside <who>."
+  yourself: "<gray>Your own inventory is a key rather than a menu."
+  being-edited: "<yellow>Somebody else is editing that inventory."
+  never-seen: "<red>This server has never seen that player."
+  unreadable: "<red>Their inventory could not be read — the log says why."
+  not-allowed: "<red>You may not do that."
+  switched-off: "<red>Looking inside inventories is switched off on this server."
 
   # When an offline edit could not be saved. Nothing was changed either way.
-  not-saved: "<red>Their inventory was not saved. Nothing was changed, and what you added is back with you."
+  not-saved: "<red>Their inventory was not saved — nothing was changed, and what you added is back with you."
   # When its owner logged in before the window was closed. The player wins.
-  owner-returned: "<gold><who> logged in before you closed the window, so your changes were not saved and their file is untouched. Open their inventory again to change it live."
+  owner-returned: "<gold><who> logged in before you closed the window, so your changes were not saved — their file is untouched. Open their inventory again to change it live."
   # Said to anybody else who was watching when that happened.
   owner-returned-watcher: "<gray>They just logged in — the window was showing their saved file, which is no longer where their things are. Open it again to see them live."
 
@@ -146,7 +136,6 @@ menu:
   back-to: "<gray>Back to <where>"
   home: "<gray>Main menu"
   close: "<gray>Close"
-  close-lore: "<gray>Shut this menu. It will not be offended"
   help: "<aqua>What is this?"
   # A button somebody may not use is shown greyed with the reason.
   locked: "<dark_gray><reason>"
@@ -160,20 +149,11 @@ menu:
 combat:
   # Told to the attacker, at most once every few seconds. The person being
   # protected is not told anything: they did not do anything.
-  no-pvp: "<red>Players cannot hurt each other here. Keep it friendly."
-  no-pve: "<red>Fighting creatures is off here. They get the day off."
+  no-pvp: "<red>Players cannot hurt each other here."
+  no-pve: "<red>Fighting creatures is off here."
   # When something else refused — a claim, an arena. Deliberately vague,
   # because Core does not know which plugin said no or why.
-  protected: "<red>Something is protecting that. Do not ask us what."
-  # A rule that allows this fight with bare fists only. A plugin can say this its own way.
-  fists-only: "<red>Fists only here. Put down what you are holding, tough guy."
-
-navigation:
-  # world.visual.Navigator — walking somebody to a point. A plugin can say these its own way.
-  started: "<green>Navigating to <white><target></white>. Follow the trail, it knows the way."
-  distance: "<yellow><target> <gray>— <white><blocks></white> blocks"
-  other-world: "<yellow><target> <gray>is in another world."
-  arrived: "<green>You have reached <white><target></white>. Ta-da."
+  protected: "<red>Something is protecting that."
 
 # ─────────────────────────────────────────────────────────── custom items
 #
@@ -184,15 +164,15 @@ navigation:
 #  deliberately: it costs nothing, so it should read as a miss rather than as
 #  a refusal.
 items:
-  cooling-down: "<yellow><item> is not ready yet. Give it <white><seconds>s</white>."
-  used-up: "<yellow><item> has nothing left in it. Not a drop left."
+  cooling-down: "<yellow><item> is not ready yet — <white><seconds>s</white>."
+  used-up: "<yellow><item> has nothing left in it."
   # The ability threw. The reason is in the log with its stack trace; the
   # player gets a sentence rather than an item that silently does nothing.
-  went-wrong: "<red><item> did not work. Somebody should look at the log, preferably not you."
+  went-wrong: "<red><item> did not work. Somebody should look at the log."
 
 # ─────────────────────────────────────────────────────────────── the tablist
 tablist:
-  nobody-on: "<dark_gray>nobody is on. Very exclusive."
+  nobody-on: "<dark_gray>nobody is on"
 
 # ─────────────────────────────────────────────── world protection: land
 #
@@ -208,21 +188,21 @@ land:
   # Said on the action bar when somebody is refused. Throttled to once every
   # second and a half, because holding a mouse button down produces one of
   # these per tick.
-  denied: "<red>You may not <white><permission></white> in <white><claim></white>. Not today."
-  pvp-refused: "<red>Fighting is not allowed in <white><claim></white>. Take it outside."
-  potions-refused: "<red>Potions are not allowed in <white><claim></white>. Keep the chemistry set at home."
-  redstone-refused: "<red>Redstone does not work in <white><claim></white>. The wiring is on strike."
-  riptide-refused: "<red>Riptide is not allowed in <white><claim></white>. No flying trident tours here."
-  leads-refused: "<red>You may not lead animals about in <white><claim></white>. They like it where they are."
-  boats-refused: "<red>Boats and minecarts may not be put down in <white><claim></white>. No parking."
-  walk-in-refused: "<red>You may not go into <white><claim></white>. The door is metaphorical, the no is not."
-  hit-mobs-refused: "<red>You may not hurt the animals in <white><claim></white>. They have friends here."
-  hit-monsters-refused: "<red>You may not fight monsters in <white><claim></white>. Even they get a quiet life."
-  interact-mobs-refused: "<red>You may not handle the animals in <white><claim></white>. Look, do not touch."
+  denied: "<red>You may not <white><permission></white> in <white><claim></white>."
+  pvp-refused: "<red>Fighting is not allowed in <white><claim></white>."
+  potions-refused: "<red>Potions are not allowed in <white><claim></white>."
+  redstone-refused: "<red>Redstone does not work in <white><claim></white>."
+  riptide-refused: "<red>Riptide is not allowed in <white><claim></white>."
+  leads-refused: "<red>You may not lead animals about in <white><claim></white>."
+  boats-refused: "<red>Boats and minecarts may not be put down in <white><claim></white>."
+  walk-in-refused: "<red>You may not go into <white><claim></white>."
+  hit-mobs-refused: "<red>You may not hurt the animals in <white><claim></white>."
+  hit-monsters-refused: "<red>You may not fight monsters in <white><claim></white>."
+  interact-mobs-refused: "<red>You may not handle the animals in <white><claim></white>."
 
-  bypass-reminder: "<gold>Your protection bypass has been on for a while. <gray>Still need your superpowers?"
-  bypass-reminder-extended: "<gray>Alright, asked again in ten minutes. No pressure."
-  bypass-reminder-silenced: "<gray>Fine, we will stop nagging until you toggle bypass off and back on."
+  bypass-reminder: "<gold>Your protection bypass has been on for a while. <gray>Still working?"
+  bypass-reminder-extended: "<gray>Alright — asked again in ten minutes."
+  bypass-reminder-silenced: "<gray>Won't ask again until you toggle bypass off and back on."
 
   audience:
     owner:
@@ -307,18 +287,6 @@ land:
     item-pickup: {name: "Item pickup", description: "Pick up dropped items"}
     trade: {name: "Villager trading", description: "Trade with villagers"}
 
-
-# ──────────────────────────────────────────────────────── questions typed into chat
-# <problem> is what was wrong with the answer, <left> how many tries remain.
-prompt:
-  how: "<dark_gray>Type your answer in chat, or <white>cancel</white>. The clock is ticking: <seconds>s to answer."
-  again: "<red><problem> <gray>Try again, <left> <tries> left. No pressure."
-  gave-up: "<red><problem> That was the last try; nothing was changed. Better luck next time."
-  timed-out: "<gray>No answer came, so nothing was changed. The silence was deafening."
-  cancelled: "<gray>Cancelled. Nothing was changed, nobody is judging."
-  busy: "<yellow>Something else is already waiting for your answer. Answer or cancel that first, one thing at a time."
-  suggestions: "<dark_gray>Click one: "
-
 # ─────────────────────────────────────────────────────────────────────────────
 #  Nothing else here on purpose.
 #
@@ -332,4 +300,3 @@ prompt:
 #  a message file listing lines that never appear is worse than a short one,
 #  because somebody translates them and then wonders why nothing changed.
 # ─────────────────────────────────────────────────────────────────────────────
-

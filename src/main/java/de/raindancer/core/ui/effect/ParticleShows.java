@@ -73,6 +73,12 @@ public final class ParticleShows {
      */
     public static void preview(Plugin plugin, Player viewer, String particle, Integer colour, int count,
                                ParticleShape shape, int seconds) {
+        preview(plugin, viewer, particle, colour, count, shape, seconds, 1.0);
+    }
+
+    /** The same, with the shape moving {@code speed} times as fast as normal. */
+    public static void preview(Plugin plugin, Player viewer, String particle, Integer colour, int count,
+                               ParticleShape shape, int seconds, double speed) {
         Particle found = particleOf(particle);
         if (found == null || !canShow(particle)) {
             return;
@@ -87,7 +93,8 @@ public final class ParticleShows {
             }
             Location eye = viewer.getEyeLocation();
             Location feet = eye.clone().add(eye.getDirection().setY(0).normalize().multiply(3)).add(0, -1.6, 0);
-            for (double[] offset : shape.offsets(drawn[0], eye.getYaw() + 180)) {
+            long frame = (long) Math.floor(drawn[0] * Math.max(0.1, speed));
+            for (double[] offset : shape.offsets(frame, eye.getYaw() + 180)) {
                 viewer.spawnParticle(found, feet.getX() + offset[0], feet.getY() + offset[1],
                         feet.getZ() + offset[2], count, 0.05, 0.05, 0.05, 0, data);
             }

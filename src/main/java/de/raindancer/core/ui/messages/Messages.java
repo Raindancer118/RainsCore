@@ -116,6 +116,35 @@ public final class Messages {
         this.file = file;
     }
 
+    /**
+     * Wording earlier versions shipped, key by key: a line in the owner's file that still reads exactly
+     * like one of these was never theirs, and takes this version's wording instead.
+     */
+    private final Map<String, java.util.Set<Object>> retired = new ConcurrentHashMap<>();
+
+    /**
+     * Teaches this an older version's bundled messages.yml, so the lines a server still has unchanged
+     * from it upgrade to the current wording on the next {@link #load}. The file on disk is not
+     * rewritten — whatever the owner changed is theirs, and stays exactly as they left it.
+     *
+     * @param olderBundled an earlier release's own messages.yml; closed here
+     */
+    public void retired(InputStream olderBundled) {
+        if (olderBundled == null) {
+            return;
+        }
+        Map<String, Object> old = new LinkedHashMap<>();
+        try (InputStream stream = olderBundled) {
+            flatten(YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8)),
+                    "", old);
+        } catch (IOException | RuntimeException broken) {
+            log.warn("An older version's messages could not be read ({}); lines from it stay as they are.",
+                    broken.getMessage());
+            return;
+        }
+        old.forEach((key, value) -> retired.computeIfAbsent(key, any -> ConcurrentHashMap.newKeySet()).add(value));
+    }
+
     // ---------------------------------------------------------------------------- loading
 
     /**
@@ -159,6 +188,23 @@ public final class Messages {
                         file.getFileName(), broken.getMessage());
                 owner.clear();
             }
+        }
+        // A line still exactly as an older version shipped it is ours, not theirs: it takes this
+        // version's wording. Without this, a server keeps the wording of whatever release first wrote
+        // its file, for ever.
+        int upgraded = 0;
+        for (var line : new ArrayList<>(owner.entrySet())) {
+            Object current = shipped.get(line.getKey());
+            java.util.Set<Object> old = retired.get(line.getKey());
+            if (current != null && old != null && old.contains(line.getValue())
+                    && !current.equals(line.getValue())) {
+                owner.remove(line.getKey());
+                upgraded++;
+            }
+        }
+        if (upgraded > 0) {
+            log.info("{} message(s) were still as an older version wrote them and now use this "
+                    + "version's wording; lines you changed are untouched.", upgraded);
         }
         theirs = Map.copyOf(owner);
 
