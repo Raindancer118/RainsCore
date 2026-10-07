@@ -209,7 +209,7 @@ public final class CueMenu extends Menu {
                     if (sounds) {
                         SoundSequence parsed = SoundSequence.parseAndExpand(written);
                         if (parsed.isSilent()) {
-                            tell("<red>Nothing in that could be read as a sound, so nothing changed.");
+                            tell("<red>Nothing in that could be read as a sound, so nothing changed. Silence it is.");
                             open();
                             return;
                         }
@@ -217,7 +217,7 @@ public final class CueMenu extends Menu {
                     } else {
                         ParticleSequence parsed = ParticleSequence.parse(written);
                         if (parsed.isNothing()) {
-                            tell("<red>Nothing in that could be read as a particle, so nothing changed.");
+                            tell("<red>Nothing in that could be read as a particle, so nothing changed. Very minimalist.");
                             open();
                             return;
                         }
@@ -231,7 +231,7 @@ public final class CueMenu extends Menu {
         if (!asked) {
             // Somebody else is already waiting on this player's next line; told to type here, it
             // would have gone to public chat.
-            tell("<red>You are already being asked something else — answer or cancel that first.");
+            tell("<red>You are already being asked something else — answer or cancel that first. One question at a time.");
             open();
         }
     }

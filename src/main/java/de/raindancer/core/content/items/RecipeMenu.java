@@ -211,7 +211,7 @@ public final class RecipeMenu extends Menu {
         // Named honestly: Bukkit registers recipes at start-up, so a changed one is stored now and crafted
         // after a restart. Claiming otherwise would send somebody to a crafting table to be disappointed.
         tell(cropped.isEmpty()
-                ? "<yellow>" + item.id() + " has no recipe any more."
+                ? "<yellow>" + item.id() + " has no recipe any more. Uncraftable, like a good mystery."
                 : "<green>✔ Recipe saved. <gray>It can be crafted after the next restart.</gray>");
         backToWhoeverOpenedThis();
     }

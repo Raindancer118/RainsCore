@@ -79,7 +79,7 @@ public final class PrefixCommand implements BasicCommand {
                     default -> null;
                 };
                 if (mode == null) {
-                    say(sender, "<red>Either <white>shared</white> or <white>per-plugin</white>.");
+                    say(sender, "<red>Either <white>shared</white> or <white>per-plugin</white>. There is no secret third option.");
                     return;
                 }
                 apply(sender, "mode " + rest, d -> d.withMode(mode));
@@ -94,7 +94,7 @@ public final class PrefixCommand implements BasicCommand {
             case "style" -> {
                 NameStyle style = NameStyle.parse(rest);
                 if (!rest.isBlank() && style.isEmpty()) {
-                    say(sender, "<red>No colour or decoration in that. Like <white>#ff8800,#ffee00|bold</white>.");
+                    say(sender, "<red>No colour or decoration in that, which rather defeats the point. Like <white>#ff8800,#ffee00|bold</white>.");
                     return;
                 }
                 apply(sender, "style " + rest, d -> d.withStyle(style));
@@ -112,7 +112,7 @@ public final class PrefixCommand implements BasicCommand {
             case "reload" -> {
                 prefixes.reload();
                 say(sender, prefixes.isFileBroken()
-                        ? "<red>prefix.yml is broken; the defaults are used until it is fixed."
+                        ? "<red>prefix.yml is broken; the defaults are used until it is fixed. The console knows where it hurts."
                         : "<green>prefix.yml read again.");
                 preview(sender);
             }
@@ -155,7 +155,7 @@ public final class PrefixCommand implements BasicCommand {
         boolean saved = service.get().change(change);
         audit(sender, what);
         say(sender, saved ? "<green>Prefix changed." : "<yellow>Prefix changed, but prefix.yml could not be written — "
-                + "this lasts until the next restart or reload.");
+                + "this lasts until the next restart or reload. Enjoy it while it lasts.");
         preview(sender);
     }
 
