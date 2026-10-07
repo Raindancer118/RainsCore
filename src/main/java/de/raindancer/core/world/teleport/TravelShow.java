@@ -30,11 +30,21 @@ public final class TravelShow {
     private static final LogChannel log = Log.of("travel");
 
     private final Effects effects;
+    private final java.util.function.Predicate<UUID> hidden;
     private volatile TravelLooks looks = TravelLooks.SERVERS;
     private volatile boolean complained;
 
     public TravelShow(Effects effects) {
+        this(effects, who -> false);
+    }
+
+    /**
+     * @param hidden who is vanished. Their teleports are silent and bare: a sound where they stood or
+     *               landed, or particles around an empty spot, tells everybody nearby they are there
+     */
+    public TravelShow(Effects effects, java.util.function.Predicate<UUID> hidden) {
         this.effects = effects;
+        this.hidden = hidden == null ? who -> false : hidden;
     }
 
     /** Where travellers' own choices come from. One source at a time; the last to register wins. */
@@ -50,12 +60,18 @@ public final class TravelShow {
     }
 
     public void departed(UUID traveller, String world, double x, double y, double z) {
+        if (hidden.test(traveller)) {
+            return;
+        }
         TravelLook look = lookFor(traveller);
         Effect server = effects.boundTo(Cues.TELEPORT_DEPART).orElse(Effect.silence());
         effects.playAt(world, x, y, z, look.depart() == null ? server : withSound(server, look.depart()));
     }
 
     public void arrived(UUID traveller, String world, double x, double y, double z) {
+        if (hidden.test(traveller)) {
+            return;
+        }
         TravelLook look = lookFor(traveller);
         Effect server = effects.boundTo(Cues.TELEPORT).orElse(Effect.silence());
         effects.playAt(world, x, y, z, look.arrive() == null ? server : withSound(server, look.arrive()));
@@ -63,7 +79,7 @@ public final class TravelShow {
 
     /** The particle drawn while they wait, or empty for none. */
     public Optional<String> waitParticle(UUID traveller) {
-        if (!effects.isEnabled()) {
+        if (!effects.isEnabled() || hidden.test(traveller)) {
             return Optional.empty();
         }
         String chosen = lookFor(traveller).waitParticle();

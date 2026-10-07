@@ -141,4 +141,18 @@ class TravelShowTest {
         });
         assertThat(show.waitParticle(BO)).contains("PORTAL");
     }
+
+    @Test
+    @DisplayName("a vanished traveller makes no sound and no particles: either would tell everybody nearby they are there")
+    void vanishedIsSilent() {
+        TravelShow hiding = new TravelShow(effects, who -> who.equals(BO));
+        hiding.looks(who -> new TravelLook(new SoundCue("block.bell.use", 1f, 1f), null, "HEART", null));
+        hiding.departed(BO, "w", 0, 0, 0);
+        hiding.arrived(BO, "w", 0, 0, 0);
+        assertThat(heard).isEmpty();
+        assertThat(hiding.waitParticle(BO)).isEmpty();
+
+        hiding.departed(CY, "w", 0, 0, 0);
+        assertThat(heard).containsExactly("w:block.bell.use");
+    }
 }

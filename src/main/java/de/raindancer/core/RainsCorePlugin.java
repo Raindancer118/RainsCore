@@ -570,7 +570,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         new SettingsChatInput(this, navigation, chat, chat.brand(), prompts);
 
         effects = new Effects(new BukkitEffectSink(this), System::currentTimeMillis);
-        travelShow = new de.raindancer.core.world.teleport.TravelShow(effects);
+        // Asked through the field at teleport time: vanish is built later in onEnable than this.
+        travelShow = new de.raindancer.core.world.teleport.TravelShow(effects,
+                who -> vanish != null && vanish.isVanished(who));
         // Without this every '>delay' of a layered cue played at once. Waited out off-thread; the sink
         // then plays it on the thread that owns the player or the place.
         effects.delayedPlaybackVia((millis, what) ->
