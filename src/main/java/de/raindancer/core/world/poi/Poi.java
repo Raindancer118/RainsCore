@@ -119,6 +119,12 @@ public record Poi(String id, String name, String kind, UUID owner, String world,
                 tags);
     }
 
+    /** The same place, belonging to somebody else — a warp staff hand to a player, say. */
+    public Poi withOwner(UUID newOwner) {
+        return new Poi(id, name, kind, newOwner, world, x, y, z, yaw, pitch, icon, label, shared,
+                tags);
+    }
+
     public Poi withShared(boolean nowShared) {
         return new Poi(id, name, kind, owner, world, x, y, z, yaw, pitch, icon, label, nowShared,
                 tags);

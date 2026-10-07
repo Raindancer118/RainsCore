@@ -15,12 +15,20 @@ import de.raindancer.core.ui.effect.SoundCue;
  * @param waitParticle drawn around them while they stand still, a Bukkit particle name
  * @param waitShape    the shape it is drawn in
  * @param tick         heard by them alone at each second of the countdown
+ * @param waitColour   0xRRGGBB for a particle that takes a colour (dust and the tinted ones)
+ * @param waitDensity  particles per draw while they wait
  */
 public record TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape,
-                         SoundCue tick) {
+                         SoundCue tick, Integer waitColour, Integer waitDensity) {
 
     /** Everything as the server has it. */
-    public static final TravelLook SERVERS = new TravelLook(null, null, null, null, null);
+    public static final TravelLook SERVERS = new TravelLook(null, null, null, null, null, null, null);
+
+    /** The shape plugins built against 1.55.0 were compiled against: no colour, the server's density. */
+    public TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape,
+                      SoundCue tick) {
+        this(depart, arrive, waitParticle, waitShape, tick, null, null);
+    }
 
     /** The shape plugins built against 1.54.0 were compiled against: the countdown stays the server's. */
     public TravelLook(SoundCue depart, SoundCue arrive, String waitParticle, ParticleShape waitShape) {

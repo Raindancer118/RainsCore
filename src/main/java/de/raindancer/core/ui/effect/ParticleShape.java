@@ -13,11 +13,11 @@ public enum ParticleShape {
 
     /** Scattered loosely over the body, the way vanilla shows a potion effect. */
     AMBIENT("Like a potion effect"),
-    /** Two points circling the body, bobbing up and down. */
+    /** Two arms circling the body, bobbing up and down. */
     AURA("Around you"),
-    /** A ring of three above the head. */
+    /** A ring above the head. */
     HALO("Above your head"),
-    /** One point at the feet, just behind. */
+    /** At the heels, just behind. */
     TRAIL("Behind you"),
     /** One point climbing round the body, feet to head, again and again. */
     SPIRAL("Spiralling up");
@@ -35,30 +35,43 @@ public enum ParticleShape {
         return title;
     }
 
-    /**
-     * @param tick how many times this has been drawn — what makes the aura and halo turn
-     * @param yaw  the wearer's yaw in degrees, Minecraft's: 0 faces south (+z), 90 west (-x)
-     * @return {x, y, z} offsets from the wearer's feet
-     */
+    /** The lightest drawing of each shape, as it always was before density meant anything to it. */
     public List<double[]> offsets(long tick, float yaw) {
+        return offsets(tick, yaw, 1);
+    }
+
+    /**
+     * @param tick    how many times this has been drawn — what makes the aura and halo turn
+     * @param yaw     the wearer's yaw in degrees, Minecraft's: 0 faces south (+z), 90 west (-x)
+     * @param density how many points the shape is drawn with, 1 the lightest. Denser is more points
+     *                <em>along</em> the shape — a ring of three looks like a triangle, a ring of
+     *                twenty-four like a ring — never more particles piled on the same point
+     * @return {x, y, z} offsets from the wearer's feet, one particle each
+     */
+    public List<double[]> offsets(long tick, float yaw, int density) {
+        int d = Math.clamp(density, 1, 20);
         List<double[]> points = new ArrayList<>();
         switch (this) {
             case AURA -> {
+                // Two arms, each a short arc trailing behind its head as it circles.
                 double angle = tick * 0.5;
                 double height = 1.0 + 0.8 * Math.sin(tick * 0.3);
                 for (int side = 0; side < 2; side++) {
-                    double at = angle + side * Math.PI;
-                    points.add(new double[]{Math.cos(at) * AURA_RADIUS, height, Math.sin(at) * AURA_RADIUS});
+                    for (int k = 0; k < d; k++) {
+                        double at = angle + side * Math.PI - k * 0.22;
+                        points.add(new double[]{Math.cos(at) * AURA_RADIUS, height, Math.sin(at) * AURA_RADIUS});
+                    }
                 }
             }
             case HALO -> {
-                for (int point = 0; point < 3; point++) {
-                    double at = tick * 0.3 + point * (2 * Math.PI / 3);
+                int around = 6 * d;
+                for (int point = 0; point < around; point++) {
+                    double at = tick * 0.3 + point * (2 * Math.PI / around);
                     points.add(new double[]{Math.cos(at) * HALO_RADIUS, 2.2, Math.sin(at) * HALO_RADIUS});
                 }
             }
             case AMBIENT -> {
-                for (int point = 0; point < 2; point++) {
+                for (int point = 0; point < 2 * d; point++) {
                     // Scattered, but the same scatter for the same tick: a test can pin it.
                     long seed = tick * 31 + point * 17;
                     points.add(new double[]{(unit(seed) - 0.5) * 0.8, 0.2 + unit(seed + 7) * 1.6,
@@ -66,13 +79,27 @@ public enum ParticleShape {
                 }
             }
             case SPIRAL -> {
-                double at = tick * 0.6;
-                points.add(new double[]{Math.cos(at) * AURA_RADIUS, 0.1 + (tick % 20) / 20.0 * 1.9,
-                        Math.sin(at) * AURA_RADIUS});
+                // The climbing point with a tail along the path it just came up, so a dense spiral
+                // reads as a line winding round the body rather than a dot.
+                for (int k = 0; k < d; k++) {
+                    double back = k * 0.35;
+                    double at = tick * 0.6 - back;
+                    double climbed = ((tick % 20) - back / 0.6) / 20.0;
+                    if (climbed < 0) {
+                        climbed += 1;
+                    }
+                    points.add(new double[]{Math.cos(at) * AURA_RADIUS, 0.1 + climbed * 1.9,
+                            Math.sin(at) * AURA_RADIUS});
+                }
             }
             case TRAIL -> {
+                // A short arc behind the heels, widening with density.
                 double radians = Math.toRadians(yaw);
-                points.add(new double[]{Math.sin(radians) * 0.5, 0.15, -Math.cos(radians) * 0.5});
+                for (int k = 0; k < d; k++) {
+                    double spread = d == 1 ? 0 : (k / (double) (d - 1) - 0.5) * 0.9;
+                    double at = radians + spread;
+                    points.add(new double[]{Math.sin(at) * 0.5, 0.15, -Math.cos(at) * 0.5});
+                }
             }
         }
         return points;

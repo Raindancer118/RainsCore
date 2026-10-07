@@ -45,6 +45,7 @@ public final class ParticleShows {
      * nearby players are only safe to look at from there.
      *
      * @param colour   for a particle that {@link #takesColour}; ignored otherwise, white if missing
+     * @param count    the density: how many points the shape is drawn with, one particle each
      * @param range    how far away somebody may be and still see it
      * @param sees     who wants to — a player who has switched other people's particles off is left out
      */
@@ -61,9 +62,9 @@ public final class ParticleShows {
             return;
         }
         World world = wearer.getWorld();
-        for (double[] offset : shape.offsets(tick, feet.getYaw())) {
+        for (double[] offset : shape.offsets(tick, feet.getYaw(), count)) {
             world.spawnParticle(found, viewers, wearer, feet.getX() + offset[0], feet.getY() + offset[1],
-                    feet.getZ() + offset[2], count, 0.05, 0.05, 0.05, 0, data);
+                    feet.getZ() + offset[2], 1, 0, 0, 0, 0, data);
         }
     }
 
@@ -94,9 +95,9 @@ public final class ParticleShows {
             Location eye = viewer.getEyeLocation();
             Location feet = eye.clone().add(eye.getDirection().setY(0).normalize().multiply(3)).add(0, -1.6, 0);
             long frame = (long) Math.floor(drawn[0] * Math.max(0.1, speed));
-            for (double[] offset : shape.offsets(frame, eye.getYaw() + 180)) {
+            for (double[] offset : shape.offsets(frame, eye.getYaw() + 180, count)) {
                 viewer.spawnParticle(found, feet.getX() + offset[0], feet.getY() + offset[1],
-                        feet.getZ() + offset[2], count, 0.05, 0.05, 0.05, 0, data);
+                        feet.getZ() + offset[2], 1, 0, 0, 0, 0, data);
             }
         });
     }

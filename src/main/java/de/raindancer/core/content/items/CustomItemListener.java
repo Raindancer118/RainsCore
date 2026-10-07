@@ -6,6 +6,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -123,6 +124,18 @@ public final class CustomItemListener implements Listener {
                 // DECLINED, UNKNOWN, WRONG_TRIGGER: the click was not consumed, so vanilla behaviour
                 // stands. A hook that hit the sky costs nothing and looks like a miss, which is the point
                 // of ItemAbility.attempts.
+            }
+        }
+    }
+
+    /** A grid holding an item marked {@link CustomItem#isIngredient not an ingredient} makes nothing. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPrepareCraft(PrepareItemCraftEvent event) {
+        for (ItemStack ingredient : event.getInventory().getMatrix()) {
+            if (ingredient != null && factory.keyOf(ingredient).flatMap(items::byKey)
+                    .map(item -> !item.isIngredient()).orElse(false)) {
+                event.getInventory().setResult(null);
+                return;
             }
         }
     }

@@ -79,4 +79,35 @@ class ParticleShapeTest {
         assertThat(high).isGreaterThan(low);
         assertThat(ParticleShape.SPIRAL.offsets(20, 0).getFirst()[1]).isCloseTo(low, within(1e-9));
     }
+
+    @Test
+    @DisplayName("denser is more points along the shape: a dense halo is an actual ring, evenly spaced")
+    void denseHaloIsARing() {
+        List<double[]> ring = ParticleShape.HALO.offsets(3, 0, 4);
+
+        assertThat(ring).hasSizeGreaterThanOrEqualTo(16);
+        double step = 2 * Math.PI / ring.size();
+        for (int i = 0; i < ring.size(); i++) {
+            double[] point = ring.get(i);
+            double[] next = ring.get((i + 1) % ring.size());
+            assertThat(Math.hypot(point[0], point[2])).isCloseTo(0.35, within(1e-9));
+            double gap = Math.hypot(next[0] - point[0], next[2] - point[2]);
+            assertThat(gap).isCloseTo(2 * 0.35 * Math.sin(step / 2), within(1e-9));
+        }
+    }
+
+    @Test
+    @DisplayName("every shape gets more distinct points as it gets denser, never more on the same spot")
+    void denserIsMoreSpots() {
+        for (ParticleShape shape : ParticleShape.values()) {
+            List<double[]> light = shape.offsets(5, 30, 1);
+            List<double[]> dense = shape.offsets(5, 30, 4);
+
+            assertThat(dense.size()).as(shape.name()).isGreaterThan(light.size());
+            long distinct = dense.stream()
+                    .map(p -> Math.round(p[0] * 1000) + "," + Math.round(p[1] * 1000) + "," + Math.round(p[2] * 1000))
+                    .distinct().count();
+            assertThat(distinct).as(shape.name()).isEqualTo(dense.size());
+        }
+    }
 }

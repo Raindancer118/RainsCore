@@ -123,6 +123,17 @@ public final class TravelShow {
                 .map(ParticleCue::particle);
     }
 
+    /** The traveller's colour for the waiting particle, or empty for white. */
+    public Optional<Integer> waitColour(UUID traveller) {
+        return Optional.ofNullable(lookFor(traveller).waitColour());
+    }
+
+    /** Particles per draw while this traveller waits: their own, held to the server's bounds, or the server's. */
+    public int waitDensity(UUID traveller) {
+        Integer chosen = lookFor(traveller).waitDensity();
+        return chosen == null ? waitDensity : Math.clamp(chosen, 1, 20);
+    }
+
     public ParticleShape waitShape(UUID traveller) {
         ParticleShape chosen = lookFor(traveller).waitShape();
         return chosen == null ? ParticleShape.SPIRAL : chosen;

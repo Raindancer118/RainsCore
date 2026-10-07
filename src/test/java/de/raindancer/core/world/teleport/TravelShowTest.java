@@ -229,4 +229,25 @@ class TravelShowTest {
         assertThat(landed).as("nought at the arrival is none").isEmpty();
         assertThat(dense.waitDensity()).as("at least one, or there is nothing to wait in").isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("a traveller's own colour and density reach the waiting particles; without them it is the server's")
+    void ownColourAndDensity() {
+        show.looks(who -> who.equals(BO)
+                ? new TravelLook(null, null, "DUST", ParticleShape.HALO, null, 0xFF8800, 12)
+                : TravelLook.SERVERS);
+
+        assertThat(show.waitColour(BO)).contains(0xFF8800);
+        assertThat(show.waitDensity(BO)).isEqualTo(12);
+        assertThat(show.waitColour(CY)).isEmpty();
+        assertThat(show.waitDensity(CY)).isEqualTo(show.waitDensity());
+    }
+
+    @Test
+    @DisplayName("a traveller's density is held to the same bounds as the server's")
+    void ownDensityClamped() {
+        show.looks(who -> new TravelLook(null, null, "DUST", null, null, null, 500));
+
+        assertThat(show.waitDensity(BO)).isEqualTo(20);
+    }
 }

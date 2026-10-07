@@ -40,6 +40,9 @@ public record CustomItem(String plugin, String id, Material material, String dis
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
+    /** Set on an item that must not be crafted away as the block it is made of — see {@link #isIngredient}. */
+    public static final String TAG_NOT_AN_INGREDIENT = "core:not-an-ingredient";
+
     /** Something shaped like a tag, surviving into the rendered text — i.e. one nothing knows. */
     private static final Pattern UNPARSED_TAG = Pattern.compile("<[a-zA-Z_][a-zA-Z0-9_:#-]*>");
 
@@ -150,6 +153,16 @@ public record CustomItem(String plugin, String id, Material material, String dis
 
     public boolean isCraftable() {
         return !recipeRows.isEmpty();
+    }
+
+    /**
+     * Whether it may go into a crafting grid as the vanilla item it is made of.
+     *
+     * <p>True unless marked: a server may have a custom emerald it expects to be crafted with. A token
+     * that is a nether star is not one of those — it would make a beacon.
+     */
+    public boolean isIngredient() {
+        return tag(TAG_NOT_AN_INGREDIENT).isEmpty();
     }
 
     public boolean isGlowing() {
@@ -289,6 +302,11 @@ public record CustomItem(String plugin, String id, Material material, String dis
                 tags.put(key, value);
             }
             return this;
+        }
+
+        /** Never accepted by a crafting grid — see {@link CustomItem#isIngredient}. */
+        public Builder notAnIngredient() {
+            return tag(TAG_NOT_AN_INGREDIENT, "true");
         }
 
         public CustomItem build() {
