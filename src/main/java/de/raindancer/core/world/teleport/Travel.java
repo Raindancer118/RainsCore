@@ -194,6 +194,7 @@ public final class Travel {
         }
         told.counting(traveller, trip.warmupSeconds(), trip);
         departing(traveller, trip);
+        ding(traveller, trip, trip.warmupSeconds());
 
         // The player's own scheduler: on Folia that is the region thread that owns them, and it
         // follows them if they cross into another region while they wait.
@@ -274,8 +275,10 @@ public final class Travel {
             return;
         }
         switch (departures.tick(who)) {
-            case WAITING -> departures.pending(who).ifPresent(left ->
-                    journey.watcher().counting(traveller, left.secondsLeft(), journey.trip()));
+            case WAITING -> departures.pending(who).ifPresent(left -> {
+                journey.watcher().counting(traveller, left.secondsLeft(), journey.trip());
+                ding(traveller, journey.trip(), left.secondsLeft());
+            });
             case ARRIVED -> {
                 task.cancel();
                 journeys.remove(who);
@@ -529,6 +532,13 @@ public final class Travel {
         }
     }
 
+    /** One second of the countdown, heard by the traveller. */
+    private static void ding(Player traveller, Trip trip, int secondsLeft) {
+        if (!trip.isQuiet()) {
+            show(traveller, "countdown", show -> show.counting(traveller.getUniqueId(), secondsLeft));
+        }
+    }
+
     private void departing(Player traveller, Trip trip) {
         if (trip.isQuiet()) {
             return;
@@ -569,7 +579,7 @@ public final class Travel {
                 task.cancel();
                 return;
             }
-            de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), null, 2, shape,
+            de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), null, show.waitDensity(), shape,
                     drawn[0]++, SHIMMER_RANGE, viewer -> true);
         });
     }

@@ -155,4 +155,78 @@ class TravelShowTest {
         hiding.departed(CY, "w", 0, 0, 0);
         assertThat(heard).containsExactly("w:block.bell.use");
     }
+
+    @Test
+    @DisplayName("every second of the countdown dings, for the traveller alone, in their own sound if they chose one")
+    void countdownDings() {
+        assertThat(Cues.all()).contains(Cues.TELEPORT_TICK);
+        show.counting(BO, 3);
+        assertThat(heard).singleElement().satisfies(line -> assertThat(line).startsWith("player:block.note_block"));
+
+        heard.clear();
+        show.looks(who -> new TravelLook(null, null, null, null, new SoundCue("block.amethyst_block.chime", 1f, 1f)));
+        show.counting(BO, 2);
+        assertThat(heard).containsExactly("player:block.amethyst_block.chime");
+
+        heard.clear();
+        show.looks(who -> new TravelLook(null, null, null, null, TravelLook.NOTHING_HEARD));
+        show.counting(BO, 1);
+        assertThat(heard).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a vanished traveller still hears their own countdown — nobody else does")
+    void vanishedHearsTheirOwnDing() {
+        TravelShow hiding = new TravelShow(effects, who -> true);
+        hiding.counting(BO, 3);
+        assertThat(heard).singleElement().satisfies(line -> assertThat(line).startsWith("player:"));
+    }
+
+    @Test
+    @DisplayName("how many particles are drawn while waiting and where somebody lands is the owner's to set")
+    void densities() {
+        assertThat(show.waitDensity()).isEqualTo(TravelShow.DEFAULT_WAIT_DENSITY);
+        List<Integer> landed = new ArrayList<>();
+        Effects counting = new Effects(new EffectSink() {
+            @Override
+            public void toPlayer(UUID player, SoundCue sound) {
+            }
+
+            @Override
+            public void toPlayer(UUID player, ParticleCue particles) {
+            }
+
+            @Override
+            public void atPlace(String world, double x, double y, double z, SoundCue sound) {
+            }
+
+            @Override
+            public void atPlace(String world, double x, double y, double z, ParticleCue particles) {
+                landed.add(particles.count());
+            }
+
+            @Override
+            public void stopForPlayer(UUID player, String soundKey) {
+            }
+
+            @Override
+            public void stopAllForPlayer(UUID player) {
+            }
+        }, () -> 0L);
+        TravelShow dense = new TravelShow(counting);
+        dense.arrived(BO, "w", 0, 0, 0);
+        assertThat(landed).containsExactly(TravelShow.DEFAULT_ARRIVAL_DENSITY);
+
+        landed.clear();
+        dense.densities(7, 150);
+        dense.arrived(BO, "w", 0, 0, 0);
+        assertThat(landed).containsExactly(150);
+        assertThat(dense.waitDensity()).isEqualTo(7);
+
+        landed.clear();
+        dense.densities(0, 0);
+        dense.arrived(BO, "w", 0, 0, 0);
+        assertThat(landed).as("nought at the arrival is none").isEmpty();
+        assertThat(dense.waitDensity()).as("at least one, or there is nothing to wait in").isEqualTo(1);
+    }
 }

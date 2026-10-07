@@ -764,6 +764,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         if (messages != null) {
             messages.tone(config.messageTone());
         }
+        if (travelShow != null) {
+            travelShow.densities(config.teleportWaitParticles(), config.teleportArrivalParticles());
+        }
         if (combat != null) {
             // A change in the menu takes hold without a restart, which is the difference between a
             // setting somebody uses and one they read about.

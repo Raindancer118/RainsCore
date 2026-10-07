@@ -29,6 +29,13 @@ public final class TravelShow {
 
     private static final LogChannel log = Log.of("travel");
 
+    /** Particles per draw while somebody waits, and in the burst where they land — until the owner says. */
+    public static final int DEFAULT_WAIT_DENSITY = 4;
+    public static final int DEFAULT_ARRIVAL_DENSITY = 80;
+
+    private volatile int waitDensity = DEFAULT_WAIT_DENSITY;
+    private volatile int arrivalDensity = DEFAULT_ARRIVAL_DENSITY;
+
     private final Effects effects;
     private final java.util.function.Predicate<UUID> hidden;
     private volatile TravelLooks looks = TravelLooks.SERVERS;
@@ -45,6 +52,19 @@ public final class TravelShow {
     public TravelShow(Effects effects, java.util.function.Predicate<UUID> hidden) {
         this.effects = effects;
         this.hidden = hidden == null ? who -> false : hidden;
+    }
+
+    /**
+     * How dense the waiting particles and the arrival burst are, from Core's settings. The arrival's
+     * count replaces whatever its cue says; nought is none. Waiting is at least one, or there is nothing.
+     */
+    public void densities(int waiting, int arriving) {
+        waitDensity = Math.clamp(waiting, 1, 20);
+        arrivalDensity = Math.clamp(arriving, 0, 300);
+    }
+
+    public int waitDensity() {
+        return waitDensity;
     }
 
     /** Where travellers' own choices come from. One source at a time; the last to register wins. */
@@ -73,8 +93,19 @@ public final class TravelShow {
             return;
         }
         TravelLook look = lookFor(traveller);
-        Effect server = effects.boundTo(Cues.TELEPORT).orElse(Effect.silence());
+        Effect server = withDensity(effects.boundTo(Cues.TELEPORT).orElse(Effect.silence()), arrivalDensity);
         effects.playAt(world, x, y, z, look.arrive() == null ? server : withSound(server, look.arrive()));
+    }
+
+    /**
+     * One second of the countdown, for the traveller alone — so it is heard even while vanished, where
+     * the departure and arrival are not: nobody else is told anything.
+     */
+    public void counting(UUID traveller, int secondsLeft) {
+        TravelLook look = lookFor(traveller);
+        effects.play(traveller, look.tick() == null
+                ? effects.boundTo(Cues.TELEPORT_TICK).orElse(Effect.silence())
+                : Effect.of(look.tick()));
     }
 
     /** The particle drawn while they wait, or empty for none. */
@@ -95,6 +126,17 @@ public final class TravelShow {
     public ParticleShape waitShape(UUID traveller) {
         ParticleShape chosen = lookFor(traveller).waitShape();
         return chosen == null ? ParticleShape.SPIRAL : chosen;
+    }
+
+    /** The same bursts, each with {@code count} particles; none at all for nought. */
+    private static Effect withDensity(Effect effect, int count) {
+        if (count <= 0) {
+            return Effect.of(effect.sounds(), ParticleSequence.nothing());
+        }
+        return Effect.of(effect.sounds(), new ParticleSequence(effect.bursts().bursts().stream()
+                .map(burst -> new ParticleCue(burst.particle(), count, burst.spreadX(), burst.spreadY(),
+                        burst.spreadZ(), burst.speed(), burst.colour()))
+                .toList()));
     }
 
     /** The server's effect with the traveller's sound in place of its own; its particles stay. */

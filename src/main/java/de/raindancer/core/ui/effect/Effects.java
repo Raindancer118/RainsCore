@@ -123,9 +123,10 @@ public final class Effects {
 
         // Moving about
         bound.put(Cues.TELEPORT, new Effect(new SoundCue("entity.enderman.teleport", 0.6f, 1.2f),
-                new ParticleCue("PORTAL", 24, 0.4, 0.6, 0.4, 0.06)));
+                new ParticleCue("PORTAL", 80, 0.5, 0.9, 0.5, 0.4)));
         bound.put(Cues.TELEPORT_DEPART, Effect.of(new SoundCue("block.beacon.power_select", 0.4f, 1.6f)));
         bound.put(Cues.TELEPORT_WAIT, Effect.of(ParticleCue.of("PORTAL", 1)));
+        bound.put(Cues.TELEPORT_TICK, Effect.of(new SoundCue("block.note_block.bell", 0.5f, 1.3f)));
         bound.put(Cues.COUNTDOWN, Effect.of(new SoundCue("block.note_block.hat", 0.5f, 1.2f)));
         bound.put(Cues.COUNTDOWN_DONE,
                 Effect.of(new SoundCue("block.note_block.bell", 0.7f, 1.6f)));
@@ -224,6 +225,23 @@ public final class Effects {
         playSounds(effect, step -> sink.toPlayer(player, step),
                 // A layer still waiting when the cue (or everything) was stopped never starts.
                 () -> generation(key) == token && epochs.getOrDefault(player, 0L) == epoch);
+        for (ParticleCue burst : effect.bursts().bursts()) {
+            if (!burst.isNothing()) {
+                sink.toPlayer(player, burst);
+            }
+        }
+    }
+
+    /**
+     * Plays an effect that is not a cue — one a player chose for themselves — to one player.
+     *
+     * <p>Not throttled: it is not a cue, so there is no cue to have played too recently.
+     */
+    public void play(UUID player, Effect effect) {
+        if (player == null || !enabled || effect == null || effect.isSilent()) {
+            return;
+        }
+        playSounds(effect, step -> sink.toPlayer(player, step), () -> true);
         for (ParticleCue burst : effect.bursts().bursts()) {
             if (!burst.isNothing()) {
                 sink.toPlayer(player, burst);

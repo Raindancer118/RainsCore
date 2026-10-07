@@ -318,6 +318,15 @@ public record CoreConfig(
                 + "tick would otherwise deafen somebody. 0 switches the suppression off.")
         int effectsRepeatGapMillis,
 
+        @In("appearance/effects") @Title("Teleport: particles while waiting") @Range(min = 1, max = 20)
+        @Describe("How many are drawn at a time around somebody standing still for a teleport — the "
+                + "server's portal swirl and a player's own choice alike.")
+        int teleportWaitParticles,
+
+        @In("appearance/effects") @Title("Teleport: particles where somebody lands") @Range(min = 0, max = 300)
+        @Describe("The burst at the spot a teleport arrives. 0 for none; the sound stays either way.")
+        int teleportArrivalParticles,
+
         @In("config/safety") @Title("Refuse to arrive underwater")
         @Describe("Whether a teleport to a spot underwater is treated as unsafe. Off for a server "
                 + "with warps deliberately placed in an ocean.")
@@ -366,5 +375,7 @@ public record CoreConfig(
             true, true, true,
             90,
             true, 120,
+            de.raindancer.core.world.teleport.TravelShow.DEFAULT_WAIT_DENSITY,
+            de.raindancer.core.world.teleport.TravelShow.DEFAULT_ARRIVAL_DENSITY,
             true, 1, 8);
 }
