@@ -57,6 +57,17 @@ public final class ParticleShows {
     /** The same, in a gradient from {@code colour} to {@code colourTo} along the shape; null for one colour. */
     public static void around(Player wearer, String particle, Integer colour, Integer colourTo, int count,
                               ParticleShape shape, long tick, double range, Predicate<Player> sees) {
+        around(wearer, particle, colour, colourTo, count, shape, tick, range, sees, null);
+    }
+
+    /**
+     * The same, with every point gone after {@code lifetimeTicks} — for a shape redrawn every tick, such as
+     * wings, where dust lingering its usual one to two seconds smears the shape into a cloud. Only a
+     * particle that takes a colour can be given a lifetime ({@link #drawnAs}); others keep vanilla's.
+     */
+    public static void around(Player wearer, String particle, Integer colour, Integer colourTo, int count,
+                              ParticleShape shape, long tick, double range, Predicate<Player> sees,
+                              Integer lifetimeTicks) {
         Particle found = particleOf(particle);
         if (found == null || !canShow(particle)) {
             return;
@@ -67,17 +78,42 @@ public final class ParticleShows {
             return;
         }
         World world = wearer.getWorld();
+        Particle drawn = drawnAs(particle, lifetimeTicks);
+        boolean trail = drawn == Particle.TRAIL && found != Particle.TRAIL;
         int from = colour == null ? 0xFFFFFF : colour;
         Object single = BukkitEffectSink.dataFor(found.getDataType(), from, dustSize(count));
         boolean blended = colourTo != null && takesColour(particle);
-        for (double[] offset : shape.offsets(tick, feet.getYaw(), count)) {
-            Object data = blended
-                    ? BukkitEffectSink.dataFor(found.getDataType(), colourAlong(from, colourTo, offset[3]),
-                            dustSize(count))
-                    : single;
-            world.spawnParticle(found, viewers, wearer, feet.getX() + offset[0], feet.getY() + offset[1],
-                    feet.getZ() + offset[2], 1, 0, 0, 0, 0, data);
+        for (double[] offset : shape.offsets(tick, facing(wearer), count)) {
+            double x = feet.getX() + offset[0];
+            double y = feet.getY() + offset[1];
+            double z = feet.getZ() + offset[2];
+            int rgb = blended ? colourAlong(from, colourTo, offset[3]) : from;
+            Object data = trail ? trailData(new Location(world, x, y, z), rgb, lifetimeTicks)
+                    : blended ? BukkitEffectSink.dataFor(found.getDataType(), rgb, dustSize(count)) : single;
+            world.spawnParticle(drawn, viewers, wearer, x, y, z, 1, 0, 0, 0, 0, data);
         }
+    }
+
+    /**
+     * Which way a worn shape faces: the body's, not the head's — wings on a back must not swing round
+     * every time their wearer looks about.
+     */
+    public static float facing(Player wearer) {
+        return wearer.getBodyYaw();
+    }
+
+    /** What is actually spawned: a coloured particle given a lifetime becomes a trail point, which has one. */
+    public static Particle drawnAs(String particle, Integer lifetimeTicks) {
+        Particle found = particleOf(particle);
+        if (found == null) {
+            return null;
+        }
+        return lifetimeTicks != null && takesColour(particle) ? Particle.TRAIL : found;
+    }
+
+    /** A trail point that stays where it is — its target is itself — and is gone after {@code ticks}. */
+    public static Object trailData(Location at, int rgb, int ticks) {
+        return new Particle.Trail(at, org.bukkit.Color.fromRGB(rgb & 0xFFFFFF), Math.max(1, ticks));
     }
 
     /**

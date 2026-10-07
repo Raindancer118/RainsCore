@@ -60,6 +60,9 @@ public enum ParticleShape {
     private static final int[][] ANGEL_QUILLS = {{0, 4}, {0, 6}, {0, 8}, {0, 10}, {0, 12}};
     private static final int[][] BUTTERFLY_VEINS = {{0, 3}, {0, 5}, {0, 8}, {0, 9}};
 
+    /** How far every kind of wings sits below where its outline is drawn — set by eye, in game. */
+    private static final double LOWERED = 0.1;
+
     /** From this density up, wings are drawn with their inside lines as well — what ops get as Ultra. */
     public static final int ULTRA = 10;
 
@@ -162,6 +165,24 @@ public enum ParticleShape {
         return points;
     }
 
+    /**
+     * How far apart a wing's points are at this density, edge and fill alike — about one trail point
+     * apart from Normal up, so the wing reads as a surface. Ultra goes finer still; below it the
+     * spacing stops tightening, because a wing is redrawn every tick and every point is a particle
+     * every viewer receives twenty times a second.
+     */
+    public static double wingStep(int density) {
+        return density >= ULTRA ? 0.06 : Math.max(0.075, 0.16 / Math.sqrt(Math.max(1, density)));
+    }
+
+    private static double length(double[][] polyline) {
+        double total = 0;
+        for (int i = 0; i < polyline.length - 1; i++) {
+            total += Math.hypot(polyline[i + 1][0] - polyline[i][0], polyline[i + 1][1] - polyline[i][1]);
+        }
+        return total;
+    }
+
     /** Whether this is one of the kinds of wings, which a menu offers together. */
     public boolean isWings() {
         return this == WINGS || this == BAT_WINGS || this == BUTTERFLY_WINGS || this == HUMMINGBIRD_WINGS;
@@ -187,17 +208,27 @@ public enum ParticleShape {
         double rightX = -Math.cos(radians);
         double rightZ = -Math.sin(radians);
         double folded = sweep + swing * Math.sin(tick * flapRate);
-        List<double[]> drawn = new ArrayList<>(alongOutline(outline, 12 * density));
-        drawn.addAll(filling(outline, density));
+        double step = wingStep(density);
+        List<double[]> drawn = new ArrayList<>(alongOutline(outline, (int) Math.ceil(length(outline) / step)));
+        List<double[][]> boneLines = new ArrayList<>();
+        for (int[] bone : bones) {
+            boneLines.add(new double[][]{corners[bone[0]], corners[bone[1]]});
+        }
+        drawn.addAll(filling(outline, boneLines, step));
         for (int[] bone : bones) {
             // Ends left out: they are already on the outline, and a point drawn twice is the
             // "more particles on one spot" density is not supposed to mean.
             double[] from = corners[bone[0]];
             double[] to = corners[bone[1]];
-            int along = 2 * density;
+            int along = (int) Math.max(1, Math.floor(Math.hypot(to[0] - from[0], to[1] - from[1]) / step) - 1);
             for (int k = 1; k <= along; k++) {
                 double t = k / (double) (along + 1);
-                drawn.add(new double[]{from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t});
+                double bx = from[0] + (to[0] - from[0]) * t;
+                double by = from[1] + (to[1] - from[1]) * t;
+                // Where a bone meets the rounded edge the edge already has a point.
+                if (distanceToEdge(outline, bx, by) > step * 0.45) {
+                    drawn.add(new double[]{bx, by});
+                }
             }
         }
         double spine = Double.MAX_VALUE;
@@ -209,9 +240,10 @@ public enum ParticleShape {
         for (double[] at : drawn) {
             double outward = (at[0] - spine) / (tip - spine);
             double out = at[0] * Math.cos(folded);
+            // Not closer: the head reaches 0.25 behind the centre, and a turning head would cut through the wings.
             double back = 0.3 + at[0] * Math.sin(folded);
             for (int side = -1; side <= 1; side += 2) {
-                points.add(new double[]{side * out * rightX + back * backX, at[1],
+                points.add(new double[]{side * out * rightX + back * backX, at[1] - LOWERED,
                         side * out * rightZ + back * backZ, Math.clamp(outward, 0, 1)});
             }
         }
@@ -242,8 +274,7 @@ public enum ParticleShape {
      * An even grid of points inside the outline (closed back to its first point), finer as density
      * rises — about the same spacing as along the edge, so the fill and the outline read as one.
      */
-    private static List<double[]> filling(double[][] outline, int density) {
-        double step = 0.24 / Math.sqrt(density);
+    private static List<double[]> filling(double[][] outline, List<double[][]> bones, double step) {
         double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
         for (double[] p : outline) {
             minX = Math.min(minX, p[0]);
@@ -256,7 +287,8 @@ public enum ParticleShape {
         int row = 0;
         for (double y = minY + step / 2; y < maxY; y += step * 0.87, row++) {
             for (double x = minX + (row % 2 == 0 ? step / 2 : step); x < maxX; x += step) {
-                if (isInside(outline, x, y) && distanceToEdge(outline, x, y) > step * 0.45) {
+                if (isInside(outline, x, y) && distanceToEdge(outline, x, y) > step * 0.45
+                        && clearOf(bones, x, y, step * 0.45)) {
                     inside.add(new double[]{x, y});
                 }
             }
@@ -275,6 +307,23 @@ public enum ParticleShape {
             }
         }
         return in;
+    }
+
+    private static boolean clearOf(List<double[][]> bones, double x, double y, double gap) {
+        for (double[][] bone : bones) {
+            if (distanceToSegment(bone[0], bone[1], x, y) <= gap) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static double distanceToSegment(double[] a, double[] b, double x, double y) {
+        double dx = b[0] - a[0];
+        double dy = b[1] - a[1];
+        double length = dx * dx + dy * dy;
+        double t = length == 0 ? 0 : Math.clamp(((x - a[0]) * dx + (y - a[1]) * dy) / length, 0, 1);
+        return Math.hypot(x - (a[0] + t * dx), y - (a[1] + t * dy));
     }
 
     /** How far a point is from the nearest edge, so the fill leaves the outline its own row. */

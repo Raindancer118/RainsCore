@@ -586,7 +586,9 @@ public final class Travel {
                 return;
             }
             de.raindancer.core.ui.effect.ParticleShows.around(traveller, particle.get(), colour, colourTo, density, shape,
-                    drawn[0]++, SHIMMER_RANGE, viewer -> true);
+                    drawn[0]++, SHIMMER_RANGE, viewer -> true,
+                    // Wings live exactly until the next redraw: longer and two frames show at once.
+                    shape.isWings() ? (int) SHIMMER_EVERY_TICKS : null);
         });
     }
 

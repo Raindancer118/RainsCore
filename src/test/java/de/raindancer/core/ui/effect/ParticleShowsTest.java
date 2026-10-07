@@ -56,4 +56,28 @@ class ParticleShowsTest {
                 BukkitEffectSink.dataFor(org.bukkit.Particle.DustOptions.class, 0xff0000, 0.5f);
         assertThat(dust.getSize()).isEqualTo(0.5f);
     }
+
+    @Test
+    @DisplayName("a coloured particle given a lifetime is drawn as a trail point, gone after exactly that many ticks")
+    void shortLived() {
+        assertThat(ParticleShows.drawnAs("DUST", 2)).isEqualTo(org.bukkit.Particle.TRAIL);
+        assertThat(ParticleShows.drawnAs("DUST", null)).isEqualTo(org.bukkit.Particle.DUST);
+        // A flame cannot be told how long to live; it stays a flame.
+        assertThat(ParticleShows.drawnAs("FLAME", 2)).isEqualTo(org.bukkit.Particle.FLAME);
+        org.bukkit.Location at = new org.bukkit.Location(null, 1, 2, 3);
+        org.bukkit.Particle.Trail trail = (org.bukkit.Particle.Trail) ParticleShows.trailData(at, 0x112233, 3);
+        assertThat(trail.getDuration()).isEqualTo(3);
+        assertThat(trail.getColor().asRGB()).isEqualTo(0x112233);
+        assertThat(trail.getTarget()).isEqualTo(at);
+    }
+
+    @Test
+    @DisplayName("a worn shape faces the way the body does, not the way the head looks")
+    void facesTheBody() {
+        org.bukkit.entity.Player wearer = org.mockito.Mockito.mock(org.bukkit.entity.Player.class);
+        org.mockito.Mockito.when(wearer.getBodyYaw()).thenReturn(30f);
+        org.mockito.Mockito.when(wearer.getLocation()).thenReturn(new org.bukkit.Location(null, 0, 0, 0, 120f, 0));
+
+        assertThat(ParticleShows.facing(wearer)).isEqualTo(30f);
+    }
 }

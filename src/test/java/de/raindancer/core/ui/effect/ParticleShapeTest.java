@@ -180,8 +180,8 @@ class ParticleShapeTest {
     @DisplayName("wings are filled, not only outlined: the middle of a wing has particles in it")
     void wingsAreFilled(ParticleShape kind) {
         assertThat(middle(kind.offsets(0, 0, 4))).as(kind.name()).isPositive();
-        assertThat(kind.offsets(0, 0, 8).size()).as(kind.name())
-                .isGreaterThan(kind.offsets(0, 0, 4).size() * 3 / 2);
+        assertThat(kind.offsets(0, 0, 4).size()).as(kind.name())
+                .isGreaterThan(kind.offsets(0, 0, 1).size() * 2);
     }
 
     @Test
@@ -197,6 +197,25 @@ class ParticleShapeTest {
         double cx = right.stream().mapToDouble(p -> p[0]).average().orElseThrow();
         double cy = right.stream().mapToDouble(p -> p[1]).average().orElseThrow();
         return right.stream().filter(p -> Math.abs(p[0] - cx) < 0.08 && Math.abs(p[1] - cy) < 0.08).count();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS"})
+    @DisplayName("at Normal the points of a wing are close enough to read as one surface, and never two on one spot")
+    void wingSpacing(ParticleShape kind) {
+        assertThat(ParticleShape.wingStep(2)).isLessThanOrEqualTo(0.12);
+        assertThat(ParticleShape.wingStep(ParticleShape.ULTRA)).isLessThan(ParticleShape.wingStep(6));
+        List<double[]> points = kind.offsets(0, 0, 2);
+        double tooClose = ParticleShape.wingStep(2) * 0.35;
+        for (int i = 0; i < points.size(); i++) {
+            for (int j = i + 1; j < points.size(); j++) {
+                double[] a = points.get(i);
+                double[] b = points.get(j);
+                assertThat(Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2) + Math.pow(a[2] - b[2], 2)))
+                        .as("%s points %d and %d", kind, i, j).isGreaterThan(tooClose);
+            }
+        }
     }
 
     private static double highest(List<double[]> points) {
