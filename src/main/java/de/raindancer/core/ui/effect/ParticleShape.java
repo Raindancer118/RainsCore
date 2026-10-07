@@ -282,7 +282,7 @@ public enum ParticleShape {
      * every viewer receives twenty times a second.
      */
     public static double wingStep(int density) {
-        return density >= ULTRA ? 0.06 : Math.max(0.075, 0.16 / Math.sqrt(Math.max(1, density)));
+        return density >= ULTRA ? 0.05 : Math.max(0.065, 0.135 / Math.sqrt(Math.max(1, density)));
     }
 
     /** An outline scaled out from the spine and moved up or down — a second pair of the same wing. */
@@ -344,17 +344,7 @@ public enum ParticleShape {
                               float yaw, int density, double flapRate, double sweep, double swing) {
         List<double[]> flat = LAYOUTS.computeIfAbsent(new Layout(corners, smoothing, bones, density),
                 ignored -> layout(corners, smoothing, bones, density));
-        double spine = Double.MAX_VALUE;
-        double tip = 0;
-        for (double[] corner : corners) {
-            spine = Math.min(spine, corner[0]);
-            tip = Math.max(tip, corner[0]);
-        }
-        List<double[]> shaded = new ArrayList<>(flat.size());
-        for (double[] at : flat) {
-            shaded.add(new double[]{at[0], at[1] - LOWERED, (at[0] - spine) / (tip - spine)});
-        }
-        onTheBack(points, shaded, tick, yaw, flapRate, sweep, swing);
+        onTheBack(points, flat, tick, yaw, flapRate, sweep, swing);
     }
 
     /** A traced wing: its cells sampled at the density's spacing, every feather's edges always kept. */
@@ -366,35 +356,115 @@ public enum ParticleShape {
     }
 
     private static List<double[]> sampled(String[] mask, double top, int density) {
-        // Ultra takes every traced cell; below it the density's spacing in whole cells — Normal every
-        // third, Dense every second — so each step up is visibly finer.
-        int every = density >= ULTRA ? 1 : (int) Math.max(1, Math.round(wingStep(density) / MASK_CELL));
+        // Ultra takes every traced cell; below it a staggered grid at the density's spacing, in cells but
+        // not rounded to whole ones — rounded, Normal and Dense came out the same.
+        boolean every = density >= ULTRA;
+        double step = wingStep(density);
+        double across = step / MASK_CELL;
+        double down = across * 0.87;
         List<double[]> cells = new ArrayList<>();
+        List<double[]> rim = new ArrayList<>();
         for (int row = 0; row < mask.length; row++) {
-            if (row % every != 0) {
-                continue;
-            }
-            String line = mask[row];
-            // Rows offset by half a step, so the points make a mesh of triangles rather than a chessboard.
-            int offset = (row / every) % 2 == 0 ? 0 : every / 2;
-            for (int column = 0; column < line.length(); column++) {
-                char shade = line.charAt(column);
-                if (shade == '.') {
+            for (int column = 0; column < mask[row].length(); column++) {
+                if (mask[row].charAt(column) == '.') {
                     continue;
                 }
-                boolean edge = column == 0 || line.charAt(column - 1) == '.'
-                        || column == line.length() - 1 || line.charAt(column + 1) == '.';
-                if (edge || Math.floorMod(column - offset, every) == 0) {
-                    cells.add(new double[]{(column + 0.5) * MASK_CELL, top - row * MASK_CELL,
-                            (9 - (shade - '0')) / 9.0});
+                double nx = (air(mask, row, column + 1) ? 1 : 0) - (air(mask, row, column - 1) ? 1 : 0);
+                double ny = (air(mask, row - 1, column) ? 1 : 0) - (air(mask, row + 1, column) ? 1 : 0);
+                if (nx != 0 || ny != 0) {
+                    double length = Math.hypot(nx, ny);
+                    rim.add(new double[]{(column + 0.5) * MASK_CELL, top - row * MASK_CELL, nx / length, ny / length,
+                            (9 - (mask[row].charAt(column) - '0')) / 9.0});
                 }
             }
         }
-        return List.copyOf(cells);
+        if (every) {
+            for (int row = 0; row < mask.length; row++) {
+                for (int column = 0; column < mask[row].length(); column++) {
+                    if (mask[row].charAt(column) != '.') {
+                        cells.add(new double[]{(column + 0.5) * MASK_CELL, top - row * MASK_CELL,
+                                (9 - (mask[row].charAt(column) - '0')) / 9.0});
+                    }
+                }
+            }
+        } else {
+            // Points at the grid's own heights and places, each taking the shade of the cell it falls in —
+            // snapped to the cells, the rows came out one and two cells apart in turn, and the wing striped.
+            for (int k = 0; k * down < mask.length - 0.5; k++) {
+                String line = mask[(int) Math.round(k * down)];
+                double offset = k % 2 == 0 ? 0 : across / 2;
+                for (double at = offset; at < line.length() - 0.5; at += across) {
+                    char shade = line.charAt((int) Math.round(at));
+                    if (shade != '.') {
+                        cells.add(new double[]{(at + 0.5) * MASK_CELL, top - k * down * MASK_CELL,
+                                (9 - (shade - '0')) / 9.0});
+                    }
+                }
+            }
+        }
+        return fluffed(cells, rim, step);
+    }
+
+    private static boolean air(String[] mask, int row, int column) {
+        return row < 0 || row >= mask.length || column < 0 || column >= mask[row].length()
+                || mask[row].charAt(column) == '.';
+    }
+
+    /** How far behind the back a point may sit beyond the others — what gives a wing body. */
+    private static final double DEPTH = 0.1;
+
+    /**
+     * A wing made soft: a loose fringe of feathers just outside its rim, and every point at its own depth
+     * behind the back, so the wing has body rather than being a sheet. The same for the same wing, so a
+     * point never jumps about from one draw to the next.
+     *
+     * @param body {x, y, along} — the wing itself
+     * @param rim  {x, y, outward x, outward y, along} — points on its edge, which way is out
+     * @return {x, y, along, depth}
+     */
+    private static List<double[]> fluffed(List<double[]> body, List<double[]> rim, double step) {
+        double spine = Double.MAX_VALUE;
+        for (double[] at : body) {
+            spine = Math.min(spine, at[0]);
+        }
+        List<double[]> all = new ArrayList<>(body);
+        double nearest = step * 0.45;
+        for (int i = 0; i < rim.size(); i++) {
+            double[] at = rim.get(i);
+            // Not along the spine: a fringe there would stand in the wearer's back.
+            if (at[2] < -0.3 && at[0] < spine + 0.2) {
+                continue;
+            }
+            double out = step * (0.5 + 0.5 * unit(i * 7L + 1));
+            double sideways = step * (unit(i * 7L + 2) - 0.5) * 0.6;
+            double x = at[0] + at[2] * out - at[3] * sideways;
+            double y = at[1] + at[3] * out + at[2] * sideways;
+            // Nor into the wearer's back, nor into the ground under a wing that reaches it.
+            if (x <= spine || y < 0.05) {
+                continue;
+            }
+            boolean crowded = false;
+            for (double[] other : all) {
+                if (Math.abs(other[0] - x) < nearest && Math.abs(other[1] - y) < nearest
+                        && Math.hypot(other[0] - x, other[1] - y) < nearest) {
+                    crowded = true;
+                    break;
+                }
+            }
+            if (!crowded) {
+                all.add(new double[]{x, y, at[4]});
+            }
+        }
+        List<double[]> fluffed = new ArrayList<>(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            double[] at = all.get(i);
+            fluffed.add(new double[]{at[0], at[1], at[2], DEPTH * unit(i * 13L + 5)});
+        }
+        return List.copyOf(fluffed);
     }
 
     /**
-     * Flat points — {outward, height, along} — set on the wearer's back as both wings, beating.
+     * Flat points — {outward, height, along, depth} — set on the wearer's back as both wings, beating.
      */
     private static void onTheBack(List<double[]> points, List<double[]> flat, long tick, float yaw, double flapRate,
                                   double sweep, double swing) {
@@ -407,7 +477,7 @@ public enum ParticleShape {
         for (double[] at : flat) {
             double out = at[0] * Math.cos(folded);
             // Not closer: the head reaches 0.25 behind the centre, and a turning head would cut through the wings.
-            double back = 0.3 + at[0] * Math.sin(folded);
+            double back = 0.3 + at[3] + at[0] * Math.sin(folded);
             for (int side = -1; side <= 1; side += 2) {
                 points.add(new double[]{side * out * rightX + back * backX, at[1],
                         side * out * rightZ + back * backZ, Math.clamp(at[2], 0, 1)});
@@ -419,7 +489,8 @@ public enum ParticleShape {
     private static List<double[]> layout(double[][] corners, int smoothing, int[][] bones, int density) {
         double[][] outline = rounded(corners, smoothing);
         double step = wingStep(density);
-        List<double[]> drawn = new ArrayList<>(alongOutline(outline, (int) Math.ceil(length(outline) / step)));
+        List<double[]> edge = alongOutline(outline, (int) Math.ceil(length(outline) / step));
+        List<double[]> drawn = new ArrayList<>(edge);
         List<double[][]> boneLines = new ArrayList<>();
         for (int[] bone : bones) {
             boneLines.add(new double[][]{corners[bone[0]], corners[bone[1]]});
@@ -457,7 +528,37 @@ public enum ParticleShape {
                 kept.add(candidate);
             }
         }
-        return List.copyOf(kept);
+        double spine = Double.MAX_VALUE;
+        double tip = 0;
+        for (double[] corner : corners) {
+            spine = Math.min(spine, corner[0]);
+            tip = Math.max(tip, corner[0]);
+        }
+        List<double[]> body = new ArrayList<>(kept.size());
+        for (double[] at : kept) {
+            body.add(new double[]{at[0], at[1] - LOWERED, (at[0] - spine) / (tip - spine)});
+        }
+        List<double[]> rim = new ArrayList<>(edge.size());
+        for (int i = 0; i < edge.size(); i++) {
+            double[] before = edge.get(Math.max(0, i - 1));
+            double[] after = edge.get(Math.min(edge.size() - 1, i + 1));
+            double tx = after[0] - before[0];
+            double ty = after[1] - before[1];
+            double length = Math.hypot(tx, ty);
+            if (length == 0) {
+                continue;
+            }
+            double nx = ty / length;
+            double ny = -tx / length;
+            double[] at = edge.get(i);
+            // Whichever way round the outline runs, out is where the wing is not.
+            if (isInside(outline, at[0] + nx * 0.02, at[1] + ny * 0.02)) {
+                nx = -nx;
+                ny = -ny;
+            }
+            rim.add(new double[]{at[0], at[1] - LOWERED, nx, ny, (at[0] - spine) / (tip - spine)});
+        }
+        return fluffed(body, rim, step);
     }
 
     /**

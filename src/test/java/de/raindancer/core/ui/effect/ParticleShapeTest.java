@@ -126,13 +126,12 @@ class ParticleShapeTest {
         });
         assertThat(wings.stream().mapToDouble(p -> p[0]).min().orElseThrow()).isLessThan(-0.8);
         assertThat(wings.stream().mapToDouble(p -> p[0]).max().orElseThrow()).isGreaterThan(0.8);
+        java.util.Set<String> drawn = new java.util.HashSet<>();
         for (double[] p : wings) {
-            assertThat(wings).anySatisfy(q -> {
-                assertThat(q[0]).isCloseTo(-p[0], within(1e-9));
-                assertThat(q[1]).isCloseTo(p[1], within(1e-9));
-                assertThat(q[2]).isCloseTo(p[2], within(1e-9));
-            });
+            drawn.add(Math.round(p[0] * 1e6) + "," + Math.round(p[1] * 1e6) + "," + Math.round(p[2] * 1e6));
         }
+        assertThat(wings).allSatisfy(p -> assertThat(drawn)
+                .contains(Math.round(-p[0] * 1e6) + "," + Math.round(p[1] * 1e6) + "," + Math.round(p[2] * 1e6)));
 
         // Facing west (yaw 90, -x): the wings are to the east of the feet.
         assertThat(kind.offsets(0, 90, 2)).allSatisfy(p -> assertThat(p[0]).isPositive());
@@ -255,5 +254,61 @@ class ParticleShapeTest {
         }
         assertThat(ParticleShape.cachedLayouts()).as("drawing again must not grow it").isEqualTo(filled);
         assertThat(filled).isLessThanOrEqualTo(ParticleShape.wings().size() * 2 * 20);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ParticleShape.class,
+            names = {"WINGS", "BAT_WINGS", "BUTTERFLY_WINGS", "HUMMINGBIRD_WINGS", "DRAGON_WINGS", "PHOENIX_WINGS", "FAIRY_WINGS", "SERAPH_WINGS", "GRAND_WINGS"})
+    @DisplayName("wings are fluffy at every density, not a flat sheet: their points sit at different depths behind the back")
+    void wingsHaveBody(ParticleShape kind) {
+        for (int density : new int[]{1, 2, 4}) {
+            // Facing south, one wing: were it flat, how far behind you a point is would follow from how far
+            // out it is alone. Points equally far out but at different depths are what makes it a volume.
+            List<double[]> right = kind.offsets(0, 0, density).stream().filter(p -> p[0] < 0).toList();
+            double widest = 0;
+            for (double[] p : right) {
+                for (double[] q : right) {
+                    if (Math.abs(p[0] - q[0]) < 0.01) {
+                        widest = Math.max(widest, Math.abs(p[2] - q[2]));
+                    }
+                }
+            }
+            assertThat(widest).as("%s at %d", kind, density).isGreaterThan(0.06);
+            assertThat(right).allSatisfy(p -> assertThat(p[2]).as("never into the head").isLessThan(-0.25));
+        }
+    }
+
+    @Test
+    @DisplayName("more particles for everyone: each density is clearly finer than it was in 1.63")
+    void finer() {
+        assertThat(ParticleShape.wingStep(1)).isLessThanOrEqualTo(0.14);
+        assertThat(ParticleShape.wingStep(2)).isLessThanOrEqualTo(0.1);
+        assertThat(ParticleShape.wingStep(4)).isLessThanOrEqualTo(0.07);
+        assertThat(ParticleShape.wingStep(ParticleShape.ULTRA)).isLessThanOrEqualTo(0.05);
+        // What they drew at Normal before.
+        java.util.Map<ParticleShape, Integer> before = java.util.Map.of(ParticleShape.WINGS, 198,
+                ParticleShape.DRAGON_WINGS, 346, ParticleShape.GRAND_WINGS, 274, ParticleShape.FAIRY_WINGS, 194);
+        before.forEach((kind, count) -> assertThat(kind.offsets(0, 0, 2).size()).as(kind.name())
+                .isGreaterThan((int) (count * 1.4)));
+    }
+
+    @Test
+    @DisplayName("grand wings are drawn in evenly spaced rows: rounded to the traced cells they striped, every other gap double")
+    void grandRowsAreEven() {
+        for (int density : new int[]{2, 4, 6}) {
+            java.util.Map<Long, Long> perHeight = ParticleShape.GRAND_WINGS.offsets(0, 0, density).stream()
+                    .collect(java.util.stream.Collectors.groupingBy(p -> Math.round(p[1] * 1e6),
+                            java.util.stream.Collectors.counting()));
+            // A row has many points; a fringe feather's height is its own.
+            // Where the wing is broad: lower down it parts into feathers, a row's points few.
+            List<Double> rows = perHeight.entrySet().stream().filter(row -> row.getValue() >= 6)
+                    .map(row -> row.getKey() / 1e6).filter(y -> y > 0.9 && y < 1.8).sorted().toList();
+            assertThat(rows).hasSizeGreaterThan(5);
+            double spacing = ParticleShape.wingStep(density) * 0.87;
+            for (int k = 1; k < rows.size(); k++) {
+                assertThat(rows.get(k) - rows.get(k - 1)).as("density %d, rows at %s and %s", density,
+                        rows.get(k - 1), rows.get(k)).isBetween(spacing * 0.8, spacing * 1.2);
+            }
+        }
     }
 }
