@@ -46,11 +46,71 @@ public final class Text {
             return markup.miniMessage();
         }
         if (text instanceof ComponentLike component) {
-            return MINI.serialize(component.asComponent());
+            return closed(component.asComponent());
         }
         // Backslashes first: MiniMessage reads "\<" as "a literal <", so a value's own trailing
         // backslash would otherwise escape whatever the template puts after it.
         return MINI.escapeTags(String.valueOf(text).replace("\\", "\\\\"));
+    }
+
+    /**
+     * {@code component} as MiniMessage that closes every tag it opens, so whatever is appended after it
+     * starts unstyled.
+     *
+     * <p>MiniMessage's serializer leaves the tags still open at the end unclosed, which is harmless for
+     * the string alone and wrong the moment something is concatenated: a bold prefix made every
+     * message after it bold.
+     */
+    public static String closed(Component component) {
+        String serialized = MINI.serialize(component);
+        java.util.ArrayDeque<String> open = new java.util.ArrayDeque<>();
+        int i = 0;
+        while (i < serialized.length()) {
+            char c = serialized.charAt(i);
+            if (c == '\\') {
+                i += 2;
+                continue;
+            }
+            if (c != '<') {
+                i++;
+                continue;
+            }
+            int end = tagEnd(serialized, i + 1);
+            if (end < 0) {
+                break;
+            }
+            String tag = serialized.substring(i + 1, end);
+            if (tag.startsWith("/")) {
+                open.pollFirst();
+            } else if (!tag.endsWith("/")) {
+                int colon = tag.indexOf(':');
+                open.push(colon < 0 ? tag : tag.substring(0, colon));
+            }
+            i = end + 1;
+        }
+        StringBuilder out = new StringBuilder(serialized);
+        open.forEach(name -> out.append("</").append(name).append('>'));
+        return out.toString();
+    }
+
+    /** Index of the {@code >} ending the tag whose name starts at {@code from}, skipping quoted arguments. */
+    private static int tagEnd(String markup, int from) {
+        char quote = 0;
+        for (int i = from; i < markup.length(); i++) {
+            char c = markup.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quote) {
+                    quote = 0;
+                }
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+            } else if (c == '>') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

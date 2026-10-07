@@ -3,6 +3,9 @@ package de.raindancer.core.ui.text;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.Style;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -111,5 +114,31 @@ class TextTest {
         assertThat(clicks(nickname)).isEmpty();
         assertThat(plain(nickname)).isEqualTo("Steve" + CLICK);
         assertThat(plain(Text.styled("<hover:show_text:'x'>hi</hover>"))).contains("<hover");
+    }
+
+    @Test
+    @DisplayName("a component pasted into markup keeps its style to itself: the text after it is not bold or red")
+    void componentStyleDoesNotSpill() {
+        Component bold = Component.text("Claims", NamedTextColor.RED).decorate(TextDecoration.BOLD);
+        Component flowing = Gradients.styled("Claims", NameStyle.parse("#ff8800,#ffee00|bold|italic"));
+        Component notItalic = Component.text("Claims").decoration(TextDecoration.ITALIC, false)
+                .append(Component.translatable("block.minecraft.stone"));
+
+        for (Component pasted : List.of(bold, flowing, notItalic)) {
+            for (String markup : List.of(Text.closed(pasted), Text.literal(pasted))) {
+                Component after = lastLeaf(MiniMessage.miniMessage().deserialize(markup + "MSG"));
+
+                assertThat(after).as(markup).isEqualTo(Component.text("MSG"));
+            }
+        }
+    }
+
+    /** The last text in a tree, with every style it inherits from the nodes around it. */
+    static Component lastLeaf(Component node) {
+        if (node.children().isEmpty()) {
+            return node;
+        }
+        Component child = lastLeaf(node.children().getLast());
+        return child.style(child.style().merge(node.style(), Style.Merge.Strategy.IF_ABSENT_ON_TARGET));
     }
 }

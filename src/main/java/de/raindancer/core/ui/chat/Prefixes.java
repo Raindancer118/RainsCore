@@ -3,7 +3,6 @@ package de.raindancer.core.ui.chat;
 import de.raindancer.core.ui.identity.Identities;
 import de.raindancer.core.ui.text.Gradients;
 import de.raindancer.core.ui.text.NameStyle;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -20,8 +19,6 @@ import java.util.function.LongSupplier;
  * changed in the menu shows on the very next message of every plugin, without a reload.
  */
 public final class Prefixes {
-
-    private static final MiniMessage MINI = MiniMessage.miniMessage();
 
     private static volatile PrefixDesign design = PrefixDesign.DEFAULT;
     private static volatile LongSupplier clock = System::currentTimeMillis;
@@ -62,9 +59,11 @@ public final class Prefixes {
         if (!current.shownFor(plugin)) {
             return "";
         }
+        // <reset>: a format typed by hand may leave a tag open, and the message must not inherit it.
         return current.format()
                 .replace(PrefixDesign.PLUGIN, de.raindancer.core.ui.text.Text.literal(ownTag == null ? plugin : ownTag))
-                .replace(PrefixDesign.TAG, paintedTag(plugin, ownTag, phase()));
+                .replace(PrefixDesign.TAG, paintedTag(plugin, ownTag, phase()))
+                + "<reset>";
     }
 
     /** The painted tag alone, now — for a window title. */
@@ -81,7 +80,7 @@ public final class Prefixes {
             return "<gradient:" + Style.brandFrom() + ":" + Style.brandTo() + "><bold>"
                     + de.raindancer.core.ui.text.Text.literal(tag) + "</bold></gradient>";
         }
-        return MINI.serialize(Gradients.styled(tag, style, phase));
+        return de.raindancer.core.ui.text.Text.closed(Gradients.styled(tag, style, phase));
     }
 
     private static double phase() {

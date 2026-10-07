@@ -1,6 +1,8 @@
 package de.raindancer.core.ui.chat;
 
 import de.raindancer.core.ui.text.NameStyle;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -30,6 +32,28 @@ class PrefixDesignTest {
 
     private static String plain(String miniMessage) {
         return PlainTextComponentSerializer.plainText().serialize(MiniMessage.miniMessage().deserialize(miniMessage));
+    }
+
+    /** The styled leaf holding "MSG" when the prefix and a bare message are drawn as one line. */
+    private static Component messageAfterPrefix() {
+        Component line = MiniMessage.miniMessage().deserialize(Prefixes.chatPrefix("Claims", "Claims") + "MSG");
+        Component found = find(line, net.kyori.adventure.text.format.Style.empty(), "MSG");
+        assertThat(found).as("the message text is in the line").isNotNull();
+        return found;
+    }
+
+    private static Component find(Component node, net.kyori.adventure.text.format.Style inherited, String text) {
+        net.kyori.adventure.text.format.Style style = node.style().merge(inherited, net.kyori.adventure.text.format.Style.Merge.Strategy.IF_ABSENT_ON_TARGET);
+        if (node instanceof TextComponent t && t.content().contains(text)) {
+            return Component.text(text).style(style);
+        }
+        for (Component child : node.children()) {
+            Component hit = find(child, style, text);
+            if (hit != null) {
+                return hit;
+            }
+        }
+        return null;
     }
 
     @AfterEach
@@ -103,6 +127,27 @@ class PrefixDesignTest {
 
             assertThat(plain(painted)).isEqualTo("Claims");
             assertThat(painted).contains("red").contains("bold");
+        }
+
+        @Test
+        @DisplayName("a bold tag does not make the message after it bold")
+        void boldStaysInTheTag() {
+            Prefixes.use(PrefixDesign.DEFAULT.withStyle(RED_BOLD));
+            assertThat(messageAfterPrefix().hasDecoration(TextDecoration.BOLD)).isFalse();
+
+            Prefixes.use(PrefixDesign.DEFAULT.withStyle(NameStyle.parse("#ff8800,#ffee00|bold")));
+            assertThat(messageAfterPrefix().hasDecoration(TextDecoration.BOLD)).isFalse();
+        }
+
+        @Test
+        @DisplayName("an unclosed tag in the owner's format does not spill into the message either")
+        void unclosedFormatStaysInThePrefix() {
+            Prefixes.use(PrefixDesign.DEFAULT.withFormat("<bold><gold>{tag} » "));
+
+            Component message = messageAfterPrefix();
+
+            assertThat(message.hasDecoration(TextDecoration.BOLD)).isFalse();
+            assertThat(message.color()).isNull();
         }
 
         @Test
