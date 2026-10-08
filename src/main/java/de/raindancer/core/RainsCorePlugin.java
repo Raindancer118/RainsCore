@@ -513,6 +513,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Coins, banknotes and tokens are never worth their material — see NonIngredients.
         getServer().getPluginManager().registerEvents(
                 new de.raindancer.core.content.items.NonIngredientListener(), this);
+        // Eggs a shop sold hatch mobs but never set a spawner — see NotForSpawners.
+        getServer().getPluginManager().registerEvents(new de.raindancer.core.content.items.NotForSpawnersListener(
+                player -> messages.send(player, "items.not-for-spawners")), this);
         movementProtection = new MovementProtectionListener(land, messages);
         // Told about each other after both exist, rather than one taking the other in its constructor: the
         // damage listener has to be registered before this one, and a constructor argument would be a cycle.

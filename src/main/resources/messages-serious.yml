@@ -42,3 +42,6 @@ prompt:
 
 vanish-chat:
   held: "<yellow>You are vanished. Saying <white><line></white> would show everybody that you are here."
+
+items:
+  not-for-spawners: "<red>Spawn eggs from the shop cannot be used on spawners."

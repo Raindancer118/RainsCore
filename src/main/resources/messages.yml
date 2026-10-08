@@ -196,6 +196,7 @@ navigation:
 #  deliberately: it costs nothing, so it should read as a miss rather than as
 #  a refusal.
 items:
+  not-for-spawners: "<red>Nice try. Eggs from the shop hatch mobs — they don't set spawners."
   cooling-down: "<yellow><item> is not ready yet — <white><seconds>s</white>."
   used-up: "<yellow><item> has nothing left in it."
   # The ability threw. The reason is in the log with its stack trace; the
