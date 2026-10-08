@@ -39,6 +39,28 @@ public record SettingsPage(String path, String title, List<SettingsTopic> subtop
         return subtopics.isEmpty() && settings.isEmpty();
     }
 
+    /** How many windows this page needs: as many as the longer of its categories and its settings fill, at least one. */
+    public int pageCount(int topicsPerPage, int settingsPerPage) {
+        int forTopics = (subtopics.size() + topicsPerPage - 1) / topicsPerPage;
+        int forSettings = (settings.size() + settingsPerPage - 1) / settingsPerPage;
+        return Math.max(1, Math.max(forTopics, forSettings));
+    }
+
+    /** The categories shown on one window of this page. */
+    public List<SettingsTopic> topicsOn(int window, int perPage) {
+        return slice(subtopics, window, perPage);
+    }
+
+    /** The settings shown on one window of this page. */
+    public List<Setting<?>> settingsOn(int window, int perPage) {
+        return slice(settings, window, perPage);
+    }
+
+    private static <T> List<T> slice(List<T> all, int window, int perPage) {
+        int from = Math.max(0, window) * perPage;
+        return from >= all.size() ? List.of() : all.subList(from, Math.min(all.size(), from + perPage));
+    }
+
     /** Where Back goes: the page above, or null when this is the root or a top-level category. */
     public String parentPath() {
         if (path == null) {

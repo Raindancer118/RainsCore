@@ -87,9 +87,13 @@ public final class SettingsMenu extends Menu {
     /** How many category buttons fit in the band — the seven columns between the frame panes. */
     private static final int TOPICS_PER_PAGE = 7;
 
+    /** Settings go in the rows between the category band and the toolbar. */
+    private static final int FIRST_SETTINGS_ROW = MenuLayout.RULES;
+    private static final int SETTINGS_PER_PAGE = (MenuLayout.LAND - FIRST_SETTINGS_ROW + 1) * 9;
+
     private final String path;
     private final SettingsPage page;
-    private int topicPage;
+    private int window;
 
     public SettingsMenu(Player viewer, Brand brand, Chat chat, SettingsNavigation navigation,
                         String path, Menu parent) {
@@ -155,25 +159,15 @@ public final class SettingsMenu extends Menu {
 
     @Override
     protected void render() {
-        List<SettingsTopic> subtopics = page.subtopics();
-        int pages = MenuLayout.pageCount(subtopics.size(), TOPICS_PER_PAGE);
-        topicPage = MenuLayout.clampPage(topicPage, pages);
-        int from = MenuLayout.pageStart(topicPage, TOPICS_PER_PAGE);
-        int to = Math.min(subtopics.size(), from + TOPICS_PER_PAGE);
-
+        window = MenuLayout.clampPage(window, windows());
         int column = 1;
-        for (int i = from; i < to; i++) {
-            SettingsTopic topic = subtopics.get(i);
+        for (SettingsTopic topic : page.topicsOn(window, TOPICS_PER_PAGE)) {
             band(MenuLayout.WHO, column++, categoryIcon(topic), event -> open(topic.path()));
         }
 
         int index = 0;
-        for (Setting<?> setting : page.settings()) {
-            int row = 2 + index / 9;
-            if (row > MenuLayout.LAND) {
-                break;
-            }
-            cell(row, index % 9, settingIcon(setting), event -> onClick(setting));
+        for (Setting<?> setting : page.settingsOn(window, SETTINGS_PER_PAGE)) {
+            cell(FIRST_SETTINGS_ROW + index / 9, index % 9, settingIcon(setting), event -> onClick(setting));
             index++;
         }
 
@@ -184,31 +178,34 @@ public final class SettingsMenu extends Menu {
     }
 
     /**
-     * More than seven categories used to be a wall this class quietly built: everything past the
-     * seventh was dropped with no error and no warning, which is how random teleport went missing
-     * from the front page the day it became the eighth module registered. Paged instead, the same way
-     * {@link PaginatedMenu} pages a list too long for one screen.
+     * More than seven categories, or more settings than two rows hold, used to be a wall this class
+     * quietly built: everything past it was dropped with no error and no warning — random teleport went
+     * missing from the front page the day it became the eighth module, and every casino game after the
+     * eighteenth gambling setting could not be found at all. Paged instead, both together, the same way
+     * {@link de.raindancer.core.ui.menu.PaginatedMenu} pages a list too long for one screen.
      */
     @Override
     protected void paintPagingChrome(int chromeRow) {
-        int pages = MenuLayout.pageCount(page.subtopics().size(), TOPICS_PER_PAGE);
+        int pages = windows();
         if (pages <= 1) {
             return;
         }
-        if (topicPage > 0) {
-            set(chromeRow + MenuLayout.CHROME_PREVIOUS, Icons.previousPage(topicPage, pages),
-                    turnCategoriesTo(topicPage - 1));
+        if (window > 0) {
+            set(chromeRow + MenuLayout.CHROME_PREVIOUS, Icons.previousPage(window, pages), turnTo(window - 1));
         }
-        if (topicPage < pages - 1) {
-            set(chromeRow + MenuLayout.CHROME_NEXT, Icons.nextPage(topicPage + 2, pages),
-                    turnCategoriesTo(topicPage + 1));
+        if (window < pages - 1) {
+            set(chromeRow + MenuLayout.CHROME_NEXT, Icons.nextPage(window + 2, pages), turnTo(window + 1));
         }
-        set(chromeRow + MenuLayout.CHROME_PAGE, Icons.pageCounter(topicPage + 1, pages));
+        set(chromeRow + MenuLayout.CHROME_PAGE, Icons.pageCounter(window + 1, pages));
     }
 
-    private Consumer<InventoryClickEvent> turnCategoriesTo(int newPage) {
+    private int windows() {
+        return page.pageCount(TOPICS_PER_PAGE, SETTINGS_PER_PAGE);
+    }
+
+    private Consumer<InventoryClickEvent> turnTo(int newPage) {
         return event -> {
-            topicPage = newPage;
+            window = newPage;
             refresh();
         };
     }

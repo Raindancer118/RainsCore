@@ -147,6 +147,40 @@ class SettingsNavigationTest {
         }
     }
 
+    // ------------------------------------------------------------------ pages of settings
+
+    @Nested
+    @DisplayName("a page with more settings than one window holds")
+    class Paging {
+
+        private SettingsPage pageOf(int settings, int topics) {
+            Setting<?> one = navigation.page("management/fences").settings().getFirst();
+            SettingsTopic topic = navigation.page(null).subtopics().getFirst();
+            return new SettingsPage("x", "X", java.util.Collections.nCopies(topics, topic),
+                    java.util.Collections.nCopies(settings, one), List.of());
+        }
+
+        @Test
+        @DisplayName("shows every setting across its pages — none is dropped past the first window")
+        void nothingIsDropped() {
+            SettingsPage page = pageOf(38, 0);
+            assertThat(page.pageCount(7, 18)).isEqualTo(3);
+            assertThat(page.settingsOn(0, 18)).hasSize(18);
+            assertThat(page.settingsOn(1, 18)).hasSize(18);
+            assertThat(page.settingsOn(2, 18)).hasSize(2);
+            assertThat(page.settingsOn(3, 18)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("pages as far as whichever of categories and settings runs longest")
+        void longestDecides() {
+            assertThat(pageOf(5, 15).pageCount(7, 18)).isEqualTo(3);
+            assertThat(pageOf(19, 2).pageCount(7, 18)).isEqualTo(2);
+            assertThat(pageOf(0, 0).pageCount(7, 18)).isEqualTo(1);
+            assertThat(pageOf(5, 15).topicsOn(2, 7)).hasSize(1);
+        }
+    }
+
     // ------------------------------------------------------------------ going up
 
     @Nested
