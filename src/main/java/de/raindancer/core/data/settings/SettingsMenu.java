@@ -135,12 +135,14 @@ public final class SettingsMenu extends Menu {
         return new SettingsMenu(viewer, brand, chat, navigation, null, null);
     }
 
+    /**
+     * Only this page's own name: {@link Menu#windowTitle()} already puts the page above in front of it.
+     * The whole path used to be here, and a deep page — Economy ▸ Gambling ▸ Slot machine — had its end, the
+     * one part that says where you are, clipped off by the client.
+     */
     @Override
     protected Component title() {
-        if (page.trail().isEmpty()) {
-            return MINI.deserialize("<gray>Settings");
-        }
-        return MINI.deserialize("<gray>" + String.join(" <dark_gray>▸<gray> ", page.trail()));
+        return MINI.deserialize("<gray>" + MINI.escapeTags(page.isRoot() ? "Settings" : page.title()));
     }
 
     @Override
