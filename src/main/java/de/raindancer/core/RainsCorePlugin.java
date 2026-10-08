@@ -509,6 +509,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new MobControlListener(land), this);
         getServer().getPluginManager().registerEvents(
                 new BoundItemListener(), this);
+        // Coins, banknotes and tokens are never worth their material — see NonIngredients.
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.content.items.NonIngredientListener(), this);
         movementProtection = new MovementProtectionListener(land, messages);
         // Told about each other after both exist, rather than one taking the other in its constructor: the
         // damage listener has to be registered before this one, and a constructor argument would be a cycle.
