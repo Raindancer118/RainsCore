@@ -54,4 +54,17 @@ class MenuAnimationTest {
         assertThat(seen.toString()).isEqualTo("0!");
         assertThat(run.finished()).isTrue();
     }
+
+    @Test
+    @DisplayName("a loop draws while the window is open and stops, saying so once, when it closes")
+    void looping() {
+        StringBuilder seen = new StringBuilder();
+        MenuAnimation.Loop loop = new MenuAnimation.Loop(() -> seen.append("f"), () -> seen.append("x"));
+        assertThat(loop.tick(true)).isTrue();
+        assertThat(loop.tick(true)).isTrue();
+        assertThat(loop.tick(false)).isFalse();
+        assertThat(loop.tick(true)).isFalse();
+        loop.end();
+        assertThat(seen.toString()).isEqualTo("ffx");
+    }
 }

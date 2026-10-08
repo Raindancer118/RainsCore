@@ -56,6 +56,52 @@ public final class MenuAnimation {
         }, run::end);
     }
 
+    /**
+     * Redraws a menu every {@code periodTicks} for as long as it stays open — a shared race or round that
+     * moves on whether this viewer does anything or not. {@code closed} runs once, when they leave it.
+     */
+    public static void loop(Plugin plugin, Menu menu, long periodTicks, Runnable frame, Runnable closed) {
+        Player viewer = menu.viewer();
+        Loop loop = new Loop(frame, closed);
+        Scheduling.entityTimer(plugin, viewer, periodTicks, periodTicks, task -> {
+            if (!loop.tick(isOpen(viewer, menu))) {
+                task.cancel();
+            }
+        }, loop::end);
+    }
+
+    /** The looping, apart from any server. */
+    static final class Loop {
+        private final Runnable frame;
+        private final Runnable closed;
+        private boolean ended;
+
+        Loop(Runnable frame, Runnable closed) {
+            this.frame = frame;
+            this.closed = closed == null ? () -> { } : closed;
+        }
+
+        /** @return whether to keep going */
+        boolean tick(boolean stillOpen) {
+            if (ended) {
+                return false;
+            }
+            if (!stillOpen) {
+                end();
+                return false;
+            }
+            frame.run();
+            return true;
+        }
+
+        void end() {
+            if (!ended) {
+                ended = true;
+                closed.run();
+            }
+        }
+    }
+
     private static boolean isOpen(Player viewer, Menu menu) {
         InventoryView open = viewer.getOpenInventory();
         return open != null && open.getTopInventory() != null && open.getTopInventory().getHolder(false) == menu;
