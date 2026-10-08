@@ -136,12 +136,22 @@ public abstract class Menu implements InventoryHolder {
      * with no parent, and there is nowhere to go back to.
      */
     protected void backToWhoeverOpenedThis() {
+        if (!stillOnScreen()) {
+            // The answer already moved them on — a player picked from a list opens that player's page.
+            // Going back now would close the very page the answer opened.
+            return;
+        }
         Menu opener = parent();
         if (opener != null) {
             opener.open();
         } else {
             viewer.closeInventory();
         }
+    }
+
+    private boolean stillOnScreen() {
+        org.bukkit.inventory.InventoryView open = viewer.getOpenInventory();
+        return open != null && open.getTopInventory() != null && open.getTopInventory().getHolder(false) == this;
     }
 
     /** Rebuilds the contents in place; the view stays open, which is what a toggle needs. */
