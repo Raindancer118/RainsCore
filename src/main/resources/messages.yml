@@ -72,6 +72,8 @@ button:
 command:
   # <command> is what was typed. Only said when something close exists; otherwise the server's own line.
   unknown: "<red>/<command> is not a thing here. Not even a secret thing."
+  # A command that exists, with a word after it that it does not know. <word> is that word.
+  unknown-sub: "<red>/<command> does not do <word>. It has a short list, and that is not on it."
   # The guesses follow as buttons, then did-you-mean-end.
   did-you-mean: "<gray>Did you mean "
   did-you-mean-end: "<gray>?"

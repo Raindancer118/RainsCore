@@ -74,4 +74,31 @@ class MistypedCommandTest {
     void limit() {
         assertThat(MistypedCommand.closest("hom", usable, 1)).hasSize(1);
     }
+
+    @Test
+    @DisplayName("a mistyped sub-command keeps the command, the words before it and the words after it")
+    void subCommand() {
+        List<String> words = List.of("trust", "untrust", "list", "manual");
+        MistypedCommand.Guess guess = MistypedCommand.closestSub("claim", new String[]{"trsut", "Steve"}, 0, words, 3)
+                .getFirst();
+        assertThat(guess.command()).isEqualTo("trust");
+        assertThat(guess.line()).isEqualTo("/claim trust Steve");
+        assertThat(guess.bare()).isFalse();
+
+        assertThat(MistypedCommand.closestSub("hg", new String[]{"chat", "mtue"}, 1, List.of("mute", "unmute"), 3))
+                .extracting(MistypedCommand.Guess::line)
+                .containsExactly("/hg chat mute");
+        assertThat(MistypedCommand.closestSub("claim", new String[]{"lsit"}, 0, words, 3).getFirst().bare()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a sub-command guess is never the word itself, nor anything when nothing is close or nothing is there")
+    void subCommandNothing() {
+        List<String> words = List.of("trust", "list");
+        assertThat(MistypedCommand.closestSub("claim", new String[]{"zzzzzzz"}, 0, words, 3)).isEmpty();
+        assertThat(MistypedCommand.closestSub("claim", new String[]{"LIST"}, 0, words, 3)).isEmpty();
+        assertThat(MistypedCommand.closestSub("claim", new String[]{}, 0, words, 3)).isEmpty();
+        assertThat(MistypedCommand.closestSub("claim", new String[]{"lsit"}, 1, words, 3)).isEmpty();
+        assertThat(MistypedCommand.closestSub("claim", new String[]{"lsit"}, 0, null, 3)).isEmpty();
+    }
 }

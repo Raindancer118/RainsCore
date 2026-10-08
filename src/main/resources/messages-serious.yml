@@ -14,6 +14,7 @@ button:
 
 command:
   unknown: "<red>There is no command /<command>."
+  unknown-sub: "<red>/<command> has no option <word>."
 
 settings:
   changed: "<green><name> is now <value>."
