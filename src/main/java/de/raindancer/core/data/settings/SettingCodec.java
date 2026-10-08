@@ -72,7 +72,8 @@ final class SettingCodec {
             return Optional.empty();
         }
         String text = raw.trim();
-        if (text.isEmpty() && setting.type() != String.class) {
+        // An empty list is a real answer: it is how a list is cleared from a command or a screen.
+        if (text.isEmpty() && setting.type() != String.class && setting.type() != List.class) {
             return Optional.empty();
         }
         Class<?> type = setting.type();

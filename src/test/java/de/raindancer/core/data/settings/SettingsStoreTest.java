@@ -314,6 +314,16 @@ class SettingsStoreTest {
         }
 
         @Test
+        @DisplayName("a list can be emptied by typing nothing, and an empty number is still refused")
+        void emptiesAList() {
+            store.load();
+            assertThat(store.set("banned-worlds", "nether, the_end")).isTrue();
+            assertThat(store.set("banned-worlds", "")).isTrue();
+            assertThat(store.current().bannedWorlds()).isEmpty();
+            assertThat(store.set("fences-height", "")).isFalse();
+        }
+
+        @Test
         @DisplayName("a value that will not parse is refused and changes nothing")
         void refusesRubbish() {
             store.load();
