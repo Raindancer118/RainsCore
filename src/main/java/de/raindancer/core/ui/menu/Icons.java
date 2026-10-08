@@ -74,6 +74,8 @@ public final class Icons {
         return head(who, name, List.of(lore));
     }
 
+    private static final HeadSkins SKINS = new HeadSkins();
+
     public static ItemStack head(OfflinePlayer who, String name, List<String> lore) {
         ItemStack item = of(Material.PLAYER_HEAD, name, lore);
         if (who == null) {
@@ -81,10 +83,15 @@ public final class Icons {
         }
         ItemMeta meta = item.getItemMeta();
         if (meta instanceof SkullMeta skull) {
-            // setOwningPlayer rather than the deprecated owner-by-name: a name lookup blocks on
-            // Mojang's servers, and doing that while drawing a menu freezes the main thread for
-            // everybody until it answers.
-            skull.setOwningPlayer(who);
+            HeadSkins.Skin skin = SKINS.of(who);
+            if (skin.profile() != null) {
+                skull.setPlayerProfile(skin.profile());
+            } else if (skin.lookUp()) {
+                // setOwningPlayer rather than the deprecated owner-by-name: a name lookup blocks on
+                // Mojang's servers, and doing that while drawing a menu freezes the main thread for
+                // everybody until it answers.
+                skull.setOwningPlayer(who);
+            }
             item.setItemMeta(skull);
         }
         return item;
