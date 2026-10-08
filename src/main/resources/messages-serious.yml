@@ -12,6 +12,9 @@
 button:
   no-longer-offered: "<yellow>That is no longer on offer."
 
+command:
+  unknown: "<red>There is no command /<command>."
+
 settings:
   changed: "<green><name> is now <value>."
 

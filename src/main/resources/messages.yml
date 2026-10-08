@@ -68,6 +68,14 @@ button:
   not-a-player: "<red>Only a player can click a button."
   not-typed: "<yellow>That is not something to type."
 
+# ──────────────────────────────────────────────────── a command nobody has
+command:
+  # <command> is what was typed. Only said when something close exists; otherwise the server's own line.
+  unknown: "<red>/<command> is not a thing here. Not even a secret thing."
+  # The guesses follow as buttons, then did-you-mean-end.
+  did-you-mean: "<gray>Did you mean "
+  did-you-mean-end: "<gray>?"
+
 # ─────────────────────────────────────────────────────────── the settings menu
 settings:
   # <name> is the setting, <value> what it became.

@@ -102,6 +102,7 @@ import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import de.raindancer.core.content.items.BoundItemListener;
+import de.raindancer.core.platform.command.MistypedCommand;
 import de.raindancer.core.platform.command.CommandDirectory;
 import de.raindancer.core.platform.command.CommandNote;
 import de.raindancer.core.ui.chat.ChatButton;
@@ -532,6 +533,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // does nothing — see ChatButtons and CoreCommands.
         buttons = new ChatButtons(clickActions, "");
         chat = chatFor("Core");
+        getServer().getPluginManager().registerEvents(
+                new MistypedCommand.Listener(getServer()::getCommandMap, messages, buttons), this);
         // Core's own sections, signed with Core's own brand. Until this, they were unowned, and an
         // unowned section wears whatever plugin called prefixFrom last — which is how every warp and
         // home line on the test server announced itself as "Moderation".
