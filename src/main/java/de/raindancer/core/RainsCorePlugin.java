@@ -310,6 +310,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         return instance;
     }
 
+    /** Present only when Vault is installed; see Economies. */
+    private de.raindancer.core.social.economy.VaultBridge vaultBridge;
+
     @Override
     public void onEnable() {
         long startedAt = System.nanoTime();
@@ -407,6 +410,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             getServer().getPluginManager().addPermission(new Permission(
                     SEE_VANISHED, "See players who have vanished",
                     PermissionDefault.FALSE));
+        }
+
+        if (de.raindancer.core.social.economy.VaultBridge.vaultPresent(getServer())) {
+            vaultBridge = new de.raindancer.core.social.economy.VaultBridge(getServer());
+            de.raindancer.core.social.economy.Economies.bridge(vaultBridge);
+            log.info("Vault is installed: a Rain economy is offered to every Vault plugin, and without one "
+                    + "Rain's plugins charge through whatever economy Vault has.");
         }
 
         grants = new Grants(getDataFolder().toPath(), this);
@@ -864,6 +874,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     public void onDisable() {
         // The logfile last: everything above may want to say something on the way out.
         instance = null;
+        if (vaultBridge != null) {
+            vaultBridge.close();
+        }
+        de.raindancer.core.social.economy.Economies.clear();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
         // shutting down, so the final flushes below have to run on this thread, and there is nobody
         // left on the server for them to stall — reporting them as a mistake put an ERROR line in every
@@ -1570,7 +1584,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         int dropped = worldEntryRules.forgetFrom(loader)
                 + registry.forgetFrom(loader)
                 + ProfileExtensions.forgetFrom(loader)
-                + ChatChannels.forgetFrom(loader);
+                + ChatChannels.forgetFrom(loader)
+                + de.raindancer.core.social.economy.Economies.forgetFrom(loader);
         if (combat != null) {
             dropped += combat.forgetFrom(loader);
         }

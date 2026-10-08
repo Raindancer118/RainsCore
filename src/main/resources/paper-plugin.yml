@@ -33,3 +33,9 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
+    # Same treatment. With it, Economies offers a Rain economy to every Vault plugin and falls back to a
+    # foreign Vault economy when none is installed — see VaultBridge.
+    Vault:
+      load: BEFORE
+      required: false
+      join-classpath: true
