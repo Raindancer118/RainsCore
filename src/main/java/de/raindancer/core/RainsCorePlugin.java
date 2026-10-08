@@ -884,6 +884,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             vaultBridge.close();
         }
         de.raindancer.core.social.economy.Economies.clear();
+        de.raindancer.core.social.economy.ItemValues.clear();
         de.raindancer.core.social.presence.Away.clear();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
         // shutting down, so the final flushes below have to run on this thread, and there is nobody
@@ -1593,6 +1594,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + ProfileExtensions.forgetFrom(loader)
                 + ChatChannels.forgetFrom(loader)
                 + de.raindancer.core.social.economy.Economies.forgetFrom(loader)
+                + de.raindancer.core.social.economy.ItemValues.forgetFrom(loader)
                 + de.raindancer.core.social.presence.Away.forgetFrom(loader);
         if (combat != null) {
             dropped += combat.forgetFrom(loader);
