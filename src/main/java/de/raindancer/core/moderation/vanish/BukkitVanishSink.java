@@ -158,6 +158,20 @@ public final class BukkitVanishSink implements VanishSink {
         if (target == null) {
             return;
         }
+        java.util.List<Player> to = new java.util.ArrayList<>();
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.equals(target) || !exceptThem.contains(viewer.getUniqueId())) {
+                to.add(viewer);
+            }
+        }
+        // A server whose join and quit lines are a plugin's own gets that plugin's line — vanilla's, in
+        // yellow, right after a custom "- Ada left." would be the tell this exists to hide.
+        boolean spoken = key.endsWith("left")
+                ? de.raindancer.core.social.presence.PresenceLines.departed(target, to)
+                : de.raindancer.core.social.presence.PresenceLines.arrived(target, to);
+        if (spoken) {
+            return;
+        }
         Component line = Component
                 .translatable(key, NamedTextColor.YELLOW,
                         Component.text(target.getName()));

@@ -47,7 +47,7 @@ public final class KnownNames {
     }
 
     /** Somebody is called this now — on every join, and once for everybody the server has a file for. */
-    public void seen(UUID player, String name) {
+    public synchronized void seen(UUID player, String name) {
         if (player == null || name == null || name.isBlank() || name.equals(names.get(player))) {
             return;
         }
@@ -55,9 +55,13 @@ public final class KnownNames {
         dirty = true;
     }
 
-    /** Only when nothing is known about them yet — for seeding from the server's files, which may be stale. */
-    public void seenIfUnknown(UUID player, String name) {
-        if (player != null && !names.containsKey(player)) {
+    /**
+     * Only when nothing is known about them yet, and only a name nobody holds — for seeding from the server's
+     * player files, which may be years stale. A stale name taking one somebody holds now would point every
+     * command naming that player (a ban!) at whoever had it before.
+     */
+    public synchronized void seenIfUnknown(UUID player, String name) {
+        if (player != null && name != null && !names.containsKey(player) && !ids.containsKey(key(name))) {
             seen(player, name);
         }
     }

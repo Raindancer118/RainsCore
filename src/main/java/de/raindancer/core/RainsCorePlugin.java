@@ -620,7 +620,16 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // forgot. Off the server's threads — reading a name may read the player's file.
         org.bukkit.OfflinePlayer[] everybody = getServer().getOfflinePlayers();
         Scheduling.async(this, () -> {
-            for (org.bukkit.OfflinePlayer who : everybody) {
+            // Most recently seen first: two old files with one name, and the one who has it now claims it.
+            java.util.List<org.bukkit.OfflinePlayer> newestFirst = new java.util.ArrayList<>(java.util.List.of(everybody));
+            newestFirst.sort(java.util.Comparator.comparingLong((org.bukkit.OfflinePlayer who) -> {
+                try {
+                    return who.getLastSeen();
+                } catch (RuntimeException unreadable) {
+                    return 0L;
+                }
+            }).reversed());
+            for (org.bukkit.OfflinePlayer who : newestFirst) {
                 try {
                     knownNames.seenIfUnknown(who.getUniqueId(), who.getName());
                 } catch (RuntimeException unreadable) {
@@ -929,6 +938,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         de.raindancer.core.social.economy.Economies.clear();
         de.raindancer.core.social.economy.ItemValues.clear();
         de.raindancer.core.social.presence.Away.clear();
+        de.raindancer.core.social.presence.PresenceLines.clear();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
         // shutting down, so the final flushes below have to run on this thread, and there is nobody
         // left on the server for them to stall — reporting them as a mistake put an ERROR line in every
@@ -1659,7 +1669,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + ChatChannels.forgetFrom(loader)
                 + de.raindancer.core.social.economy.Economies.forgetFrom(loader)
                 + de.raindancer.core.social.economy.ItemValues.forgetFrom(loader)
-                + de.raindancer.core.social.presence.Away.forgetFrom(loader);
+                + de.raindancer.core.social.presence.Away.forgetFrom(loader)
+                + de.raindancer.core.social.presence.PresenceLines.forgetFrom(loader);
         if (combat != null) {
             dropped += combat.forgetFrom(loader);
         }

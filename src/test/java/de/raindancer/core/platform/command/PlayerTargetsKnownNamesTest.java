@@ -84,4 +84,17 @@ class PlayerTargetsKnownNamesTest {
         assertThat(names.idOf("shared")).contains(bob);
         assertThat(names.nameOf(ann)).isEmpty();
     }
+
+    @Test
+    @DisplayName("a stale name from an old player file never takes a name somebody holds now")
+    void seedingNeverStealsAName() {
+        KnownNames names = new KnownNames(folder.resolve("known-names.yml"));
+        UUID bob = UUID.randomUUID();
+        names.seen(bob, "Shared");                 // Bob joined under it recently
+        names.seenIfUnknown(ann, "Shared");        // Ann's old file still says it
+
+        assertThat(names.idOf("shared")).contains(bob);
+        assertThat(names.nameOf(bob)).contains("Shared");
+        assertThat(names.nameOf(ann)).isEmpty();
+    }
 }
