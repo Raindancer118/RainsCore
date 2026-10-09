@@ -816,6 +816,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         banner.took(Duration.ofNanos(System.nanoTime() - startedAt))
                 .print(getComponentLogger());
         adoptPlayersAlreadyOnline();
+        // Who may see vanished players is worked out at join and on Core's own grants, but somebody can be
+        // made op or given a node through LuckPerms mid-session, and no event says so. Asking again every
+        // few seconds costs a permission lookup per player; maySeeVanished does nothing when it is unchanged.
+        Scheduling.globalTimer(this, 100L, 100L, ignored -> {
+            for (Player online : getServer().getOnlinePlayers()) {
+                Scheduling.entity(this, online, () -> vanish.maySeeVanished(online.getUniqueId(),
+                        VanishSight.sees(online, vanish, SEE_VANISHED)));
+            }
+        });
     }
 
     /**
