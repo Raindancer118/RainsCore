@@ -276,6 +276,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private Votes votes;
     private Vanish vanish;
     private de.raindancer.core.social.presence.Playtime playtime;
+    private de.raindancer.core.moderation.chatlog.ChatLog chatLog;
     private de.raindancer.core.social.presence.KnownNames knownNames;
     private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
     private PlayerPowers powers;
@@ -751,6 +752,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // The audit journal is written off the server's threads: recording an entry only queues it,
         // and this is where the queue is turned into rows. Separate from the flushes below because
         // those write YAML on the main thread by design and this must not.
+        chatLog = new de.raindancer.core.moderation.chatlog.ChatLog(
+                databases.of("chatlog", de.raindancer.core.moderation.chatlog.ChatLog.SCHEMA), System::currentTimeMillis);
+        chatLog.enabled(settings.current().chatLogEnabled());
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.moderation.chatlog.ChatLogListener(chatLog, messages,
+                        () -> settings.current().chatLogRetention()), this);
+        Scheduling.asyncTimer(this, AUDIT_FLUSH_PERIOD_SECONDS, AUDIT_FLUSH_PERIOD_SECONDS, task -> chatLog.flush());
+        Scheduling.asyncTimer(this, AUDIT_PRUNE_PERIOD_SECONDS, AUDIT_PRUNE_PERIOD_SECONDS,
+                task -> chatLog.forgetOlderThan(Duration.ofDays(settings.current().chatLogRetention())));
         auditFlushTask = Scheduling.asyncTimer(this, AUDIT_FLUSH_PERIOD_SECONDS,
                 AUDIT_FLUSH_PERIOD_SECONDS, task -> audit.flush());
         Scheduling.asyncTimer(this, AUDIT_PRUNE_PERIOD_SECONDS, AUDIT_PRUNE_PERIOD_SECONDS,
@@ -829,6 +839,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * about.
      */
     private void applyNewSettings(CoreConfig config) {
+        if (chatLog != null) {
+            chatLog.enabled(config.chatLogEnabled());
+        }
         if (messages != null) {
             messages.tone(config.messageTone());
         }
@@ -945,11 +958,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         de.raindancer.core.social.presence.Away.clear();
         de.raindancer.core.social.presence.PresenceLines.clear();
         de.raindancer.core.moderation.rules.ServerRules.clear();
+        de.raindancer.core.moderation.chatlog.ChatLog.clearWatchers();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
         // shutting down, so the final flushes below have to run on this thread, and there is nobody
         // left on the server for them to stall — reporting them as a mistake put an ERROR line in every
         // clean shutdown that had anything to write, which trains people to ignore the real ones.
         watchingThreads = false;
+        if (chatLog != null) {
+            chatLog.flush();
+        }
         if (playtime != null && playtime.isDirty()) {
             playtime.save();
         }
@@ -1484,6 +1501,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     }
 
     @Override
+    public de.raindancer.core.moderation.chatlog.ChatLog chatLog() {
+        return chatLog;
+    }
+
+    @Override
     public de.raindancer.core.social.presence.Playtime playtime() {
         return playtime;
     }
@@ -1682,7 +1704,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + de.raindancer.core.social.economy.Debts.forgetFrom(loader)
                 + de.raindancer.core.social.presence.Away.forgetFrom(loader)
                 + de.raindancer.core.social.presence.PresenceLines.forgetFrom(loader)
-                + de.raindancer.core.moderation.rules.ServerRules.forgetFrom(loader);
+                + de.raindancer.core.moderation.rules.ServerRules.forgetFrom(loader)
+                + de.raindancer.core.moderation.chatlog.ChatLog.forgetFrom(loader);
         if (combat != null) {
             dropped += combat.forgetFrom(loader);
         }

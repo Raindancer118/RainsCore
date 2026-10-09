@@ -43,6 +43,8 @@ import org.bukkit.Material;
                 description = "What counts as somewhere safe to put a player."),
         @Topic(path = "config/packs", title = "Resource packs", icon = Material.PAINTING,
                 description = "The one pack every plugin's assets go into, and how it is served."),
+        @Topic(path = "moderation/chatlog", title = "Chat log", icon = Material.BOOK,
+                description = "What everybody said in chat, kept for staff for a while."),
         @Topic(path = "moderation", title = "Moderation", icon = Material.IRON_AXE,
                 description = "Whether punishments are acted on, and what a punished player is "
                         + "told. The record is kept either way."),
@@ -340,12 +342,28 @@ public record CoreConfig(
         @In("config/safety") @Title("How far to search for somewhere safe") @Range(min = 0, max = 64)
         @Describe("How far a teleport will look sideways for a safe spot before giving up. Larger "
                 + "means more of the world is loaded to answer.")
-        int safetySearchRadius
+        int safetySearchRadius,
+
+        @In("moderation/chatlog") @Title("Keep a log of chat")
+        @Describe("Every public and channel line, per player, for staff to read back and search (/chatlog). "
+                + "Private messages are not kept. Players are told on their first join.")
+        boolean chatLogEnabled,
+
+        @In("moderation/chatlog") @Title("Keep the chat log for this many days")
+        @Range(min = 1, max = 730)
+        @Describe("Older lines are deleted. What people said, beside their names, is personal data: under the "
+                + "GDPR it may be kept while there is a reason — moderating — and no longer, so there is no "
+                + "'for ever'. Say how long in your privacy notice.")
+        int chatLogRetentionDays
 
 ) {
 
     /** The named looks, kept as an enum so the setting completes and cycles on its own. */
     public enum Theme { DEFAULT, MIDNIGHT, EMBER, FOREST, FROST, MONO }
+
+    public int chatLogRetention() {
+        return Math.max(1, Math.min(730, chatLogRetentionDays));
+    }
 
     /**
      * What Rain's Core ships with.
@@ -377,5 +395,7 @@ public record CoreConfig(
             true, 120,
             de.raindancer.core.world.teleport.TravelShow.DEFAULT_WAIT_DENSITY,
             de.raindancer.core.world.teleport.TravelShow.DEFAULT_ARRIVAL_DENSITY,
-            true, 1, 8);
+            true, 1, 8,
+            // A year: long enough to look into something reported months late, and a limit — never for ever.
+            true, 365);
 }

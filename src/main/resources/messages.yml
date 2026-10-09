@@ -98,6 +98,10 @@ settings:
   search-none: "<gray>No setting mentions <query>. Try a shorter word."
   search-found: "<gray><count> settings mention <query>:"
 
+# ─────────────────────────────────────── the chat log, and telling players it exists
+chatlog:
+  notice: "<dark_gray>Chat on this server is kept for <days> days so staff can look into reports. Private messages are not kept."
+
 # ─────────────────────────────────────── looking inside somebody's inventory
 invsee:
   # What a moderator is told when opening one does not work.
