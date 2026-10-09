@@ -105,6 +105,17 @@ class FeesTest {
         assertThat(bank.calls).containsExactly("withdraw 100 Teleport");
     }
 
+    @Test
+    @DisplayName("a fee written in a settings file is read in the server's currency; blank or nonsense is no fee")
+    void written() {
+        assertThat(Fees.amount("12.50")).isEqualTo(Money.of(1250));
+        assertThat(Fees.amount("1.5k")).isEqualTo(Money.of(150_000));
+        assertThat(Fees.amount("")).isEqualTo(Money.ZERO);
+        assertThat(Fees.amount(null)).isEqualTo(Money.ZERO);
+        assertThat(Fees.amount("lots")).isEqualTo(Money.ZERO);
+        assertThat(Fees.amount("-5")).isEqualTo(Money.ZERO);
+    }
+
     /** An economy written before sources existed: only the three-argument methods. */
     private static class Plain implements Economy {
         final List<String> calls = new ArrayList<>();

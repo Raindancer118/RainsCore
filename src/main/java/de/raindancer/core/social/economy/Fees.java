@@ -79,6 +79,18 @@ public final class Fees {
         return economy.get().deposit(to, taken, reason, source);
     }
 
+    /**
+     * An amount as an owner wrote it in a settings file — {@code 12.50}, {@code 1.5k} — read in the server's
+     * currency. Blank, negative or unreadable is zero, which every fee treats as "no fee".
+     */
+    public static Money amount(String written) {
+        if (written == null || written.isBlank()) {
+            return Money.ZERO;
+        }
+        Currency currency = Economies.current().map(Economy::currency).orElse(Currency.DEFAULT);
+        return currency.parse(written.strip()).orElse(Money.ZERO);
+    }
+
     /** The amount written in the server's currency, or plainly when there is no economy. */
     public static String format(Money amount) {
         return Economies.current().map(bank -> bank.format(amount)).orElseGet(() -> Currency.DEFAULT.format(amount));
