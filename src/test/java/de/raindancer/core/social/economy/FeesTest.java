@@ -93,7 +93,23 @@ class FeesTest {
         Economies.provide(owner, bank);
         PriceIndex.provide(owner, () -> 3.0);
         Fees.refund(payer, Money.of(77), "Refund", "tpa.fee");
-        assertThat(bank.calls).containsExactly("deposit 77 Refund tpa.fee");
+        assertThat(bank.calls).as("an economy without its own refund deposits it")
+                .containsExactly("deposit 77 Refund tpa.fee");
+    }
+
+    @Test
+    @DisplayName("an economy with its own refund is asked for a refund, not a deposit")
+    void ownRefund() {
+        Recording bank = new Recording(Money.ZERO) {
+            @Override
+            public EconomyResult refund(UUID player, Money amount, String reason, String source) {
+                calls.add("refund " + amount.minor() + " " + source);
+                return EconomyResult.done(amount, money);
+            }
+        };
+        Economies.provide(owner, bank);
+        Fees.refund(payer, Money.of(77), "Refund", "tpa.fee");
+        assertThat(bank.calls).containsExactly("refund 77 tpa.fee");
     }
 
     @Test

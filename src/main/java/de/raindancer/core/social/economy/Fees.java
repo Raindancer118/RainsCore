@@ -76,7 +76,7 @@ public final class Fees {
         if (economy.isEmpty()) {
             return EconomyResult.failed(EconomyResult.Outcome.UNAVAILABLE, taken, Money.ZERO);
         }
-        return economy.get().deposit(to, taken, reason, source);
+        return economy.get().refund(to, taken, reason, source);
     }
 
     /**

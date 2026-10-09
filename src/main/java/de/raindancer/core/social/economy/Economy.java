@@ -61,6 +61,15 @@ public interface Economy {
         return withdraw(player, amount, reason);
     }
 
+    /**
+     * Gives back exactly what a fee just took, because what was paid for did not happen. Unlike a payout it is
+     * never refused for an empty treasury and never skimmed toward a debt: the fee made the room, and money
+     * handed back is not income.
+     */
+    default EconomyResult refund(UUID player, Money amount, String reason, String source) {
+        return deposit(player, amount, reason, source);
+    }
+
     /** How much money there is and what the treasury holds; empty when the provider does not know. */
     default java.util.Optional<MoneySupply> supply() {
         return java.util.Optional.empty();
