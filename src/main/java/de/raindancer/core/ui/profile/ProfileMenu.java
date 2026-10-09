@@ -124,7 +124,10 @@ public final class ProfileMenu extends Menu {
             lore.add("<gray>Last seen <white>" + Times.describe(ago) + "</white> ago.");
         }
         if (RainsCore.isAvailable() && RainsCore.get().playtime().isKnown(subject)) {
-            lore.add("<gray>Played <white>" + Times.describe(RainsCore.get().playtime().played(subject)) + "</white>.");
+            de.raindancer.core.social.presence.Playtime playtime = RainsCore.get().playtime();
+            lore.add("<gray>Played <white>" + Times.describe(playtime.played(subject)) + "</white>.");
+            lore.add("<gray>Active <white>" + Times.describe(playtime.playedActively(subject)) + "</white>, AFK <white>"
+                    + Times.describe(playtime.playedAway(subject)) + "</white>.");
         }
         return lore;
     }

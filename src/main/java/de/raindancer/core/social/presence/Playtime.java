@@ -78,6 +78,15 @@ public final class Playtime {
         return entry == null ? 0 : entry.active();
     }
 
+    /** Minutes online but away from the keyboard. */
+    public long awayMinutes(UUID player) {
+        return Math.max(0, minutes(player) - activeMinutes(player));
+    }
+
+    public Duration playedAway(UUID player) {
+        return Duration.ofMinutes(awayMinutes(player));
+    }
+
     public Duration played(UUID player) {
         return Duration.ofMinutes(minutes(player));
     }

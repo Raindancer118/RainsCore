@@ -35,6 +35,8 @@ class PlaytimeTest {
         assertThat(playtime.minutes(alice)).isEqualTo(3);
         assertThat(playtime.activeMinutes(alice)).isEqualTo(2);
         assertThat(playtime.played(alice)).isEqualTo(Duration.ofMinutes(3));
+        assertThat(playtime.awayMinutes(alice)).isEqualTo(1);
+        assertThat(playtime.playedAway(alice)).isEqualTo(Duration.ofMinutes(1));
     }
 
     @Test
