@@ -135,8 +135,7 @@ public final class Messages {
         }
         Map<String, Object> old = new LinkedHashMap<>();
         try (InputStream stream = olderBundled) {
-            flatten(YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8)),
-                    "", old);
+            flatten(parse(stream), "", old);
         } catch (IOException | RuntimeException broken) {
             log.warn("An older version's messages could not be read ({}); lines from it stay as they are.",
                     broken.getMessage());
@@ -180,9 +179,7 @@ public final class Messages {
         }
         Map<String, Object> wording = new LinkedHashMap<>();
         try (InputStream stream = bundled) {
-            YamlConfiguration yaml = new YamlConfiguration();
-            yaml.loadFromString(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
-            flatten(yaml, "", wording);
+            flatten(parse(stream), "", wording);
         } catch (Exception broken) {
             problems.add("a serious wording file could not be read (" + broken.getMessage() + ")");
             log.warn("A serious wording file could not be read ({}); those lines keep their playful "
@@ -228,9 +225,7 @@ public final class Messages {
         Map<String, Object> defaults = new LinkedHashMap<>();
         if (bundledDefaults != null) {
             try (InputStream stream = bundledDefaults) {
-                YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
-                        new InputStreamReader(stream, StandardCharsets.UTF_8));
-                flatten(yaml, "", defaults);
+                flatten(parse(stream), "", defaults);
             } catch (IOException | RuntimeException broken) {
                 // The plugin's own file being unreadable is the plugin's bug, not the owner's, and
                 // it leaves every message showing its key. Loud on purpose.
@@ -244,9 +239,7 @@ public final class Messages {
         Map<String, Object> owner = new LinkedHashMap<>();
         if (file != null && Files.isRegularFile(file)) {
             try {
-                YamlConfiguration yaml = new YamlConfiguration();
-                yaml.loadFromString(Files.readString(file));
-                flatten(yaml, "", owner);
+                flatten(parse(Files.readString(file)), "", owner);
             } catch (Exception broken) {
                 // Their file, their mistake — and it costs them the translation rather than every
                 // message the plugin has.
@@ -354,9 +347,7 @@ public final class Messages {
 
         Map<String, Object> fromJar = new LinkedHashMap<>();
         try (InputStream stream = bundledDefaults) {
-            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
-            flatten(yaml, "", fromJar);
+            flatten(parse(stream), "", fromJar);
         } catch (IOException | RuntimeException broken) {
             log.error("The bundled messages.yml could not be read; {} was left untouched.",
                     file.getFileName());
@@ -367,9 +358,7 @@ public final class Messages {
         Map<String, Object> owned = new LinkedHashMap<>();
         try {
             text = Files.readString(file);
-            YamlConfiguration yaml = new YamlConfiguration();
-            yaml.loadFromString(text);
-            flatten(yaml, "", owned);
+            flatten(parse(text), "", owned);
         } catch (Exception broken) {
             // Deliberately not repaired. Somebody is mid-edit, or the disk filled during a write, and
             // a rewrite from half a parse loses whatever is not in the half that parsed.
@@ -926,9 +915,7 @@ public final class Messages {
         }
         Map<String, Object> wording = new LinkedHashMap<>();
         try (InputStream stream = bundled) {
-            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
-            flatten(yaml, "", wording);
+            flatten(parse(stream), "", wording);
             if (signature != null) {
                 // The top-level sections this file defines, which is exactly what this module owns.
                 for (String key : wording.keySet()) {
@@ -1100,6 +1087,32 @@ public final class Messages {
      * <p>So {@code nested.deeper} works whether the owner wrote it nested or flat — which they will
      * do inconsistently, and should not have to think about.
      */
+    /** A bare {@code off:}, {@code on:}, {@code yes:} or {@code no:} key, the whole word, at the start of a line. */
+    private static final java.util.regex.Pattern YES_NO_KEY = java.util.regex.Pattern.compile(
+            "(?m)^(\\s*)(on|off|yes|no|y|n|true|false)(\\s*):", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Quotes keys YAML 1.1 would read as booleans. Bukkit's loader turns {@code off:} into the key
+     * {@code false}, so {@code shop.off} becomes {@code shop.false} and the line is never found.
+     */
+    static String quoteYesNoKeys(String text) {
+        return YES_NO_KEY.matcher(text).replaceAll("$1\"$2\"$3:");
+    }
+
+    private static YamlConfiguration parse(String text) {
+        YamlConfiguration yaml = new YamlConfiguration();
+        try {
+            yaml.loadFromString(quoteYesNoKeys(text));
+        } catch (org.bukkit.configuration.InvalidConfigurationException broken) {
+            throw new IllegalArgumentException(broken.getMessage(), broken);
+        }
+        return yaml;
+    }
+
+    private static YamlConfiguration parse(java.io.InputStream stream) throws java.io.IOException {
+        return parse(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+    }
+
     private static void flatten(ConfigurationSection section, String prefix,
                                 Map<String, Object> into) {
         for (String key : section.getKeys(false)) {
