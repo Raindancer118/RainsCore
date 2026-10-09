@@ -2,7 +2,8 @@ name: RainsCore
 version: '${project.version}'
 main: de.raindancer.core.RainsCorePlugin
 bootstrapper: de.raindancer.core.RainsCoreBootstrap
-api-version: '1.21'
+api-version: '26.3'
+folia-supported: true
 description: The one implementation of everything Rain's plugins do to the game.
 author: Raindancer118
 website: https://github.com/Raindancer118/RainsCore

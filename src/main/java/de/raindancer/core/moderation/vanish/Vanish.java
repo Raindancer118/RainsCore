@@ -51,6 +51,10 @@ public final class Vanish {
 
     private volatile boolean flightWhileVanished = true;
 
+    /** Permissions whose holders count as staff for {@link #staffSeeStaff}: whoever may vanish, usually. */
+    private final Set<String> staffNodes = ConcurrentHashMap.newKeySet();
+    private volatile boolean staffSeeStaff = true;
+
     /** See {@link #fakeDeparture(boolean)}. On, because being noticed is the thing vanish avoids. */
     private volatile boolean fakeDeparture = true;
 
@@ -59,6 +63,30 @@ public final class Vanish {
     }
 
     // ---------------------------------------------------------------------------- settings
+
+    /**
+     * Whether staff — holders of a {@link #countAsStaff} permission — see vanished players without the
+     * separate see-vanished permission. On by default: two vanished moderators should not be invisible
+     * to each other.
+     */
+    public void staffSeeStaff(boolean on) {
+        this.staffSeeStaff = on;
+    }
+
+    public boolean isStaffSeeStaff() {
+        return staffSeeStaff;
+    }
+
+    /** Holders of {@code permission} count as staff; a moderation plugin passes the node that lets one vanish. */
+    public void countAsStaff(String permission) {
+        if (permission != null && !permission.isBlank()) {
+            staffNodes.add(permission);
+        }
+    }
+
+    public Set<String> staffNodes() {
+        return Set.copyOf(staffNodes);
+    }
 
     /**
      * Whether vanishing also grants flight.

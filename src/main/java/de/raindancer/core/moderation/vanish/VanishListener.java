@@ -1,6 +1,8 @@
 package de.raindancer.core.moderation.vanish;
 
 import de.raindancer.core.platform.util.Scheduling;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,6 +12,8 @@ import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
+
+import java.util.function.Predicate;
 
 /**
  * Keeping the promise across joins, leaves and advancements.
@@ -26,24 +30,33 @@ public final class VanishListener implements Listener {
 
     private final Plugin plugin;
     private final Vanish vanish;
-    private final String seeVanishedPermission;
+    private final Predicate<Player> seesVanished;
 
     public VanishListener(Plugin plugin, Vanish vanish, String seeVanishedPermission) {
+        this(plugin, vanish, (Predicate<Player>) player ->
+                seeVanishedPermission != null && player.hasPermission(seeVanishedPermission));
+    }
+
+    /** @param seesVanished who may see hidden players, asked once per join — see {@link VanishSight} */
+    public VanishListener(Plugin plugin, Vanish vanish, Predicate<Player> seesVanished) {
         this.plugin = plugin;
         this.vanish = vanish;
-        this.seeVanishedPermission = seeVanishedPermission;
+        this.seesVanished = seesVanished;
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onJoin(PlayerJoinEvent event) {
         Player joining = event.getPlayer();
-        vanish.maySeeVanished(joining.getUniqueId(),
-                seeVanishedPermission != null && joining.hasPermission(seeVanishedPermission));
+        vanish.maySeeVanished(joining.getUniqueId(), seesVanished.test(joining));
 
         if (vanish.isVanished(joining.getUniqueId())) {
             // Quietly: their own arrival must not be announced, and they have to be hidden again
-            // from everybody, since a fresh connection knows nothing about who was hidden.
+            // from everybody, since a fresh connection knows nothing about who was hidden. Staff who
+            // can see them are told, or a colleague logging in is a tab entry that appeared unannounced.
+            Component line = event.joinMessage();
             event.joinMessage(null);
+            tellStaff(joining, line != null ? line
+                    : Component.translatable("multiplayer.player.joined", Component.text(joining.getName())));
         }
         // Everybody already hidden has to be hidden from the person who just arrived. Without this
         // the newest player is the one person who can see every vanished moderator on the server.
@@ -89,10 +102,24 @@ public final class VanishListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onQuit(PlayerQuitEvent event) {
         if (vanish.isVanished(event.getPlayer().getUniqueId())) {
+            Component line = event.quitMessage();
             event.quitMessage(null);
+            tellStaff(event.getPlayer(), line != null ? line : Component.translatable("multiplayer.player.left",
+                    Component.text(event.getPlayer().getName())));
         }
         // Whether they may see hidden players is a fact about this session, not about them. Being
         // hidden is not, and deliberately survives — see Vanish#forgetSession.
         vanish.forgetSession(event.getPlayer().getUniqueId());
+    }
+
+    /** The join or leave line, marked as vanished, to everybody online who can see vanished players. */
+    private void tellStaff(Player who, Component line) {
+        Component marked = Component.text("[vanished] ", NamedTextColor.GRAY)
+                .append(line.colorIfAbsent(NamedTextColor.GRAY));
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.equals(who) && vanish.maySeeVanished(viewer.getUniqueId())) {
+                viewer.sendMessage(marked);
+            }
+        }
     }
 }

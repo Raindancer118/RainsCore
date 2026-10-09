@@ -26,9 +26,10 @@ import java.util.Map;
  * the better one.
  *
  * <h2>Game rules as text</h2>
- * Through the name/value form rather than typed {@code GameRule}s: the rule set changes between
+ * Kept as name/value text rather than typed {@code GameRule}s: the rule set changes between
  * Minecraft versions, and a snapshot that only knew the rules of one version would silently drop the
- * rest on the next.
+ * rest on the next. Read and written through {@link GameRuleAccess}, on the typed API — the by-name
+ * string calls are gone from Paper since 26.3.
  */
 public record WorldSnapshot(Map<String, String> gameRules, Difficulty difficulty,
                             double borderCenterX, double borderCenterZ, double borderSize,
@@ -38,6 +39,15 @@ public record WorldSnapshot(Map<String, String> gameRules, Difficulty difficulty
     public static final double VANILLA_BORDER = 5.9999968E7;
 
     private static final LogChannel log = Log.of("world");
+
+    private static final GameRuleAccess SERVER_RULES = new PaperGameRules();
+    /** The server's rules, unless a test has put in its own — {@code GameRule} cannot exist without a server. */
+    private static volatile GameRuleAccess rules = SERVER_RULES;
+
+    /** For tests only: {@code null} puts the server's back. */
+    static void useRules(GameRuleAccess access) {
+        rules = access == null ? SERVER_RULES : access;
+    }
 
     public WorldSnapshot {
         gameRules = gameRules == null ? Map.of() : Map.copyOf(gameRules);
@@ -49,14 +59,10 @@ public record WorldSnapshot(Map<String, String> gameRules, Difficulty difficulty
             return new WorldSnapshot(Map.of(), null, 0, 0, VANILLA_BORDER, 0, 0, 0, 0f, false);
         }
         Map<String, String> rules = new LinkedHashMap<>();
-        String[] names = world.getGameRules();
-        if (names != null) {
-            for (String name : names) {
-                String value = world.getGameRuleValue(name);
-                if (value != null) {
-                    rules.put(name, value);
-                }
-            }
+        try {
+            rules.putAll(WorldSnapshot.rules.read(world));
+        } catch (RuntimeException unreadable) {
+            log.warn("The game rules of '{}' could not be read; they are not carried over.", world.getName());
         }
         double centerX = 0;
         double centerZ = 0;
@@ -83,9 +89,13 @@ public record WorldSnapshot(Map<String, String> gameRules, Difficulty difficulty
         if (world == null) {
             return;
         }
+        GameRuleAccess access = rules;
         gameRules.forEach((name, value) -> {
             try {
-                world.setGameRuleValue(name, value);
+                access.typeOf(name).flatMap(type -> GameRuleAccess.parse(type, value)).ifPresentOrElse(
+                        typed -> access.write(world, name, typed),
+                        () -> log.info("Game rule {}={} is not one this server knows; left out on '{}'.",
+                                name, value, world.getName()));
             } catch (RuntimeException refused) {
                 log.warn("Game rule {} could not be carried over to '{}'.", name, world.getName());
             }

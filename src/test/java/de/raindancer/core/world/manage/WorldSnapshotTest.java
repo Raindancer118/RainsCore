@@ -4,8 +4,16 @@ import org.bukkit.Difficulty;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,11 +29,47 @@ import static org.mockito.Mockito.when;
  */
 class WorldSnapshotTest {
 
-    private static World configured() {
+    /**
+     * Game rules as a server answers them, per world. {@code GameRule} itself cannot exist without a
+     * running server, so the typed side is {@link PaperGameRules}' and is checked on a real one.
+     */
+    static final class FakeRules implements GameRuleAccess {
+        final Map<World, Map<String, String>> worlds = new IdentityHashMap<>();
+        final Map<String, Class<?>> known = new LinkedHashMap<>(Map.of(
+                "keep_inventory", Boolean.class, "mob_griefing", Boolean.class, "respawn_radius", Integer.class));
+
+        @Override
+        public Map<String, String> read(World world) {
+            return worlds.getOrDefault(world, Map.of());
+        }
+
+        @Override
+        public Optional<Class<?>> typeOf(String name) {
+            return Optional.ofNullable(known.get(name));
+        }
+
+        @Override
+        public void write(World world, String name, Object value) {
+            worlds.computeIfAbsent(world, ignored -> new HashMap<>()).put(name, String.valueOf(value));
+        }
+    }
+
+    private final FakeRules rules = new FakeRules();
+
+    @BeforeEach
+    void useTheFake() {
+        WorldSnapshot.useRules(rules);
+    }
+
+    @AfterEach
+    void putTheServersBack() {
+        WorldSnapshot.useRules(null);
+    }
+
+    private World configured() {
         World world = mock(World.class);
-        when(world.getGameRules()).thenReturn(new String[]{"keepInventory", "doMobGriefing"});
-        when(world.getGameRuleValue("keepInventory")).thenReturn("true");
-        when(world.getGameRuleValue("doMobGriefing")).thenReturn("false");
+        // Minecraft 26.3 names: game rules are registry entries now, and the old camelCase ones are gone.
+        rules.worlds.put(world, Map.of("keep_inventory", "true", "mob_griefing", "false", "respawn_radius", "3"));
         when(world.getDifficulty()).thenReturn(Difficulty.HARD);
         WorldBorder border = mock(WorldBorder.class);
         Location center = mock(Location.class);
@@ -57,8 +101,9 @@ class WorldSnapshotTest {
 
         snapshot.applyTo(fresh, false);
 
-        verify(fresh).setGameRuleValue("keepInventory", "true");
-        verify(fresh).setGameRuleValue("doMobGriefing", "false");
+        assertThat(rules.read(fresh)).containsEntry("keep_inventory", "true")
+                .containsEntry("mob_griefing", "false")
+                .containsEntry("respawn_radius", "3");
         verify(fresh).setDifficulty(Difficulty.HARD);
         verify(fresh.getWorldBorder()).setCenter(100.0, -200.0);
         verify(fresh.getWorldBorder()).setSize(5000.0);
@@ -98,5 +143,30 @@ class WorldSnapshotTest {
         assertThat(snapshot.gameRules()).isEmpty();
         snapshot.applyTo(fresh(), true);
         assertThat(WorldSnapshot.of(null).gameRules()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a rule this server does not know, or a value that is not of its type, is skipped — the rest still apply")
+    void unknownRulesAreSkipped() {
+        WorldSnapshot snapshot = new WorldSnapshot(Map.of(
+                "doDaylightCycle", "false", "respawn_radius", "lots", "mob_griefing", "maybe", "keep_inventory", "TRUE"),
+                null, 0, 0, WorldSnapshot.VANILLA_BORDER, 0, 0, 0, 0f, false);
+        World fresh = fresh();
+
+        snapshot.applyTo(fresh, false);
+
+        assertThat(rules.read(fresh)).containsExactly(Map.entry("keep_inventory", "true"));
+    }
+
+    @Test
+    @DisplayName("text becomes the rule's own type: a switch or a number, nothing else")
+    void parsing() {
+        assertThat(GameRuleAccess.parse(Boolean.class, "true")).contains(true);
+        assertThat(GameRuleAccess.parse(Boolean.class, " False ")).contains(false);
+        assertThat(GameRuleAccess.parse(Boolean.class, "yes")).isEmpty();
+        assertThat(GameRuleAccess.parse(Integer.class, "-5")).contains(-5);
+        assertThat(GameRuleAccess.parse(Integer.class, "5.5")).isEmpty();
+        assertThat(GameRuleAccess.parse(String.class, "x")).isEmpty();
+        assertThat(GameRuleAccess.parse(Integer.class, null)).isEmpty();
     }
 }

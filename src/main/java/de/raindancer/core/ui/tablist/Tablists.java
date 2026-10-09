@@ -227,6 +227,10 @@ public final class Tablists {
             Player player = allOnline.get(index);
             TablistEntry entry = allEntries.get(index);
             Component line = showWorldOnEachLine ? model.lineWithWorld(entry) : model.line(entry);
+            if (hidden.contains(entry.player())) {
+                // Only somebody allowed to see them still has their entry at all, so the mark is for staff.
+                line = line.append(Component.text(" [vanished]", net.kyori.adventure.text.format.NamedTextColor.GRAY));
+            }
             try {
                 // Only when it differs from what the player has now: every call is a packet to every
                 // player on the server, so setting it unchanged each refresh was N² packets saying

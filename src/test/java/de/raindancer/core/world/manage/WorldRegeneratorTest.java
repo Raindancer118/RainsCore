@@ -6,6 +6,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.entity.Player;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -48,6 +49,17 @@ class WorldRegeneratorTest {
 
     private Path worldFolder;
     private World world;
+
+    /** No game rules unless a test says so: the server's registry does not exist in a unit test. */
+    @BeforeEach
+    void noServerRules() {
+        WorldSnapshot.useRules(new WorldSnapshotTest.FakeRules());
+    }
+
+    @AfterEach
+    void serverRulesBack() {
+        WorldSnapshot.useRules(null);
+    }
 
     @BeforeEach
     void setUp() throws IOException {
@@ -493,8 +505,9 @@ class WorldRegeneratorTest {
         @Test
         @DisplayName("game rules come across to the new world")
         void gameRulesComeAcross() {
-            when(world.getGameRules()).thenReturn(new String[]{"keepInventory"});
-            when(world.getGameRuleValue("keepInventory")).thenReturn("true");
+            WorldSnapshotTest.FakeRules rules = new WorldSnapshotTest.FakeRules();
+            rules.worlds.put(world, java.util.Map.of("keep_inventory", "true"));
+            WorldSnapshot.useRules(rules);
             World made = mock(World.class);
             when(made.getWorldBorder()).thenReturn(mock(org.bukkit.WorldBorder.class));
             try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
@@ -504,7 +517,9 @@ class WorldRegeneratorTest {
                 Boolean ok = awaitResult(cb -> regenerator.regenerate(world, WorldSeed.same(), cb));
 
                 assertThat(ok).isTrue();
-                verify(made).setGameRuleValue("keepInventory", "true");
+                assertThat(rules.read(made)).containsEntry("keep_inventory", "true");
+            } finally {
+                WorldSnapshot.useRules(null);
             }
         }
 

@@ -12,6 +12,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.components.CustomModelDataComponent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
@@ -80,7 +81,13 @@ public final class ItemFactory {
             }
             meta.lore(lore);
         }
-        definition.modelData().ifPresent(meta::setCustomModelData);
+        definition.modelData().ifPresent(number -> {
+            // What setCustomModelData(int) did: the number as the first float, which a resource pack's
+            // "custom_model_data" range dispatch reads.
+            CustomModelDataComponent model = meta.getCustomModelDataComponent();
+            model.setFloats(List.of(number.floatValue()));
+            meta.setCustomModelDataComponent(model);
+        });
         if (definition.isGlowing()) {
             // An enchantment nobody can see, purely for the shimmer — the usual way of doing this,
             // and the flag is what stops "Unbreaking I" appearing in the tooltip.

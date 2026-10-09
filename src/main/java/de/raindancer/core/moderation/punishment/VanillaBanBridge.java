@@ -5,7 +5,7 @@ import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import org.bukkit.BanEntry;
-import org.bukkit.BanList;
+import io.papermc.paper.ban.BanListType;
 import org.bukkit.Bukkit;
 import org.bukkit.ban.ProfileBanList;
 
@@ -60,7 +60,7 @@ public final class VanillaBanBridge {
      * be added to.
      */
     private static ProfileBanList list() {
-        return Bukkit.getBanList(BanList.Type.PROFILE);
+        return Bukkit.getBanList(BanListType.PROFILE);
     }
 
     /**

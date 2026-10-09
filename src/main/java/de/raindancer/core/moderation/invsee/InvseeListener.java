@@ -1,6 +1,10 @@
 package de.raindancer.core.moderation.invsee;
 
+import com.destroystokyo.paper.profile.PlayerProfile;
 import de.raindancer.core.platform.log.Log;
+import io.papermc.paper.connection.PlayerConfigurationConnection;
+import io.papermc.paper.connection.PlayerLoginConnection;
+import io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent;
 import de.raindancer.core.platform.log.LogChannel;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -12,7 +16,6 @@ import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 
@@ -141,8 +144,17 @@ public final class InvseeListener implements Listener {
      * is about to read is the one its owner left.
      */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onLogin(PlayerLoginEvent event) {
-        inventories.somebodyJoined(event.getPlayer().getUniqueId());
+    public void onLogin(PlayerConnectionValidateLoginEvent event) {
+        // Fired at login and again when configuration ends — the second is just before the server
+        // reads their file. Doing it twice is harmless: the second finds nothing left to stop.
+        PlayerProfile profile = switch (event.getConnection()) {
+            case PlayerConfigurationConnection configuring -> configuring.getProfile();
+            case PlayerLoginConnection loggingIn -> loggingIn.getAuthenticatedProfile();
+            default -> null;
+        };
+        if (profile != null && profile.getId() != null) {
+            inventories.somebodyJoined(profile.getId());
+        }
     }
 
     /**

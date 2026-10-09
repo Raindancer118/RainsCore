@@ -71,6 +71,7 @@ import de.raindancer.core.moderation.players.PlayerPowers;
 import de.raindancer.core.moderation.vanish.BukkitVanishSink;
 import de.raindancer.core.moderation.vanish.Vanish;
 import de.raindancer.core.moderation.vanish.VanishListener;
+import de.raindancer.core.moderation.vanish.VanishSight;
 import de.raindancer.core.content.vote.Votes;
 import de.raindancer.core.content.pack.BukkitPackSink;
 import de.raindancer.core.content.pack.PackListener;
@@ -448,7 +449,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 // who is granted that node mid-session would otherwise not be able to see anybody until
                 // they relogged — the same defect one layer up.
                 if (vanish != null) {
-                    vanish.maySeeVanished(who, affected.hasPermission(SEE_VANISHED));
+                    vanish.maySeeVanished(who, VanishSight.sees(affected, vanish, SEE_VANISHED));
                 }
             };
             // A grant arrives on whoever made it — a moderator's command, on their region. The
@@ -488,7 +489,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 System::currentTimeMillis);
         achievements.load();
 
-        tablists = new Tablists(new TablistModel(identities), getServer().getMotd());
+        tablists = new Tablists(new TablistModel(identities), serverName());
         applyTablistSettings();
         // Applied again whenever they change, so switching the custom list off in a menu puts
         // every name back rather than freezing whatever was last drawn.
@@ -665,7 +666,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         nametags = new de.raindancer.core.ui.identity.Nametags(this, identities, vanish);
         getServer().getPluginManager().registerEvents(nametags, this);
         getServer().getPluginManager().registerEvents(
-                new VanishListener(this, vanish, SEE_VANISHED), this);
+                new VanishListener(this, vanish, player -> VanishSight.sees(player, vanish, SEE_VANISHED)), this);
         // Hiding a player's entity does not take them off a *custom* tablist — that list is built from
         // getOnlinePlayers(), so a vanished moderator was on it with their name, world and ping, in the
         // one place anybody looks to see who is about.
@@ -826,7 +827,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         for (Player online : getServer().getOnlinePlayers()) {
             Scheduling.entity(this, online, () -> {
                 grantListener.apply(online);
-                vanish.maySeeVanished(online.getUniqueId(), online.hasPermission(SEE_VANISHED));
+                vanish.maySeeVanished(online.getUniqueId(), VanishSight.sees(online, vanish, SEE_VANISHED));
             });
         }
     }
@@ -856,11 +857,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         effects.enabled(config.effectsEnabled());
         effects.minimumGap(Duration.ofMillis(config.effectsRepeatGapMillis()));
         vanish.flightWhileVanished(config.vanishFlight());
+        if (vanish.isStaffSeeStaff() != config.vanishStaffSeeStaff()) {
+            vanish.staffSeeStaff(config.vanishStaffSeeStaff());
+            for (Player online : getServer().getOnlinePlayers()) {
+                Scheduling.entity(this, online, () -> vanish.maySeeVanished(online.getUniqueId(),
+                        VanishSight.sees(online, vanish, SEE_VANISHED)));
+            }
+        }
         if (tablists != null) {
             tablists.model().showPing(config.tablistShowPing());
             tablists.model().title(config.tablistTitle());
             tablists.model().logo("auto".equalsIgnoreCase(config.tablistLogo().trim())
-                    ? TablistModel.logoFor(getServer().getMotd())
+                    ? TablistModel.logoFor(serverName())
                     : framesOf(config.tablistLogo()));
             tablists.headerFrames(framesOf(config.tablistHeaderFrames()), config.tablistFrameTicks());
             tablists.footerFrames(framesOf(config.tablistFooterFrames()), config.tablistFrameTicks());
@@ -1791,4 +1799,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
     }
 
+
+    /** The MOTD as plain text — what the tablist logo is drawn from. */
+    private String serverName() {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(getServer().motd());
+    }
 }

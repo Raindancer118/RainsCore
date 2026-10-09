@@ -17,7 +17,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.event.inventory.PrepareInventoryResultEvent;
+import com.destroystokyo.paper.event.inventory.PrepareResultEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.Inventory;
@@ -120,7 +120,7 @@ public final class NonIngredientListener implements Listener {
 
     /** Anvil, smithing table, grindstone, loom, cartography table and stonecutter. */
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPrepareResult(PrepareInventoryResultEvent event) {
+    public void onPrepareResult(PrepareResultEvent event) {
         if (NonIngredients.anyMarked(event.getInventory().getContents())) {
             event.setResult(null);
         }

@@ -3,9 +3,10 @@ package de.raindancer.core.world.locate;
 import de.raindancer.core.platform.log.Log;
 import de.raindancer.core.platform.log.LogChannel;
 import de.raindancer.core.platform.util.Scheduling;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.World;
 import org.bukkit.generator.structure.Structure;
 import org.bukkit.plugin.Plugin;
@@ -235,7 +236,7 @@ public final class StructureLocator {
         double nearestDistance = Double.POSITIVE_INFINITY;
         for (String key : keys) {
             NamespacedKey id = NamespacedKey.fromString(key);
-            Structure structure = id == null ? null : Registry.STRUCTURE.get(id);
+            Structure structure = id == null ? null : RegistryAccess.registryAccess().getRegistry(RegistryKey.STRUCTURE).get(id);
             if (structure == null) {
                 continue;
             }

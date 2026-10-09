@@ -23,7 +23,6 @@
  */
 package de.raindancer.core.internal.fastboard;
 
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 import java.lang.invoke.MethodHandle;
@@ -49,8 +48,9 @@ import java.util.stream.Stream;
 public abstract class FastBoardBase<T> {
 
     private static final Map<Class<?>, Field[]> PACKETS = new HashMap<>(8);
-    protected static final String[] COLOR_CODES = Arrays.stream(ChatColor.values())
-            .map(Object::toString)
+    // ChatColor.values() as text, without the deprecated ChatColor: sixteen colours, five formats, reset.
+    protected static final String[] COLOR_CODES = "0123456789abcdefklmnor".chars()
+            .mapToObj(code -> "\u00a7" + (char) code)
             .toArray(String[]::new);
     private static final VersionType VERSION_TYPE;
     // Packets and components

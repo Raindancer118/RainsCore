@@ -66,7 +66,10 @@ public final class SoundChooser extends PaginatedMenu<SoundFamily> {
         return new SoundCatalogue(() -> {
             List<String> keys = new ArrayList<>();
             Registry.SOUNDS.forEach(sound -> {
-                NamespacedKey key = sound.getKey();
+                NamespacedKey key = Registry.SOUNDS.getKey(sound);
+                if (key == null) {
+                    return;
+                }
                 keys.add(key.getNamespace().equals("minecraft")
                         ? key.getKey() : key.toString());
             });
