@@ -49,7 +49,10 @@ public final class InsuredItems {
         keepers.removeIf(each -> each.active() == active);
     }
 
-    /** Whether a policy is in force with any keeper. False with none, and for a keeper that throws. */
+    /**
+     * Whether a policy is in force with any keeper. False with none. A keeper that throws counts as "in force":
+     * the question is asked before taking an item off somebody, and a broken keeper must not let it be sold.
+     */
     public static boolean inForce(String policy) {
         if (policy == null || policy.isBlank()) {
             return false;
@@ -60,7 +63,9 @@ public final class InsuredItems {
                     return true;
                 }
             } catch (RuntimeException broken) {
-                log.error(broken, "An insurance keeper could not say whether policy {} is in force.", policy);
+                log.error(broken, "An insurance keeper could not say whether policy {} is in force; it is treated "
+                        + "as insured.", policy);
+                return true;
             }
         }
         return false;

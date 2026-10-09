@@ -40,11 +40,11 @@ class InsuredItemsTest {
     }
 
     @Test
-    @DisplayName("a keeper that throws is asked no further, and counts as not in force")
+    @DisplayName("a keeper that throws counts as in force, so a broken keeper never lets an insured item be sold")
     void broken() {
         InsuredItems.provide(owner, policy -> {
             throw new IllegalStateException();
         });
-        assertThat(InsuredItems.inForce("p1")).isFalse();
+        assertThat(InsuredItems.inForce("p1")).isTrue();
     }
 }
