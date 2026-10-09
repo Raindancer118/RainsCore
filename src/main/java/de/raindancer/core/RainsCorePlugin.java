@@ -937,6 +937,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         de.raindancer.core.social.economy.Economies.clear();
         de.raindancer.core.social.economy.ItemValues.clear();
+        de.raindancer.core.social.economy.PriceModifiers.clear();
         de.raindancer.core.social.presence.Away.clear();
         de.raindancer.core.social.presence.PresenceLines.clear();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
@@ -1669,6 +1670,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + ChatChannels.forgetFrom(loader)
                 + de.raindancer.core.social.economy.Economies.forgetFrom(loader)
                 + de.raindancer.core.social.economy.ItemValues.forgetFrom(loader)
+                + de.raindancer.core.social.economy.PriceModifiers.forgetFrom(loader)
                 + de.raindancer.core.social.presence.Away.forgetFrom(loader)
                 + de.raindancer.core.social.presence.PresenceLines.forgetFrom(loader);
         if (combat != null) {
