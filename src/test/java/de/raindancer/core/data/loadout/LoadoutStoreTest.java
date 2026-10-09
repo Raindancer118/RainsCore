@@ -62,6 +62,7 @@ class LoadoutStoreTest {
     void missing(@TempDir Path folder) {
         assertThat(new LoadoutStore(folder).load(owner, "admin")).isEmpty();
         assertThat(new LoadoutStore(folder).has(owner, "admin")).isFalse();
+        assertThat(new LoadoutStore(folder).readable(owner)).as("no file is a readable nothing").isTrue();
     }
 
     @Test
@@ -72,6 +73,7 @@ class LoadoutStoreTest {
 
         LoadoutStore store = new LoadoutStore(folder);
         assertThat(store.load(owner, "survival")).isEmpty();
+        assertThat(store.readable(owner)).as("so a caller can tell 'nothing there' from 'cannot tell'").isFalse();
         assertThat(store.save(owner, "admin", sample())).isFalse();
         assertThat(Files.readString(file)).isEqualTo("survival: [unclosed\n  : :");
     }

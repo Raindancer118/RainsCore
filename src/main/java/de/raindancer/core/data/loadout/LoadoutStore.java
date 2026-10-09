@@ -93,6 +93,17 @@ public final class LoadoutStore {
                 effects, place));
     }
 
+    /**
+     * Whether this player's file can be read — false when it exists and is broken. {@link #has} and
+     * {@link #load} answer "nothing" for a broken file too; a caller deciding something from "nothing" (is this
+     * player in admin mode?) asks this first, so a broken file never counts as an empty one.
+     */
+    public boolean readable(UUID owner) {
+        YamlStore store = file(owner);
+        store.read();
+        return store.problems().isEmpty();
+    }
+
     public boolean has(UUID owner, String profile) {
         return file(owner).read().isConfigurationSection(YamlStore.asPathPart(profile));
     }
