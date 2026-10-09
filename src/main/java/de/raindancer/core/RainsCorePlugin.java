@@ -275,6 +275,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private de.raindancer.core.world.teleport.TravelShow travelShow;
     private Votes votes;
     private Vanish vanish;
+    private de.raindancer.core.social.presence.Playtime playtime;
+    private de.raindancer.core.social.presence.KnownNames knownNames;
     private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
     private PlayerPowers powers;
     private PlayerAdmin players;
@@ -609,6 +611,43 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         getServer().getPluginManager().registerEvents(new PlayerPowerListener(powers), this);
 
         vanish = new Vanish(new BukkitVanishSink(this));
+        playtime = new de.raindancer.core.social.presence.Playtime(getDataFolder().toPath().resolve("playtime.yml"));
+        playtime.load();
+        knownNames = new de.raindancer.core.social.presence.KnownNames(getDataFolder().toPath().resolve("known-names.yml"));
+        knownNames.load();
+        de.raindancer.core.platform.command.PlayerTargets.useKnownNames(knownNames);
+        // Everybody with a player file, once: a server older than this still finds the players its name cache
+        // forgot. Off the server's threads — reading a name may read the player's file.
+        org.bukkit.OfflinePlayer[] everybody = getServer().getOfflinePlayers();
+        Scheduling.async(this, () -> {
+            for (org.bukkit.OfflinePlayer who : everybody) {
+                try {
+                    knownNames.seenIfUnknown(who.getUniqueId(), who.getName());
+                } catch (RuntimeException unreadable) {
+                    // One broken player file is one name fewer.
+                }
+            }
+        });
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.social.presence.PresenceListener(playtime, knownNames), this);
+        for (org.bukkit.entity.Player online : getServer().getOnlinePlayers()) {
+            de.raindancer.core.platform.util.Scheduling.entity(this, online,
+                    () -> playtime.seed(online.getUniqueId(), online.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE)));
+        }
+        Scheduling.globalTimer(this, 20L * 60, 20L * 60, ignored -> {
+            for (org.bukkit.entity.Player online : getServer().getOnlinePlayers()) {
+                playtime.minute(online.getUniqueId(), de.raindancer.core.social.presence.Away.isAway(online.getUniqueId()));
+            }
+        });
+        // Every five minutes at most a few minutes are lost to a crash; the write is off the server's threads.
+        Scheduling.globalTimer(this, 20L * 60 * 5, 20L * 60 * 5, ignored -> {
+            if (playtime.isDirty()) {
+                Scheduling.async(this, playtime::save);
+            }
+            if (knownNames.isDirty()) {
+                Scheduling.async(this, knownNames::save);
+            }
+        });
         mentionCompletions = new de.raindancer.core.ui.chat.MentionCompletions(this, getServer(), vanish, nicknames);
         // A vanished player's line is held and they are asked first — one chat line undoes vanish.
         getServer().getPluginManager().registerEvents(new de.raindancer.core.moderation.vanish.VanishChatGuard(
@@ -633,10 +672,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 Scheduling.entity(this, looking, looking::closeInventory);
             }
         });
-        // The playerdata folder of the main world, which is where the server writes everybody who
-        // is not currently on it. Worked out once rather than per read: getWorlds() is a copy.
+        // Where the server writes everybody who is not on it. Every place it can be is handed over and looked
+        // through on each read: deciding once at startup picked the old folder on a fresh 26.x world (the new
+        // one is only made by the first save), and every offline /invsee answered "never seen".
         inventories = new Inventories(this, inventoryViews, new OfflineEdits(System::currentTimeMillis),
-                playerDataDirOf(getServer().getWorlds().get(0)));
+                playerDataDirsOf(getServer().getWorlds().get(0)));
         // Every look and every change written down. Handed over here rather than taken in the
         // constructor because the journal needs its database, which needs the data folder, which is
         // not there until the plugin is enabling.
@@ -894,6 +934,13 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // left on the server for them to stall — reporting them as a mistake put an ERROR line in every
         // clean shutdown that had anything to write, which trains people to ignore the real ones.
         watchingThreads = false;
+        if (playtime != null && playtime.isDirty()) {
+            playtime.save();
+        }
+        if (knownNames != null && knownNames.isDirty()) {
+            knownNames.save();
+        }
+        de.raindancer.core.platform.command.PlayerTargets.useKnownNames(null);
         if (seclusion != null) {
             // Before anything else, and for the same reason as the chunk holds below: somebody left hidden by
             // a reload is invisible until they reconnect, with nothing on their screen to explain it.
@@ -1014,13 +1061,22 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
      * <p>Minecraft 26.1 moved this from {@code <world>/playerdata/} to {@code <world>/players/data/},
      * folding it in beside {@code advancements} and {@code stats} under one {@code players/} folder.
      * A world that has been converted has the new folder; one that has not — an older save, or a
-     * server not yet on 26.1 — still has only the old one. Checked once, here, rather than trusting
-     * the running version: a world can be older than the server reading it.
+     * server not yet on 26.1 — still has only the old one. Every candidate is handed over and the
+     * one holding a player's file is found on each read: a fresh world has neither folder at startup.
      */
-    private Path playerDataDirOf(World world) {
-        Path root = world.getWorldFolder().toPath();
-        Path modern = root.resolve("players").resolve("data");
-        return Files.isDirectory(modern) ? modern : root.resolve("playerdata");
+    private java.util.List<Path> playerDataDirsOf(World world) {
+        java.util.Set<Path> roots = new java.util.LinkedHashSet<>();
+        // The level's own folder; on 26.x a world's folder may be its dimension's, three levels down.
+        roots.add(getServer().getWorldContainer().toPath().resolve(world.getName()).toAbsolutePath().normalize());
+        roots.add(world.getWorldFolder().toPath().toAbsolutePath().normalize());
+        java.util.List<Path> folders = new java.util.ArrayList<>();
+        for (Path root : roots) {
+            folders.add(root.resolve("players").resolve("data"));
+        }
+        for (Path root : roots) {
+            folders.add(root.resolve("playerdata"));
+        }
+        return folders;
     }
 
     /**
@@ -1409,6 +1465,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public Votes votes() {
         return votes;
+    }
+
+    @Override
+    public de.raindancer.core.social.presence.Playtime playtime() {
+        return playtime;
     }
 
     @Override

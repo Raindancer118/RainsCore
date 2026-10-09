@@ -32,7 +32,7 @@ public final class VaultBridge implements EconomyBridge {
     @Override
     public void exported(Plugin owner, Economy economy) {
         VaultEconomyExport export = new VaultEconomyExport(economy,
-                name -> Optional.ofNullable(server.getOfflinePlayerIfCached(name)).map(p -> p.getUniqueId()));
+                name -> de.raindancer.core.platform.command.PlayerTargets.byRealName(server, name).map(p -> p.getUniqueId()));
         VaultEconomyExport before = exports.put(economy, export);
         if (before != null) {
             server.getServicesManager().unregister(before);

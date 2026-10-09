@@ -44,8 +44,47 @@ public final class PlayerTargets {
 
     /** Set by Core when it enables; null before, after, and in tests that want real names only. */
     private static volatile Nicknames nicknames;
+    /** Every name Core has seen, for players Paper's name cache has forgotten. Null: the player files are searched. */
+    private static volatile de.raindancer.core.social.presence.KnownNames knownNames;
 
     private PlayerTargets() {
+    }
+
+    /** Where real names Paper has forgotten are found. Null: searched in the server's player files instead. */
+    public static void useKnownNames(de.raindancer.core.social.presence.KnownNames names) {
+        knownNames = names;
+    }
+
+    /**
+     * Somebody offline this server has seen, by their real name, in any case — Paper's cache first, then Core's
+     * own names, then (without those) the player files. Never a lookup against Mojang.
+     */
+    public static Optional<OfflinePlayer> byRealName(Server server, String name) {
+        if (server == null || name == null || name.isBlank()) {
+            return Optional.empty();
+        }
+        Player online = server.getPlayerExact(name.trim());
+        return online != null ? Optional.of(online) : Optional.ofNullable(seenOffline(server, name.trim()));
+    }
+
+    private static OfflinePlayer seenOffline(Server server, String typed) {
+        OfflinePlayer cached = server.getOfflinePlayerIfCached(typed);
+        if (cached != null) {
+            return cached;
+        }
+        de.raindancer.core.social.presence.KnownNames names = knownNames;
+        if (names != null) {
+            return names.idOf(typed).map(server::getOfflinePlayer).orElse(null);
+        }
+        OfflinePlayer[] everybody = server.getOfflinePlayers();
+        if (everybody != null) {
+            for (OfflinePlayer who : everybody) {
+                if (who != null && typed.equalsIgnoreCase(who.getName())) {
+                    return who;
+                }
+            }
+        }
+        return null;
     }
 
     /** Which nickname directory names are also looked up in. Null for real names only. */
@@ -78,7 +117,7 @@ public final class PlayerTargets {
             return false;
         }
         String typed = text.trim();
-        return server.getPlayerExact(typed) != null || server.getOfflinePlayerIfCached(typed) != null;
+        return server.getPlayerExact(typed) != null || seenOffline(server, typed) != null;
     }
 
     /**
@@ -95,7 +134,7 @@ public final class PlayerTargets {
             return Optional.of(exact);
         }
         // A real name, even of somebody offline, before any nickname — see online().
-        OfflinePlayer known = server.getOfflinePlayerIfCached(typed);
+        OfflinePlayer known = seenOffline(server, typed);
         if (known != null) {
             return Optional.of(known);
         }
@@ -203,7 +242,7 @@ public final class PlayerTargets {
         if (exact != null) {
             return new PlayerLookup(typed, PlayerLookup.Kind.NAME, List.of(exact));
         }
-        OfflinePlayer known = server.getOfflinePlayerIfCached(typed);
+        OfflinePlayer known = seenOffline(server, typed);
         if (known != null) {
             return new PlayerLookup(typed, PlayerLookup.Kind.NAME, List.of(known));
         }

@@ -127,6 +127,12 @@ public final class Inventories {
 
     public Inventories(Plugin plugin, InventoryViews views, OfflineEdits offlineEdits,
                        Path playerData) {
+        this(plugin, views, offlineEdits, java.util.List.of(playerData));
+    }
+
+    /** @param playerData every folder a save file may be in, most likely first — see {@link PlayerDataInventorySource} */
+    public Inventories(Plugin plugin, InventoryViews views, OfflineEdits offlineEdits,
+                       java.util.List<Path> playerData) {
         this(plugin, views, offlineEdits, new OnlineInventorySource(),
                 new PlayerDataInventorySource(playerData, new ItemBytes.OfTheServer()),
                 who -> Bukkit.getPlayer(who) != null);

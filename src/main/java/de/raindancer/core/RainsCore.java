@@ -423,6 +423,9 @@ public interface RainsCore {
      */
     Vanish vanish();
 
+    /** How long everybody has played here, and how much of it actively — counted by Core, a minute at a time. */
+    de.raindancer.core.social.presence.Playtime playtime();
+
     /**
      * Styled names above heads — off until something that offers name styles switches it on.
      * See {@link de.raindancer.core.ui.identity.Nametags}.

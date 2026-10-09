@@ -123,6 +123,9 @@ public final class ProfileMenu extends Menu {
             Duration ago = Duration.between(Instant.ofEpochMilli(who.getLastLogin()), Instant.now());
             lore.add("<gray>Last seen <white>" + Times.describe(ago) + "</white> ago.");
         }
+        if (RainsCore.isAvailable() && RainsCore.get().playtime().isKnown(subject)) {
+            lore.add("<gray>Played <white>" + Times.describe(RainsCore.get().playtime().played(subject)) + "</white>.");
+        }
         return lore;
     }
 }

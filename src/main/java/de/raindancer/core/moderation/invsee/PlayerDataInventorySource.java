@@ -48,7 +48,8 @@ public final class PlayerDataInventorySource implements InventorySource {
     /** Kept beside the file before the first edit. Not {@code .dat}, so the server ignores it. */
     public static final String BACKUP_SUFFIX = ".rains-backup.nbt";
 
-    private final Path playerData;
+    /** Every folder a save file may be in, most likely first. Looked through on every call. */
+    private final java.util.List<Path> folders;
     private final ItemBytes items;
 
     /**
@@ -56,13 +57,28 @@ public final class PlayerDataInventorySource implements InventorySource {
      * @param items      how an item becomes bytes and back — the server's own reader
      */
     public PlayerDataInventorySource(Path playerData, ItemBytes items) {
-        this.playerData = playerData;
+        this(java.util.List.of(playerData), items);
+    }
+
+    /**
+     * @param folders every folder a save file may be in, most likely first — checked on every lookup, because
+     *                a fresh world has none of them yet when the server starts, and deciding then picked the
+     *                wrong one for good: every offline /invsee answered "never seen"
+     */
+    public PlayerDataInventorySource(java.util.List<Path> folders, ItemBytes items) {
+        this.folders = java.util.List.copyOf(folders);
         this.items = items;
     }
 
-    /** Where somebody's file is, whether or not it exists. */
+    /** Where somebody's file is: the first folder that has it, else where the first folder would keep it. */
     public Path fileFor(UUID who) {
-        return playerData.resolve(who + ".dat");
+        for (Path folder : folders) {
+            Path file = folder.resolve(who + ".dat");
+            if (Files.isRegularFile(file)) {
+                return file;
+            }
+        }
+        return folders.getFirst().resolve(who + ".dat");
     }
 
     /** Whether this server has ever saved them. */

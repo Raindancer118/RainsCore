@@ -116,4 +116,34 @@ class PlayerDataInventorySourceTest {
         assertThat(source.read(who)).isEmpty();
         assertThat(source.write(who, Carried.empty())).isFalse();
     }
+
+    @Test
+    @DisplayName("the save file is looked for in every folder it can be in, each time — not decided once at startup")
+    void foldersAreCheckedEveryTime() throws IOException {
+        Path modern = folder.resolve("players").resolve("data");
+        Path legacy = folder.resolve("playerdata");
+        // Neither exists yet, as on a fresh world when the server starts.
+        PlayerDataInventorySource source = new PlayerDataInventorySource(List.of(modern, legacy), new Server(4440));
+        assertThat(source.has(who)).isFalse();
+
+        java.nio.file.Files.createDirectories(modern);
+        Path written = saveFile(4440);
+        java.nio.file.Files.move(written, modern.resolve(who + ".dat"));
+
+        assertThat(source.has(who)).isTrue();
+        assertThat(source.fileFor(who)).isEqualTo(modern.resolve(who + ".dat"));
+        assertThat(source.read(who)).isPresent();
+    }
+
+    @Test
+    @DisplayName("an old world's file is found in the old folder")
+    void legacyFolder() throws IOException {
+        Path legacy = folder.resolve("playerdata");
+        java.nio.file.Files.createDirectories(legacy);
+        java.nio.file.Files.move(saveFile(4440), legacy.resolve(who + ".dat"));
+        PlayerDataInventorySource source = new PlayerDataInventorySource(
+                List.of(folder.resolve("players").resolve("data"), legacy), new Server(4440));
+        assertThat(source.has(who)).isTrue();
+        assertThat(source.fileFor(who)).isEqualTo(legacy.resolve(who + ".dat"));
+    }
 }
