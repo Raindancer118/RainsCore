@@ -76,4 +76,36 @@ class RulePenaltyTest {
         assertThat(ServerRules.byId("a1")).isPresent();
         assertThat(ServerRules.byNumber(2)).isEmpty();
     }
+
+    @Test
+    @DisplayName("a rung may cost money: a fine alone, or a fine on top of anything else")
+    void fines() {
+        assertThat(RulePenalty.parse("fine 500")).contains(new RulePenalty(PunishmentKind.FINE, null, 500));
+        assertThat(RulePenalty.parse("warn + fine 100")).contains(new RulePenalty(PunishmentKind.WARNING, null, 100));
+        assertThat(RulePenalty.parse("mute 1h+fine 250"))
+                .contains(new RulePenalty(PunishmentKind.MUTE, Duration.ofHours(1), 250));
+        assertThat(RulePenalty.parse("fine")).as("a fine needs an amount").isEmpty();
+        assertThat(RulePenalty.parse("fine -5")).isEmpty();
+        assertThat(RulePenalty.parse("fine 1h")).isEmpty();
+        assertThat(RulePenalty.parse("warn + hug 5")).isEmpty();
+        assertThat(RulePenalty.parse("fine 5 + fine 5")).as("one fine per rung").isEmpty();
+
+        List<RulePenalty> ladder = RulePenalty.ladder("warn + fine 100, fine 500, mute 1h + fine 250, ban").orElseThrow();
+        assertThat(RulePenalty.write(ladder)).isEqualTo("warn + fine 100, fine 500, mute 1h + fine 250, ban");
+        assertThat(ladder.get(0).fine()).isEqualTo(100);
+        assertThat(ladder.get(3).fine()).isZero();
+        assertThat(ladder.get(1).describe()).isEqualTo("a fine of 500");
+        assertThat(ladder.get(0).describe()).isEqualTo("a warning and a fine of 100");
+        assertThat(ladder.get(2).describe()).isEqualTo("muted for 1 hour and a fine of 250");
+    }
+
+    @Test
+    @DisplayName("a penalty built the old way, without a fine, still works and costs nothing")
+    void oldShape() {
+        RulePenalty old = new RulePenalty(PunishmentKind.MUTE, Duration.ofHours(1));
+        assertThat(old.fine()).isZero();
+        assertThat(old.write()).isEqualTo("mute 1h");
+        assertThat(new RulePenalty(PunishmentKind.FINE, Duration.ofHours(1), 5).length())
+                .as("a fine is over when it is paid").isNull();
+    }
 }

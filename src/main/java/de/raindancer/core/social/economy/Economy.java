@@ -47,6 +47,25 @@ public interface Economy {
 
     EconomyResult transfer(UUID from, UUID to, Money amount, String reason);
 
+    /**
+     * {@link #deposit(UUID, Money, String)}, saying where the money comes from — {@code reward.mob},
+     * {@code jobs.goal} — so the provider can tell what prints money. On a capped server it is paid out of the
+     * treasury, and refused with {@link EconomyResult.Outcome#TREASURY_EMPTY} when that cannot.
+     */
+    default EconomyResult deposit(UUID player, Money amount, String reason, String source) {
+        return deposit(player, amount, reason);
+    }
+
+    /** {@link #withdraw(UUID, Money, String)}, saying where the money goes — {@code claims.upkeep}, {@code fine}. */
+    default EconomyResult withdraw(UUID player, Money amount, String reason, String source) {
+        return withdraw(player, amount, reason);
+    }
+
+    /** How much money there is and what the treasury holds; empty when the provider does not know. */
+    default java.util.Optional<MoneySupply> supply() {
+        return java.util.Optional.empty();
+    }
+
     /** The amount, written in this economy's currency. */
     default String format(Money amount) {
         return currency().format(amount);

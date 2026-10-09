@@ -247,6 +247,7 @@ final class VaultEconomyExport implements net.milkbowl.vault.economy.Economy {
             case INVALID_AMOUNT -> "That is not an amount of money.";
             case UNAVAILABLE -> "The economy is not available right now.";
             case REFUSED -> "Refused.";
+            case TREASURY_EMPTY -> "The server's treasury cannot pay that right now.";
         };
     }
 

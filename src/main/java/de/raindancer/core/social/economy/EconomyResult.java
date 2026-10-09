@@ -22,7 +22,9 @@ public record EconomyResult(Outcome outcome, Money amount, Money balance) {
         /** The provider cannot answer right now — its storage is down, or it is shutting down. */
         UNAVAILABLE,
         /** Refused for a reason of the provider's own; see its log. */
-        REFUSED
+        REFUSED,
+        /** The server has a hard cap on money and its treasury cannot pay this out right now. */
+        TREASURY_EMPTY
     }
 
     public EconomyResult {

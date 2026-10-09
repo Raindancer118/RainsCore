@@ -11,11 +11,13 @@ import java.util.Optional;
 
 /**
  * What breaking a rule costs, one rung of its ladder: {@code warn}, {@code kick}, {@code mute 1h},
- * {@code freeze 30m}, {@code ban 3d}, {@code ban} (for good).
+ * {@code freeze 30m}, {@code ban 3d}, {@code ban} (for good), {@code fine 500} — and any of them with a fine
+ * on top: {@code warn + fine 100}.
  *
  * @param length how long a mute, freeze or ban lasts; null for good, and always null for a warning or kick
+ * @param fine   whole units of the server's currency to pay as well; zero for none
  */
-public record RulePenalty(PunishmentKind kind, Duration length) {
+public record RulePenalty(PunishmentKind kind, Duration length, long fine) {
 
     public RulePenalty {
         if (kind == null) {
@@ -24,6 +26,12 @@ public record RulePenalty(PunishmentKind kind, Duration length) {
         if (!kind.isLasting()) {
             length = null;
         }
+        fine = Math.max(0, fine);
+    }
+
+    /** A rung without a fine — the shape every plugin built before fines knows. */
+    public RulePenalty(PunishmentKind kind, Duration length) {
+        this(kind, length, 0);
     }
 
     public boolean isPermanent() {
@@ -34,7 +42,35 @@ public record RulePenalty(PunishmentKind kind, Duration length) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }
+        String[] parts = text.split("\\+", -1);
+        if (parts.length > 2) {
+            return Optional.empty();
+        }
+        Optional<RulePenalty> main = parseOne(parts[0]);
+        if (parts.length == 1 || main.isEmpty() || main.get().kind() == PunishmentKind.FINE) {
+            return parts.length == 1 ? main : Optional.empty();
+        }
+        return parseOne(parts[1])
+                .filter(extra -> extra.kind() == PunishmentKind.FINE)
+                .map(extra -> new RulePenalty(main.get().kind(), main.get().length(), extra.fine()));
+    }
+
+    private static Optional<RulePenalty> parseOne(String text) {
+        if (text == null || text.isBlank()) {
+            return Optional.empty();
+        }
         String[] words = text.strip().toLowerCase(Locale.ROOT).split("\\s+", 2);
+        if (words[0].equals("fine")) {
+            if (words.length == 1) {
+                return Optional.empty();
+            }
+            try {
+                long amount = Long.parseLong(words[1].strip());
+                return amount > 0 ? Optional.of(new RulePenalty(PunishmentKind.FINE, null, amount)) : Optional.empty();
+            } catch (NumberFormatException notANumber) {
+                return Optional.empty();
+            }
+        }
         PunishmentKind kind = switch (words[0]) {
             case "warn", "warning" -> PunishmentKind.WARNING;
             case "kick" -> PunishmentKind.KICK;
@@ -82,8 +118,10 @@ public record RulePenalty(PunishmentKind kind, Duration length) {
             case MUTE -> "mute";
             case FREEZE -> "freeze";
             case BAN -> "ban";
+            case FINE -> "fine " + fine;
         };
-        return length == null ? word : word + " " + compact(length);
+        String rung = length == null ? word : word + " " + compact(length);
+        return fine > 0 && kind != PunishmentKind.FINE ? rung + " + fine " + fine : rung;
     }
 
     public static String write(List<RulePenalty> ladder) {
@@ -92,11 +130,13 @@ public record RulePenalty(PunishmentKind kind, Duration length) {
 
     /** "a warning", "muted for 1 hour", "banned for good" — for players reading the rules. */
     public String describe() {
-        return switch (kind) {
+        String said = switch (kind) {
             case WARNING -> "a warning";
             case KICK -> "a kick";
+            case FINE -> "a fine of " + fine;
             default -> kind.past() + (length == null ? " for good" : " for " + Durations.describe(length));
         };
+        return fine > 0 && kind != PunishmentKind.FINE ? said + " and a fine of " + fine : said;
     }
 
     /** "1st: a warning · 2nd: muted for 1 hour · then: banned for good" — what everybody is told up front. */

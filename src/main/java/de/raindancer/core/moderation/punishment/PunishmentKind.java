@@ -27,7 +27,13 @@ public enum PunishmentKind {
      * <p>The one a plugin other than a moderation plugin usually wants: a claims module can jail
      * somebody's hands without deciding they should be off the server.
      */
-    FREEZE(true, "frozen");
+    FREEZE(true, "frozen"),
+
+    /**
+     * Had to pay. Over once it is paid; the amount is the moderation plugin's to keep, and goes wherever the
+     * economy sends fees — destroyed, or back into a capped server's treasury.
+     */
+    FINE(false, "fined");
 
     private final boolean lasting;
     private final String past;
