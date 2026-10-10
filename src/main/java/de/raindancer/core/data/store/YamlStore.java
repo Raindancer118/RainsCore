@@ -54,11 +54,20 @@ public final class YamlStore {
             DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss");
 
     private final Path file;
+    /**
+     * Shared by every store on the same file. Two settings records of one module are two stores on one
+     * config.yml; locked each on its own, two writes at once raced over the same {@code .writing} file and
+     * one of them was lost.
+     */
+    private final Object lock;
+    private static final java.util.concurrent.ConcurrentMap<Path, Object> LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
     private final List<String> problems = new ArrayList<>();
     /** Whether the last read found a file it could not parse — one a write must not replace. */
     private boolean unreadable;
 
     public YamlStore(Path file) {
+        this.lock = file == null ? new Object()
+                : LOCKS.computeIfAbsent(file.toAbsolutePath().normalize(), key -> new Object());
         this.file = file;
     }
 
@@ -146,7 +155,7 @@ public final class YamlStore {
         if (file == null || change == null) {
             return false;
         }
-        synchronized (this) {
+        synchronized (lock) {
             YamlConfiguration current = read();
             if (unreadable) {
                 // Refused, and the file left where it is — not even set aside. An update is a change
@@ -160,7 +169,13 @@ public final class YamlStore {
         }
     }
 
-    private synchronized boolean put(YamlConfiguration yaml, Consumer<YamlConfiguration> contents) {
+    private boolean put(YamlConfiguration yaml, Consumer<YamlConfiguration> contents) {
+        synchronized (lock) {
+            return putLocked(yaml, contents);
+        }
+    }
+
+    private boolean putLocked(YamlConfiguration yaml, Consumer<YamlConfiguration> contents) {
         // The contents are built under the same lock as the move, so two writers cannot each read
         // what they know and then land in the opposite order — the older picture last.
         String text;

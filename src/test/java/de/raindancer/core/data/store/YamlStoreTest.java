@@ -320,4 +320,26 @@ class YamlStoreTest {
     void namesItsFile() {
         assertThat(store().file().getFileName().toString()).isEqualTo("things.yml");
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("two stores on one file — two settings records of one module — never trip over each other's writes")
+    void twoStoresOneFile(@org.junit.jupiter.api.io.TempDir java.nio.file.Path folder) throws Exception {
+        java.nio.file.Path file = folder.resolve("config.yml");
+        YamlStore one = new YamlStore(file);
+        YamlStore two = new YamlStore(file);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        java.util.List<java.util.concurrent.Future<Boolean>> writes = new java.util.ArrayList<>();
+        for (int i = 0; i < 200; i++) {
+            YamlStore store = i % 2 == 0 ? one : two;
+            String key = (i % 2 == 0 ? "jobs." : "quests.") + "k" + i;
+            writes.add(pool.submit(() -> store.update(yaml -> yaml.set(key, true))));
+        }
+        for (var write : writes) {
+            org.assertj.core.api.Assertions.assertThat(write.get()).isTrue();
+        }
+        pool.shutdown();
+        org.bukkit.configuration.file.YamlConfiguration read = new YamlStore(file).read();
+        org.assertj.core.api.Assertions.assertThat(read.getConfigurationSection("jobs").getKeys(false)).hasSize(100);
+        org.assertj.core.api.Assertions.assertThat(read.getConfigurationSection("quests").getKeys(false)).hasSize(100);
+    }
 }
