@@ -37,4 +37,13 @@ class MaintenanceTextTest {
         String text = plain(MaintenanceText.closed("New spawn", 0, 1_000_000));
         assertThat(text).contains("The server is under maintenance").contains("New spawn");
     }
+
+    @Test
+    @DisplayName("an update warns a minute ahead; anything else twenty seconds")
+    void grace() {
+        assertThat(MaintenanceText.graceMillis("update")).isEqualTo(60_000);
+        assertThat(MaintenanceText.graceMillis("Update")).isEqualTo(60_000);
+        assertThat(MaintenanceText.graceMillis("New spawn")).isEqualTo(20_000);
+        assertThat(MaintenanceText.graceMillis("")).isEqualTo(20_000);
+    }
 }

@@ -28,7 +28,8 @@ import java.util.UUID;
  * <pre>
  * /maintenance on [reason…]     closed to joins at once; after a 20 s countdown everybody online who is
  *                               neither op nor on the list is sent off
- * /maintenance on update [min]  the same, telling everybody it is an update and when to try again (3 min if not said)
+ * /maintenance on update [min]  the same with a 60 s countdown, telling everybody it is an update and when to
+ *                               try again (3 min if not said)
  * /maintenance off
  * /maintenance add &lt;player&gt;     on the list (kept while maintenance is off)
  * /maintenance remove &lt;player&gt;
@@ -40,9 +41,8 @@ public final class MaintenanceCommand implements BasicCommand {
     public static final String PERMISSION = "rainscore.maintenance";
     private static final MiniMessage MINI = MiniMessage.miniMessage();
     private static final List<String> WORDS = List.of("on", "off", "add", "remove", "list");
-    public static final long GRACE_MILLIS = 20_000;
     public static final int UPDATE_MINUTES = 3;
-    private static final java.util.Set<Long> ANNOUNCED_AT = java.util.Set.of(20L, 10L, 5L, 4L, 3L, 2L, 1L);
+    private static final java.util.Set<Long> ANNOUNCED_AT = java.util.Set.of(60L, 30L, 20L, 10L, 5L, 4L, 3L, 2L, 1L);
     /** The one countdown running, so typing "on" twice does not start two. */
     private static final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.threadedregions.scheduler.ScheduledTask>
             COUNTDOWN = new java.util.concurrent.atomic.AtomicReference<>();
@@ -82,7 +82,7 @@ public final class MaintenanceCommand implements BasicCommand {
                     reason = MaintenanceText.UPDATE;
                     expected = minutes * 60_000L;
                 }
-                boolean saved = maintenance.turnOn(reason, GRACE_MILLIS, expected);
+                boolean saved = maintenance.turnOn(reason, MaintenanceText.graceMillis(reason), expected);
                 say(sender, "<gold>Maintenance mode is on.</gold> <gray>Only ops and the maintenance list can join; "
                         + "everybody else is sent off in " + maintenance.secondsLeft() + " s.");
                 warnIfNotSaved(sender, saved);
@@ -198,7 +198,7 @@ public final class MaintenanceCommand implements BasicCommand {
                 return;
             }
             lastSaid[0] = left;
-            String why = MaintenanceText.UPDATE.equalsIgnoreCase(maintenance.reason())
+            String why = MaintenanceText.isUpdate(maintenance.reason())
                     ? " <gray>(We're updating; back " + MaintenanceText.whenBack(maintenance.backAt(), System.currentTimeMillis()) + ")"
                     : maintenance.reason().isBlank() ? "" : " <gray>(" + MINI.escapeTags(maintenance.reason()) + ")";
             for (Player online : Bukkit.getOnlinePlayers()) {

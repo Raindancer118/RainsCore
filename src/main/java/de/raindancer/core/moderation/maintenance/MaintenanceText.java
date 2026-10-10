@@ -11,6 +11,15 @@ public final class MaintenanceText {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
+    /** How long everybody online is warned before those not allowed are sent off: an update a minute. */
+    public static long graceMillis(String reason) {
+        return isUpdate(reason) ? 60_000 : 20_000;
+    }
+
+    public static boolean isUpdate(String reason) {
+        return UPDATE.equalsIgnoreCase(reason == null ? "" : reason.strip());
+    }
+
     private MaintenanceText() {
     }
 
@@ -19,7 +28,7 @@ public final class MaintenanceText {
      *               because players are in other time zones than the server
      */
     public static Component closed(String reason, long backAt, long now) {
-        if (UPDATE.equalsIgnoreCase(reason == null ? "" : reason.strip())) {
+        if (isUpdate(reason)) {
             return MINI.deserialize("<gold>Hey you!</gold> <white>We're updating the server and expect to be back "
                     + whenBack(backAt, now) + ". Please try again then!");
         }
