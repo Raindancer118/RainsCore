@@ -521,6 +521,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 new de.raindancer.core.content.items.NonIngredientListener(), this);
         // Where players put watched blocks, so mined ore is told from placed ore — see PlacedBlocks.
         getServer().getPluginManager().registerEvents(new de.raindancer.core.world.blocks.PlacedBlocks.Listener(), this);
+        getServer().getPluginManager().registerEvents(new de.raindancer.core.world.blocks.BlockChanges.Listener(), this);
         // Eggs a shop sold hatch mobs but never set a spawner — see NotForSpawners.
         getServer().getPluginManager().registerEvents(new de.raindancer.core.content.items.NotForSpawnersListener(
                 player -> messages.send(player, "items.not-for-spawners")), this);
