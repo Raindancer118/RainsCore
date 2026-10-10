@@ -112,6 +112,10 @@ public final class SettingsSchema<T> {
             }
             topics.file(setting, owner);
         }
+        List<String> clashes = clashes(byKey.keySet(), List.of());
+        if (!clashes.isEmpty()) {
+            throw new IllegalArgumentException(owner + ": " + String.join("; ", clashes));
+        }
         // Not Map.copyOf: that returns an immutable map whose iteration order is unspecified, and
         // the order here is load-bearing. It is the record's component order, which is what
         // instantiate() pairs against the canonical constructor's parameters, what config.yml is
@@ -119,6 +123,33 @@ public final class SettingsSchema<T> {
         // built every snapshot with the components shuffled.
         return new SettingsSchema<>(type, declaration.id(), defaults, topics,
                 Collections.unmodifiableMap(new LinkedHashMap<>(byKey)));
+    }
+
+    /**
+     * What is wrong with putting these keys in one file: a key both a value and the parent of another ("perks" and
+     * "perks.start-share" — YAML holds one or the other, so saving one wipes the other), or a key in both sets.
+     *
+     * @param mine   the keys of one settings record
+     * @param others keys other records already keep in the same file
+     */
+    public static List<String> clashes(java.util.Collection<String> mine, java.util.Collection<String> others) {
+        List<String> found = new java.util.ArrayList<>();
+        java.util.Set<String> all = new java.util.LinkedHashSet<>(others);
+        for (String key : mine) {
+            if (others.contains(key)) {
+                found.add("'" + key + "' is already a setting in the same file");
+            }
+        }
+        all.addAll(mine);
+        for (String key : all) {
+            for (String other : all) {
+                if (other.startsWith(key + ".") && (mine.contains(key) || mine.contains(other))) {
+                    found.add("'" + key + "' is a value and also holds '" + other
+                            + "' — YAML keeps one or the other, so saving one would wipe the other");
+                }
+            }
+        }
+        return found;
     }
 
     // ------------------------------------------------------------------ reading one component

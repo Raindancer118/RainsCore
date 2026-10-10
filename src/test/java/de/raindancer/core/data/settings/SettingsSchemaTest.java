@@ -590,4 +590,17 @@ class SettingsSchemaTest {
         }
     }
 
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("a key that is a value and also holds another, or one two records share, is a clash")
+    void clashes() {
+        assertThat(SettingsSchema.clashes(java.util.List.of("perks", "perks.start-share", "announce"), java.util.List.of()))
+                .singleElement().asString().contains("'perks'").contains("perks.start-share");
+        assertThat(SettingsSchema.clashes(java.util.List.of("enabled", "per-day"), java.util.List.of("enabled", "choices")))
+                .singleElement().asString().contains("'enabled'");
+        assertThat(SettingsSchema.clashes(java.util.List.of("quests.enabled"), java.util.List.of("orders.enabled", "quests")))
+                .singleElement().asString().contains("'quests'");
+        assertThat(SettingsSchema.clashes(java.util.List.of("perks.enabled", "perks.start-share"), java.util.List.of()))
+                .isEmpty();
+    }
 }

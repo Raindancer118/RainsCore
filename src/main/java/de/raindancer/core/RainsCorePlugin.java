@@ -1670,6 +1670,18 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
 
     @Override
     public <T> SettingsStore<T> settingsFor(SettingsSchema<T> schema, Path file) {
+        // Several records may share a file (a module with quests and orders); their keys must not collide there.
+        Path where = file.toAbsolutePath().normalize();
+        java.util.List<String> others = new java.util.ArrayList<>();
+        for (SettingsStore<?> each : stores.values()) {
+            if (each.file().toAbsolutePath().normalize().equals(where) && !each.schema().id().equals(schema.id())) {
+                each.schema().settings().forEach(setting -> others.add(setting.key()));
+            }
+        }
+        java.util.List<String> keys = schema.settings().stream().map(de.raindancer.core.data.settings.Setting::key).toList();
+        for (String clash : SettingsSchema.clashes(keys, others)) {
+            getSLF4JLogger().error("Settings {} in {}: {}. Rename one of them.", schema.id(), file.getFileName(), clash);
+        }
         SettingsStore<T> store = new SettingsStore<>(schema, file);
         store.load();
         // Written back at once, so a new version's settings appear in the file the first time it
