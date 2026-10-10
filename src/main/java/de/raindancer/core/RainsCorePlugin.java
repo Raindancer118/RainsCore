@@ -279,6 +279,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private de.raindancer.core.social.presence.Playtime playtime;
     private de.raindancer.core.moderation.chatlog.ChatLog chatLog;
     private de.raindancer.core.social.presence.KnownNames knownNames;
+    private de.raindancer.core.ui.changelog.Changelog changelog;
     private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
     private PlayerPowers powers;
     private PlayerAdmin players;
@@ -559,6 +560,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                         .of("Core", "commands", "This book.",
                                 "[plugin] — only that plugin's"),
                 CommandNote
+                        .of("Core", "changelog", "What changed on this server lately."),
+                CommandNote
                         .of("Core", "settings", "Read and change what every plugin on this server does.")
                         .needing("rainscore.settings"),
                 CommandNote
@@ -643,6 +646,12 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         });
         getServer().getPluginManager().registerEvents(
                 new de.raindancer.core.social.presence.PresenceListener(playtime, knownNames), this);
+        changelog = new de.raindancer.core.ui.changelog.Changelog(getDataFolder().toPath().resolve("changelog.yml"),
+                getDataFolder().toPath().resolve("changelog-seen.yml"), System::currentTimeMillis);
+        changelog.reload();
+        changelog.problems().forEach(problem -> log.warn("{}", problem));
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.ui.changelog.ChangelogListener(this, changelog), this);
         for (org.bukkit.entity.Player online : getServer().getOnlinePlayers()) {
             de.raindancer.core.platform.util.Scheduling.entity(this, online,
                     () -> playtime.seed(online.getUniqueId(), online.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE)));
@@ -659,6 +668,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
             }
             if (knownNames.isDirty()) {
                 Scheduling.async(this, knownNames::save);
+            }
+            if (changelog.isDirty()) {
+                Scheduling.async(this, changelog::save);
             }
         });
         mentionCompletions = new de.raindancer.core.ui.chat.MentionCompletions(this, getServer(), vanish, nicknames);
@@ -994,6 +1006,9 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         }
         if (knownNames != null && knownNames.isDirty()) {
             knownNames.save();
+        }
+        if (changelog != null && changelog.isDirty()) {
+            changelog.save();
         }
         de.raindancer.core.platform.command.PlayerTargets.useKnownNames(null);
         if (seclusion != null) {
@@ -1530,6 +1545,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public de.raindancer.core.social.presence.Playtime playtime() {
         return playtime;
+    }
+
+    @Override
+    public de.raindancer.core.ui.changelog.Changelog changelog() {
+        return changelog;
     }
 
     @Override

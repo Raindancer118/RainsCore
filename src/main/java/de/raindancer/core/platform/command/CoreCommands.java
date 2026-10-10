@@ -153,6 +153,25 @@ public final class CoreCommands {
         return prefix(registrar, "prefix");
     }
 
+    private static final AtomicBoolean CHANGELOG_TAKEN = new AtomicBoolean();
+
+    /**
+     * {@code /changelog}: what changed lately, and for staff drafting and publishing it. Taken by the first
+     * plugin that asks, like {@link #commandList}, because there is one changelog for the server.
+     */
+    public static boolean changelog(Commands registrar, String name, String... aliases) {
+        if (!CHANGELOG_TAKEN.compareAndSet(false, true)) {
+            return false;
+        }
+        registrar.register(name, "What changed on this server lately.", List.of(aliases),
+                new de.raindancer.core.ui.changelog.ChangelogCommand());
+        return true;
+    }
+
+    public static boolean changelog(Commands registrar) {
+        return changelog(registrar, "changelog", "news");
+    }
+
     public static void worlds(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Switch to a loaded world, or wipe one and make it again.",
                 List.of(aliases), new WorldCommand());

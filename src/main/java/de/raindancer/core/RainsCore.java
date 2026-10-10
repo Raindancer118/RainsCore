@@ -193,6 +193,12 @@ public interface RainsCore {
     de.raindancer.core.ui.chat.PrefixService prefixes();
 
     /**
+     * What changed on the server, told to returning players once. {@code plugins/RainsCore/changelog.yml},
+     * published through {@code CoreCommands.changelog}.
+     */
+    de.raindancer.core.ui.changelog.Changelog changelog();
+
+    /**
      * {@code @Name} and {@code @Nickname} in every player's chat box, for everybody they could mention.
      * Off until a chat plugin that renders mentions calls {@code enable(true)}.
      */
