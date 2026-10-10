@@ -5,6 +5,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,17 +31,27 @@ public final class Maintenance {
     /** When it is expected to be over; 0 for not said. */
     private long backAt;
     private final Map<UUID, String> allowed = new LinkedHashMap<>();
+    /** How long the last updates really took, oldest first, so the next one can be guessed from them. */
+    private final List<Long> updateTook = new ArrayList<>();
+    /** When this server came up: maintenance switched on before it spanned a restart. */
+    private final long startedAt;
     private List<String> problems = List.of();
+
+    private static final int UPDATES_KEPT = 10;
+    /** Longer than this, somebody forgot /maintenance off: no measure of a restart. */
+    private static final long LONGEST_UPDATE = 4 * 60 * 60_000L;
 
     public Maintenance(Path file, LongSupplier clock) {
         this.file = new YamlStore(file);
         this.clock = clock;
+        this.startedAt = clock.getAsLong();
     }
 
     public synchronized void load() {
         YamlConfiguration yaml = file.read();
         problems = file.problems();
         allowed.clear();
+        updateTook.clear();
         if (!problems.isEmpty()) {
             // Closed rather than open: ops still get in and can fix it, nobody else gets in by accident.
             on = true;
@@ -51,6 +62,14 @@ public final class Maintenance {
         reason = yaml.getString("reason", "");
         since = yaml.getLong("since", 0L);
         backAt = yaml.getLong("back-at", 0L);
+        for (Long took : yaml.getLongList("update-took")) {
+            if (took > 0 && took <= LONGEST_UPDATE) {
+                updateTook.add(took);
+            }
+        }
+        while (updateTook.size() > UPDATES_KEPT) {
+            updateTook.removeFirst();
+        }
         ConfigurationSection list = yaml.getConfigurationSection("allowed");
         if (list != null) {
             for (String key : list.getKeys(false)) {
@@ -139,11 +158,40 @@ public final class Maintenance {
     }
 
     public synchronized boolean turnOff() {
+        long now = clock.getAsLong();
+        // Only an update that went through a restart says how long one takes; one called off before is no measure.
+        if (on && MaintenanceText.isUpdate(reason) && since > 0 && since < startedAt) {
+            long took = now - since;
+            if (took > 0 && took <= LONGEST_UPDATE) {
+                updateTook.add(took);
+                while (updateTook.size() > UPDATES_KEPT) {
+                    updateTook.removeFirst();
+                }
+            }
+        }
         on = false;
         reason = "";
         kickAt = 0;
         backAt = 0;
         return save();
+    }
+
+    /** How long the last updates took from {@code /maintenance on update} to off, oldest first. */
+    public synchronized List<Long> updateTook() {
+        return List.copyOf(updateTook);
+    }
+
+    /**
+     * How long the next update should take: the median of the last ones — one forgotten {@code off} must not
+     * stretch it — or {@code fallback} while none was measured.
+     */
+    public synchronized long expectedUpdateMillis(long fallback) {
+        if (updateTook.isEmpty()) {
+            return fallback;
+        }
+        List<Long> sorted = updateTook.stream().sorted().toList();
+        int middle = sorted.size() / 2;
+        return sorted.size() % 2 == 1 ? sorted.get(middle) : (sorted.get(middle - 1) + sorted.get(middle)) / 2;
     }
 
     public synchronized boolean allow(UUID player, String name) {
@@ -171,11 +219,13 @@ public final class Maintenance {
         long since = this.since;
         long backAt = this.backAt;
         Map<UUID, String> list = new LinkedHashMap<>(allowed);
+        List<Long> took = List.copyOf(updateTook);
         boolean saved = file.write(yaml -> {
             yaml.set("on", on);
             yaml.set("reason", reason);
             yaml.set("since", since);
             yaml.set("back-at", backAt);
+            yaml.set("update-took", took);
             list.forEach((id, name) -> yaml.set("allowed." + id, name));
         });
         if (saved) {

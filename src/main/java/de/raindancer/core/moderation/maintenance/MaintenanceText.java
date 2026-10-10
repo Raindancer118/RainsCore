@@ -62,6 +62,11 @@ public final class MaintenanceText {
                 .build();
     }
 
+    /** An update's expected length as the whole minutes it is announced with: rounded up, 1 to 240. */
+    public static int updateMinutes(long expectedMillis) {
+        return (int) Math.clamp((expectedMillis + 59_999) / 60_000, 1, 240);
+    }
+
     public static boolean isUpdate(String reason) {
         return UPDATE.equalsIgnoreCase(reason == null ? "" : reason.strip());
     }

@@ -29,7 +29,8 @@ import java.util.UUID;
  * /maintenance on [reason…]     closed to joins at once; after a 20 s countdown everybody online who is
  *                               neither op nor on the list is sent off
  * /maintenance on update [min]  the same with a 60 s countdown, telling everybody it is an update and when to
- *                               try again (3 min if not said)
+ *                               try again (if not said: the median of how long the last updates took from on
+ *                               to off, 3 min until one was measured)
  * /maintenance off
  * /maintenance add &lt;player&gt;     on the list (kept while maintenance is off)
  * /maintenance remove &lt;player&gt;
@@ -65,9 +66,15 @@ public final class MaintenanceCommand implements BasicCommand {
             case "on" -> {
                 String reason = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
                 long expected = 0;
+                String guessed = "";
                 if (args.length >= 2 && args[1].equalsIgnoreCase(MaintenanceText.UPDATE)) {
-                    int minutes = UPDATE_MINUTES;
-                    if (args.length >= 3) {
+                    int minutes = MaintenanceText.updateMinutes(maintenance.expectedUpdateMillis(UPDATE_MINUTES * 60_000L));
+                    if (args.length < 3) {
+                        int measured = maintenance.updateTook().size();
+                        guessed = " Back in about " + minutes + " min, players are told ("
+                                + (measured == 0 ? "nothing measured yet" : "median of the last " + measured
+                                + (measured == 1 ? " update" : " updates")) + ").";
+                    } else {
                         try {
                             minutes = Integer.parseInt(args[2]);
                         } catch (NumberFormatException notANumber) {
@@ -83,7 +90,7 @@ public final class MaintenanceCommand implements BasicCommand {
                 }
                 boolean saved = maintenance.turnOn(reason, MaintenanceText.graceMillis(reason), expected);
                 say(sender, "<gold>Maintenance mode is on.</gold> <gray>Only ops and the maintenance list can join; "
-                        + "everybody else is sent off in " + maintenance.secondsLeft() + " s.");
+                        + "everybody else is sent off in " + maintenance.secondsLeft() + " s." + guessed);
                 warnIfNotSaved(sender, saved);
                 startCountdown(maintenance);
                 audit(sender, "turned maintenance mode on", reason);

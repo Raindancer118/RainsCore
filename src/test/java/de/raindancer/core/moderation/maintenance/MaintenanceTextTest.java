@@ -92,4 +92,14 @@ class MaintenanceTextTest {
         assertThat(MaintenanceText.crossed(45, 44)).isEqualTo(-1);
         assertThat(MaintenanceText.crossed(10, 9)).isEqualTo(-1);
     }
+
+    @Test
+    @DisplayName("a measured update is announced in whole minutes, rounded up, between 1 and 240")
+    void updateMinutes() {
+        assertThat(MaintenanceText.updateMinutes(150_000)).isEqualTo(3);
+        assertThat(MaintenanceText.updateMinutes(120_000)).isEqualTo(2);
+        assertThat(MaintenanceText.updateMinutes(5_000)).isEqualTo(1);
+        assertThat(MaintenanceText.updateMinutes(0)).isEqualTo(1);
+        assertThat(MaintenanceText.updateMinutes(10 * 60 * 60_000L)).isEqualTo(240);
+    }
 }

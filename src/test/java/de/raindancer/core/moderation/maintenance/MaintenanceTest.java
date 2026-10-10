@@ -152,4 +152,60 @@ class MaintenanceTest {
         maintenance.turnOff();
         assertThat(maintenance.backAt()).isZero();
     }
+
+    @Test
+    @DisplayName("an update with a restart in between is measured from switching on to switching off, and the file keeps it")
+    void updateMeasured() {
+        Maintenance maintenance = maintenance();
+        maintenance.turnOn("update", 60_000, 3 * 60_000);
+        clock.addAndGet(90_000);
+
+        Maintenance restarted = maintenance();
+        clock.addAndGet(60_000);
+        restarted.turnOff();
+
+        assertThat(maintenance().updateTook()).containsExactly(150_000L);
+        assertThat(maintenance().expectedUpdateMillis(3 * 60_000)).isEqualTo(150_000L);
+    }
+
+    @Test
+    @DisplayName("an update called off before any restart, or other maintenance, says nothing about how long a restart takes")
+    void notMeasured() {
+        Maintenance maintenance = maintenance();
+        maintenance.turnOn("update", 60_000, 3 * 60_000);
+        clock.addAndGet(10_000);
+        maintenance.turnOff();
+        maintenance.turnOn("New spawn");
+        clock.addAndGet(60_000);
+        maintenance().turnOff();
+
+        assertThat(maintenance().updateTook()).isEmpty();
+        assertThat(maintenance().expectedUpdateMillis(3 * 60_000)).isEqualTo(3 * 60_000L);
+    }
+
+    @Test
+    @DisplayName("the guess is the median of the last updates, so one forgotten /maintenance off does not skew it")
+    void median() {
+        for (long took : new long[]{100_000, 120_000, 5 * 60 * 60_000, 110_000}) {
+            maintenance().turnOn("update", 60_000, 0);
+            clock.addAndGet(took);
+            maintenance().turnOff();
+        }
+
+        assertThat(maintenance().updateTook()).as("over four hours is no update, it is forgotten")
+                .containsExactly(100_000L, 120_000L, 110_000L);
+        assertThat(maintenance().expectedUpdateMillis(3 * 60_000)).isEqualTo(110_000L);
+    }
+
+    @Test
+    @DisplayName("only the last ten updates are kept, so a server that got faster is soon guessed right")
+    void keepsLastTen() {
+        for (int i = 1; i <= 12; i++) {
+            maintenance().turnOn("update", 60_000, 0);
+            clock.addAndGet(i * 60_000L);
+            maintenance().turnOff();
+        }
+
+        assertThat(maintenance().updateTook()).hasSize(10).startsWith(3 * 60_000L).endsWith(12 * 60_000L);
+    }
 }
