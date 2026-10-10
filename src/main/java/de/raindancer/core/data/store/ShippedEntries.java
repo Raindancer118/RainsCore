@@ -36,6 +36,39 @@ public final class ShippedEntries {
     }
 
     /**
+     * Writes the shipped file out when there is none; otherwise merges what is new in it into the one there. The
+     * file is only written when something was added or filled in, or it does not yet say what it has seen.
+     *
+     * @return what was added or filled in; empty when nothing was
+     */
+    public static Merged bringUp(java.nio.file.Path file, java.util.function.Supplier<java.io.InputStream> shipped,
+                                 String section, Set<String> fields) {
+        try (java.io.InputStream in = shipped.get()) {
+            if (in == null) {
+                return new Merged("", List.of(), List.of());
+            }
+            String offered = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (!java.nio.file.Files.exists(file)) {
+                java.nio.file.Files.createDirectories(file.toAbsolutePath().getParent());
+                java.nio.file.Files.writeString(file, merge(offered, offered, section, fields).text());
+                return new Merged("", List.of(), List.of());
+            }
+            String now = java.nio.file.Files.readString(file);
+            Merged merged = merge(now, offered, section, fields);
+            if (merged.changed() || !now.contains(SEEN)) {
+                java.nio.file.Path writing = file.resolveSibling(file.getFileName() + ".writing");
+                java.nio.file.Files.writeString(writing, merged.text());
+                java.nio.file.Files.move(writing, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            }
+            return merged;
+        } catch (java.io.IOException failed) {
+            // Left as it is; the plugin reads what is there.
+            return new Merged("", List.of(), List.of());
+        }
+    }
+
+    /**
      * @param fields fields that are filled in on an existing entry missing them ("abilities"); others never are
      */
     public static Merged merge(String file, String shipped, String section, Set<String> fields) {
