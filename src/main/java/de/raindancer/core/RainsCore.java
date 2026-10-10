@@ -198,6 +198,9 @@ public interface RainsCore {
      */
     de.raindancer.core.ui.changelog.Changelog changelog();
 
+    /** Maintenance mode: only operators and its own list may join. {@code CoreCommands.maintenance}. */
+    de.raindancer.core.moderation.maintenance.Maintenance maintenance();
+
     /**
      * {@code @Name} and {@code @Nickname} in every player's chat box, for everybody they could mention.
      * Off until a chat plugin that renders mentions calls {@code enable(true)}.

@@ -280,6 +280,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     private de.raindancer.core.moderation.chatlog.ChatLog chatLog;
     private de.raindancer.core.social.presence.KnownNames knownNames;
     private de.raindancer.core.ui.changelog.Changelog changelog;
+    private de.raindancer.core.moderation.maintenance.Maintenance maintenance;
     private de.raindancer.core.ui.chat.MentionCompletions mentionCompletions;
     private PlayerPowers powers;
     private PlayerAdmin players;
@@ -562,6 +563,10 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 CommandNote
                         .of("Core", "changelog", "What changed on this server lately."),
                 CommandNote
+                        .of("Core", "maintenance", "Close the server for maintenance: only ops and its own list can join.",
+                                "on [reason] — close it", "off — open it", "add|remove <player> — the list", "list")
+                        .needing("rainscore.maintenance"),
+                CommandNote
                         .of("Core", "settings", "Read and change what every plugin on this server does.")
                         .needing("rainscore.settings"),
                 CommandNote
@@ -652,6 +657,15 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         changelog.problems().forEach(problem -> log.warn("{}", problem));
         getServer().getPluginManager().registerEvents(
                 new de.raindancer.core.ui.changelog.ChangelogListener(this, changelog), this);
+        maintenance = new de.raindancer.core.moderation.maintenance.Maintenance(
+                getDataFolder().toPath().resolve("maintenance.yml"), System::currentTimeMillis);
+        maintenance.load();
+        maintenance.problems().forEach(problem -> log.error("maintenance.yml: {} — kept closed (ops only) until it is fixed or /maintenance off.", problem));
+        if (maintenance.isOn()) {
+            log.warn("Maintenance mode is on: only ops and the maintenance list can join. /maintenance off opens the server.");
+        }
+        getServer().getPluginManager().registerEvents(
+                new de.raindancer.core.moderation.maintenance.MaintenanceListener(getServer(), maintenance), this);
         for (org.bukkit.entity.Player online : getServer().getOnlinePlayers()) {
             de.raindancer.core.platform.util.Scheduling.entity(this, online,
                     () -> playtime.seed(online.getUniqueId(), online.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE)));
@@ -1550,6 +1564,11 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
     @Override
     public de.raindancer.core.ui.changelog.Changelog changelog() {
         return changelog;
+    }
+
+    @Override
+    public de.raindancer.core.moderation.maintenance.Maintenance maintenance() {
+        return maintenance;
     }
 
     @Override

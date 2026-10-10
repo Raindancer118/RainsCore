@@ -172,6 +172,22 @@ public final class CoreCommands {
         return changelog(registrar, "changelog", "news");
     }
 
+    private static final AtomicBoolean MAINTENANCE_TAKEN = new AtomicBoolean();
+
+    /** {@code /maintenance}: one per server, so taken by the first plugin that asks. */
+    public static boolean maintenance(Commands registrar, String name, String... aliases) {
+        if (!MAINTENANCE_TAKEN.compareAndSet(false, true)) {
+            return false;
+        }
+        registrar.register(name, "Close the server for maintenance: only ops and its own list can join.",
+                List.of(aliases), new de.raindancer.core.moderation.maintenance.MaintenanceCommand());
+        return true;
+    }
+
+    public static boolean maintenance(Commands registrar) {
+        return maintenance(registrar, "maintenance", "wartung", "wartungsmodus");
+    }
+
     public static void worlds(Commands registrar, String name, String... aliases) {
         registrar.register(name, "Switch to a loaded world, or wipe one and make it again.",
                 List.of(aliases), new WorldCommand());
