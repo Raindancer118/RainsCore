@@ -517,6 +517,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         // Coins, banknotes and tokens are never worth their material — see NonIngredients.
         getServer().getPluginManager().registerEvents(
                 new de.raindancer.core.content.items.NonIngredientListener(), this);
+        // Where players put watched blocks, so mined ore is told from placed ore — see PlacedBlocks.
+        getServer().getPluginManager().registerEvents(new de.raindancer.core.world.blocks.PlacedBlocks.Listener(), this);
         // Eggs a shop sold hatch mobs but never set a spawner — see NotForSpawners.
         getServer().getPluginManager().registerEvents(new de.raindancer.core.content.items.NotForSpawnersListener(
                 player -> messages.send(player, "items.not-for-spawners")), this);
@@ -969,6 +971,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         de.raindancer.core.social.economy.ItemValues.clear();
         de.raindancer.core.social.economy.PriceModifiers.clear();
         de.raindancer.core.social.economy.SaleStops.clear();
+        de.raindancer.core.social.roles.PlayerRoles.clear();
+        de.raindancer.core.world.blocks.PlacedBlocks.clear();
         de.raindancer.core.social.economy.EconomyLevers.clear();
         de.raindancer.core.social.economy.PriceIndex.clear();
         de.raindancer.core.social.economy.Debts.clear();
@@ -1717,6 +1721,8 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + de.raindancer.core.social.economy.ItemValues.forgetFrom(loader)
                 + de.raindancer.core.social.economy.PriceModifiers.forgetFrom(loader)
                 + de.raindancer.core.social.economy.SaleStops.forgetFrom(loader)
+                + de.raindancer.core.social.roles.PlayerRoles.forgetFrom(loader)
+                + de.raindancer.core.world.blocks.PlacedBlocks.forgetFrom(loader)
                 + de.raindancer.core.social.economy.EconomyLevers.forgetFrom(loader)
                 + de.raindancer.core.social.economy.PriceIndex.forgetFrom(loader)
                 + de.raindancer.core.social.economy.Debts.forgetFrom(loader)
