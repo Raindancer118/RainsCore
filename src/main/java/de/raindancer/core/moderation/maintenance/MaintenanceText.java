@@ -1,6 +1,8 @@
 package de.raindancer.core.moderation.maintenance;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 /** What somebody turned away during maintenance reads. */
@@ -14,6 +16,50 @@ public final class MaintenanceText {
     /** How long everybody online is warned before those not allowed are sent off: an update a minute. */
     public static long graceMillis(String reason) {
         return isUpdate(reason) ? 60_000 : 20_000;
+    }
+
+    /**
+     * Which second to announce now that the countdown went from {@code before} to {@code now} seconds left: where it
+     * started ({@code before} -1), or a mark (60, 30, 10) passed in between; -1 for none.
+     */
+    public static long crossed(long before, long now) {
+        if (before < 0) {
+            return now;
+        }
+        for (long mark : new long[]{60, 30, 10}) {
+            if (before > mark && now <= mark) {
+                return mark;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * The chat line for this moment of the countdown, or null for none: when it starts and at 60, 30 and 10 seconds
+     * left. Worded and coloured like the tellraw lines the Lilly deploy scripts sent, which players know.
+     */
+    public static Component countdown(String reason, long secondsLeft, boolean first) {
+        if (!first && secondsLeft != 60 && secondsLeft != 30 && secondsLeft != 10) {
+            return null;
+        }
+        boolean update = isUpdate(reason);
+        String what;
+        NamedTextColor colour = NamedTextColor.YELLOW;
+        if (secondsLeft <= 10) {
+            what = (update ? "Restart" : "Maintenance") + " in " + secondsLeft + " seconds - "
+                    + (update ? "see you in a minute!" : "see you soon!");
+            colour = NamedTextColor.RED;
+        } else if (update) {
+            what = secondsLeft >= 60 ? "Restart in " + secondsLeft + " seconds for an update!"
+                    : "Restart in " + secondsLeft + " seconds.";
+        } else {
+            what = "Maintenance in " + secondsLeft + " seconds"
+                    + (first && reason != null && !reason.isBlank() ? ": " + reason.strip() : ".");
+        }
+        return Component.text()
+                .append(Component.text("[Server] ", NamedTextColor.GOLD, TextDecoration.BOLD))
+                .append(Component.text(what, colour))
+                .build();
     }
 
     public static boolean isUpdate(String reason) {

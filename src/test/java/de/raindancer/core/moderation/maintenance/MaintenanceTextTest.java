@@ -46,4 +46,50 @@ class MaintenanceTextTest {
         assertThat(MaintenanceText.graceMillis("New spawn")).isEqualTo(20_000);
         assertThat(MaintenanceText.graceMillis("")).isEqualTo(20_000);
     }
+
+    @Test
+    @DisplayName("an update's countdown reads exactly like the deploy scripts' announcements, at 60, 30 and 10 s")
+    void updateCountdownLines() {
+        assertThat(line("update", 60, true)).isEqualTo("[Server] Restart in 60 seconds for an update!");
+        assertThat(line("update", 30, false)).isEqualTo("[Server] Restart in 30 seconds.");
+        assertThat(line("update", 10, false)).isEqualTo("[Server] Restart in 10 seconds - see you in a minute!");
+        assertThat(MaintenanceText.countdown("update", 45, false)).isNull();
+        assertThat(MaintenanceText.countdown("update", 5, false)).isNull();
+    }
+
+    @Test
+    @DisplayName("the colours are the scripts': gold bold tag, yellow, red for the last")
+    void updateCountdownColours() {
+        Component sixty = MaintenanceText.countdown("update", 60, true);
+        Component ten = MaintenanceText.countdown("update", 10, false);
+
+        assertThat(sixty.children().get(0).color()).isEqualTo(net.kyori.adventure.text.format.NamedTextColor.GOLD);
+        assertThat(sixty.children().get(0).hasDecoration(net.kyori.adventure.text.format.TextDecoration.BOLD)).isTrue();
+        assertThat(sixty.children().get(1).color()).isEqualTo(net.kyori.adventure.text.format.NamedTextColor.YELLOW);
+        assertThat(ten.children().get(1).color()).isEqualTo(net.kyori.adventure.text.format.NamedTextColor.RED);
+    }
+
+    @Test
+    @DisplayName("any other maintenance is said the same way, from wherever its countdown starts")
+    void otherCountdownLines() {
+        assertThat(line("New spawn", 20, true)).isEqualTo("[Server] Maintenance in 20 seconds: New spawn");
+        assertThat(line("", 20, true)).isEqualTo("[Server] Maintenance in 20 seconds.");
+        assertThat(line("New spawn", 10, false)).isEqualTo("[Server] Maintenance in 10 seconds - see you soon!");
+        assertThat(MaintenanceText.countdown("New spawn", 15, false)).isNull();
+    }
+
+    private static String line(String reason, long left, boolean first) {
+        return plain(MaintenanceText.countdown(reason, left, first));
+    }
+
+    @Test
+    @DisplayName("a lagging timer that jumps past a mark still says it")
+    void crossedMarks() {
+        assertThat(MaintenanceText.crossed(-1, 60)).isEqualTo(60);
+        assertThat(MaintenanceText.crossed(-1, 20)).isEqualTo(20);
+        assertThat(MaintenanceText.crossed(31, 30)).isEqualTo(30);
+        assertThat(MaintenanceText.crossed(11, 9)).isEqualTo(10);
+        assertThat(MaintenanceText.crossed(45, 44)).isEqualTo(-1);
+        assertThat(MaintenanceText.crossed(10, 9)).isEqualTo(-1);
+    }
 }

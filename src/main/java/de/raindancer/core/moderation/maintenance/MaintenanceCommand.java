@@ -42,7 +42,6 @@ public final class MaintenanceCommand implements BasicCommand {
     private static final MiniMessage MINI = MiniMessage.miniMessage();
     private static final List<String> WORDS = List.of("on", "off", "add", "remove", "list");
     public static final int UPDATE_MINUTES = 3;
-    private static final java.util.Set<Long> ANNOUNCED_AT = java.util.Set.of(60L, 30L, 20L, 10L, 5L, 4L, 3L, 2L, 1L);
     /** The one countdown running, so typing "on" twice does not start two. */
     private static final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.threadedregions.scheduler.ScheduledTask>
             COUNTDOWN = new java.util.concurrent.atomic.AtomicReference<>();
@@ -197,19 +196,15 @@ public final class MaintenanceCommand implements BasicCommand {
             if (left == lastSaid[0]) {
                 return;
             }
+            boolean first = lastSaid[0] == -1;
+            long mark = MaintenanceText.crossed(lastSaid[0], left);
             lastSaid[0] = left;
-            String why = MaintenanceText.isUpdate(maintenance.reason())
-                    ? " <gray>(We're updating; back " + MaintenanceText.whenBack(maintenance.backAt(), System.currentTimeMillis()) + ")"
-                    : maintenance.reason().isBlank() ? "" : " <gray>(" + MINI.escapeTags(maintenance.reason()) + ")";
+            var said = mark < 0 ? null : MaintenanceText.countdown(maintenance.reason(), mark, first);
+            if (said == null) {
+                return;
+            }
             for (Player online : Bukkit.getOnlinePlayers()) {
-                boolean stays = maintenance.mayJoin(online.getUniqueId(), online.isOp());
-                Scheduling.entity(core, online, () -> {
-                    online.sendActionBar(MINI.deserialize("<gold>Maintenance in <white>" + left + " s"));
-                    if (ANNOUNCED_AT.contains(left)) {
-                        online.sendMessage(MINI.deserialize("<gold>⚠ Maintenance starts in <white>" + left + " s</white>." + why
-                                + (stays ? " <green>You can stay." : " <gray>You will be disconnected; please come back later.")));
-                    }
-                });
+                Scheduling.entity(core, online, () -> online.sendMessage(said));
             }
         });
         var before = COUNTDOWN.getAndSet(task);
