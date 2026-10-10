@@ -140,4 +140,16 @@ class MaintenanceTest {
         assertThat(maintenance.secondsLeft()).isEqualTo(5);
         assertThat(maintenance.reason()).isEqualTo("Still updating");
     }
+
+    @Test
+    @DisplayName("an expected end is kept with the reason and survives a restart")
+    void backAt() {
+        Maintenance maintenance = maintenance();
+        maintenance.turnOn("update", 20_000, 3 * 60_000);
+
+        assertThat(maintenance.backAt()).isEqualTo(5_000L + 3 * 60_000);
+        assertThat(maintenance().backAt()).isEqualTo(5_000L + 3 * 60_000);
+        maintenance.turnOff();
+        assertThat(maintenance.backAt()).isZero();
+    }
 }

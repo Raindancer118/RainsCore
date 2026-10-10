@@ -34,7 +34,7 @@ public final class MaintenanceListener implements Listener {
             return;
         }
         if (!maintenance.mayJoin(profile.getId(), isOperator(server, profile.getId()))) {
-            event.kickMessage(MaintenanceText.closed(maintenance.reason()));
+            event.kickMessage(MaintenanceText.closed(maintenance.reason(), maintenance.backAt(), System.currentTimeMillis()));
         }
     }
 

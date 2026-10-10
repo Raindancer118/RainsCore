@@ -27,6 +27,8 @@ public final class Maintenance {
     private long since;
     /** When those not allowed are sent off; 0 for nothing pending. Not saved: after a restart nobody is online. */
     private long kickAt;
+    /** When it is expected to be over; 0 for not said. */
+    private long backAt;
     private final Map<UUID, String> allowed = new LinkedHashMap<>();
     private List<String> problems = List.of();
 
@@ -48,6 +50,7 @@ public final class Maintenance {
         on = yaml.getBoolean("on", false);
         reason = yaml.getString("reason", "");
         since = yaml.getLong("since", 0L);
+        backAt = yaml.getLong("back-at", 0L);
         ConfigurationSection list = yaml.getConfigurationSection("allowed");
         if (list != null) {
             for (String key : list.getKeys(false)) {
@@ -72,6 +75,11 @@ public final class Maintenance {
         return reason;
     }
 
+    /** When it is expected to be over; 0 for not said. */
+    public synchronized long backAt() {
+        return backAt;
+    }
+
     /** When it was switched on. */
     public synchronized long since() {
         return since;
@@ -91,7 +99,13 @@ public final class Maintenance {
      * passed ({@link #kickDue}). Asked again while counting down, only the reason changes.
      */
     public synchronized boolean turnOn(String why, long graceMillis) {
+        return turnOn(why, graceMillis, 0);
+    }
+
+    /** @param expectedMillis how long it should take from now; 0 for not said */
+    public synchronized boolean turnOn(String why, long graceMillis, long expectedMillis) {
         long now = clock.getAsLong();
+        backAt = expectedMillis > 0 ? now + expectedMillis : 0;
         if (!on) {
             since = now;
         }
@@ -128,6 +142,7 @@ public final class Maintenance {
         on = false;
         reason = "";
         kickAt = 0;
+        backAt = 0;
         return save();
     }
 
@@ -154,11 +169,13 @@ public final class Maintenance {
         boolean on = this.on;
         String reason = this.reason;
         long since = this.since;
+        long backAt = this.backAt;
         Map<UUID, String> list = new LinkedHashMap<>(allowed);
         boolean saved = file.write(yaml -> {
             yaml.set("on", on);
             yaml.set("reason", reason);
             yaml.set("since", since);
+            yaml.set("back-at", backAt);
             list.forEach((id, name) -> yaml.set("allowed." + id, name));
         });
         if (saved) {

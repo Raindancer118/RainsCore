@@ -28,6 +28,7 @@ import java.util.UUID;
  * <pre>
  * /maintenance on [reason…]     closed to joins at once; after a 20 s countdown everybody online who is
  *                               neither op nor on the list is sent off
+ * /maintenance on update [min]  the same, telling everybody it is an update and when to try again (3 min if not said)
  * /maintenance off
  * /maintenance add &lt;player&gt;     on the list (kept while maintenance is off)
  * /maintenance remove &lt;player&gt;
@@ -40,6 +41,7 @@ public final class MaintenanceCommand implements BasicCommand {
     private static final MiniMessage MINI = MiniMessage.miniMessage();
     private static final List<String> WORDS = List.of("on", "off", "add", "remove", "list");
     public static final long GRACE_MILLIS = 20_000;
+    public static final int UPDATE_MINUTES = 3;
     private static final java.util.Set<Long> ANNOUNCED_AT = java.util.Set.of(20L, 10L, 5L, 4L, 3L, 2L, 1L);
     /** The one countdown running, so typing "on" twice does not start two. */
     private static final java.util.concurrent.atomic.AtomicReference<io.papermc.paper.threadedregions.scheduler.ScheduledTask>
@@ -63,7 +65,24 @@ public final class MaintenanceCommand implements BasicCommand {
         switch (word) {
             case "on" -> {
                 String reason = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
-                boolean saved = maintenance.turnOn(reason, GRACE_MILLIS);
+                long expected = 0;
+                if (args.length >= 2 && args[1].equalsIgnoreCase(MaintenanceText.UPDATE)) {
+                    int minutes = UPDATE_MINUTES;
+                    if (args.length >= 3) {
+                        try {
+                            minutes = Integer.parseInt(args[2]);
+                        } catch (NumberFormatException notANumber) {
+                            minutes = -1;
+                        }
+                        if (minutes < 1 || minutes > 240 || args.length > 3) {
+                            say(sender, "<red>/maintenance on update [minutes, 1 to 240]");
+                            return;
+                        }
+                    }
+                    reason = MaintenanceText.UPDATE;
+                    expected = minutes * 60_000L;
+                }
+                boolean saved = maintenance.turnOn(reason, GRACE_MILLIS, expected);
                 say(sender, "<gold>Maintenance mode is on.</gold> <gray>Only ops and the maintenance list can join; "
                         + "everybody else is sent off in " + maintenance.secondsLeft() + " s.");
                 warnIfNotSaved(sender, saved);
@@ -179,7 +198,9 @@ public final class MaintenanceCommand implements BasicCommand {
                 return;
             }
             lastSaid[0] = left;
-            String why = maintenance.reason().isBlank() ? "" : " <gray>(" + MINI.escapeTags(maintenance.reason()) + ")";
+            String why = MaintenanceText.UPDATE.equalsIgnoreCase(maintenance.reason())
+                    ? " <gray>(We're updating; back " + MaintenanceText.whenBack(maintenance.backAt(), System.currentTimeMillis()) + ")"
+                    : maintenance.reason().isBlank() ? "" : " <gray>(" + MINI.escapeTags(maintenance.reason()) + ")";
             for (Player online : Bukkit.getOnlinePlayers()) {
                 boolean stays = maintenance.mayJoin(online.getUniqueId(), online.isOp());
                 Scheduling.entity(core, online, () -> {
@@ -218,7 +239,7 @@ public final class MaintenanceCommand implements BasicCommand {
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (!maintenance.mayJoin(online.getUniqueId(), online.isOp())) {
                 sent++;
-                Scheduling.entity(core, online, () -> online.kick(MaintenanceText.closed(maintenance.reason())));
+                Scheduling.entity(core, online, () -> online.kick(MaintenanceText.closed(maintenance.reason(), maintenance.backAt(), System.currentTimeMillis())));
             }
         }
         return sent;
@@ -250,6 +271,8 @@ public final class MaintenanceCommand implements BasicCommand {
         }
         String last = args[args.length - 1];
         return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "on" -> args.length == 2 && MaintenanceText.UPDATE.startsWith(last.toLowerCase(Locale.ROOT))
+                    ? List.of(MaintenanceText.UPDATE) : List.of();
             case "add" -> args.length == 2 ? PlayerTargets.suggestKnown(Bukkit.getServer(), last, player -> true) : List.of();
             case "remove" -> args.length == 2 ? RainsCore.get().maintenance().allowed().values().stream()
                     .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(last.toLowerCase(Locale.ROOT))).toList() : List.of();
