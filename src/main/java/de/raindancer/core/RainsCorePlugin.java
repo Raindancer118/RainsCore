@@ -1006,6 +1006,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
         de.raindancer.core.social.presence.Away.clear();
         de.raindancer.core.social.presence.PresenceLines.clear();
         de.raindancer.core.moderation.rules.ServerRules.clear();
+        de.raindancer.core.moderation.rules.RuleBreaches.clear();
         de.raindancer.core.moderation.chatlog.ChatLog.clearWatchers();
         // The mirror of the startup exemption in onEnable. On the way out the scheduler is already
         // shutting down, so the final flushes below have to run on this thread, and there is nobody
@@ -1769,6 +1770,7 @@ public final class RainsCorePlugin extends JavaPlugin implements RainsCore, List
                 + de.raindancer.core.social.presence.Away.forgetFrom(loader)
                 + de.raindancer.core.social.presence.PresenceLines.forgetFrom(loader)
                 + de.raindancer.core.moderation.rules.ServerRules.forgetFrom(loader)
+                + de.raindancer.core.moderation.rules.RuleBreaches.forgetFrom(loader)
                 + de.raindancer.core.moderation.chatlog.ChatLog.forgetFrom(loader);
         if (combat != null) {
             dropped += combat.forgetFrom(loader);

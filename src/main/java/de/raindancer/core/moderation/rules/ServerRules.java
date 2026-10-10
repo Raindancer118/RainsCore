@@ -3,6 +3,7 @@ package de.raindancer.core.moderation.rules;
 import de.raindancer.core.platform.util.PluginCode;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -46,6 +47,28 @@ public final class ServerRules {
 
     public static Optional<ServerRule> byId(String id) {
         return current().stream().filter(rule -> rule.id().equals(id)).findFirst();
+    }
+
+    /**
+     * The rule about something: the first whose title holds one of the words, else the first whose text does.
+     * "Keep the server running" may mention exploits in passing; "No cheating" says it in its title.
+     */
+    public static Optional<ServerRule> about(List<String> words) {
+        return about(current(), words);
+    }
+
+    /** {@link #about(List)} among these rules. */
+    public static Optional<ServerRule> about(List<ServerRule> rules, List<String> words) {
+        Optional<ServerRule> byTitle = rules.stream().filter(rule -> mentions(rule.title(), words)).findFirst();
+        return byTitle.isPresent() ? byTitle : rules.stream().filter(rule -> mentions(rule.text(), words)).findFirst();
+    }
+
+    private static boolean mentions(String text, List<String> words) {
+        if (text == null) {
+            return false;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        return words.stream().anyMatch(word -> lower.contains(word.toLowerCase(Locale.ROOT)));
     }
 
     public static int forgetFrom(ClassLoader loader) {
