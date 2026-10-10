@@ -18,11 +18,21 @@ import java.util.List;
  * @param inventory  {@code PlayerInventory#getContents()} — hotbar and storage, armour, off hand
  * @param gameMode   a {@code GameMode} name
  * @param place      where they stood, or null when that is not part of this loadout
+ * @param data       what plugins keep per side ({@link SideData}) — or null for a loadout saved before there was
+ *                   any, which then leaves the player's side data as it is rather than clearing it
  */
 public record Loadout(List<String> inventory, List<String> enderChest,
                       int level, float exp, double health, int food, float saturation,
                       String gameMode, boolean allowFlight, boolean flying,
-                      List<Effect> effects, Place place) {
+                      List<Effect> effects, Place place, java.util.Map<String, String> data) {
+
+    /** Without side data — as loadouts were before there was any. */
+    public Loadout(List<String> inventory, List<String> enderChest, int level, float exp, double health, int food,
+                   float saturation, String gameMode, boolean allowFlight, boolean flying, List<Effect> effects,
+                   Place place) {
+        this(inventory, enderChest, level, exp, health, food, saturation, gameMode, allowFlight, flying, effects,
+                place, null);
+    }
 
     /** 36 storage slots, 4 armour, 1 off hand. */
     public static final int INVENTORY_SLOTS = 41;
@@ -46,16 +56,18 @@ public record Loadout(List<String> inventory, List<String> enderChest,
         saturation = Math.max(0f, saturation);
         gameMode = gameMode == null || gameMode.isBlank() ? "SURVIVAL" : gameMode;
         effects = effects == null ? List.of() : List.copyOf(effects);
+        data = data == null ? null : java.util.Map.copyOf(data);
     }
 
     /** Nothing carried, full health and food, nothing active — somebody's first time in a profile. */
     public static Loadout empty(String gameMode) {
-        return new Loadout(List.of(), List.of(), 0, 0f, 20.0, 20, 5f, gameMode, false, false, List.of(), null);
+        return new Loadout(List.of(), List.of(), 0, 0f, 20.0, 20, 5f, gameMode, false, false, List.of(), null,
+                java.util.Map.of());
     }
 
     public Loadout withPlace(Place place) {
         return new Loadout(inventory, enderChest, level, exp, health, food, saturation, gameMode, allowFlight,
-                flying, effects, place);
+                flying, effects, place, data);
     }
 
     public boolean hasItems() {

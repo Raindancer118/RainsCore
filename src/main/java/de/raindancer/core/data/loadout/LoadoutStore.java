@@ -50,6 +50,11 @@ public final class LoadoutStore {
                         String.valueOf(effect.particles()), String.valueOf(effect.icon())));
             }
             section.set("effects", effects);
+            if (loadout.data() != null) {
+                // Written even when empty: "this side has none" is not "saved before side data".
+                section.createSection("data");
+                loadout.data().forEach((id, value) -> section.set("data." + YamlStore.asPathPart(id), value));
+            }
             Loadout.Place place = loadout.place();
             if (place != null) {
                 section.set("place.world", place.world());
@@ -60,6 +65,22 @@ public final class LoadoutStore {
                 section.set("place.pitch", (double) place.pitch());
             }
         });
+    }
+
+    /** The side data of a saved loadout; null for one saved before there was any. */
+    private static java.util.Map<String, String> data(ConfigurationSection section) {
+        ConfigurationSection data = section.getConfigurationSection("data");
+        if (data == null) {
+            return null;
+        }
+        java.util.Map<String, String> read = new java.util.LinkedHashMap<>();
+        for (String key : data.getKeys(false)) {
+            String value = data.getString(key);
+            if (value != null) {
+                read.put(YamlStore.fromPathPart(key), value);
+            }
+        }
+        return read;
     }
 
     public Optional<Loadout> load(UUID owner, String profile) {
@@ -90,7 +111,7 @@ public final class LoadoutStore {
                 section.getInt("level"), (float) section.getDouble("exp"), section.getDouble("health", 20),
                 section.getInt("food", 20), (float) section.getDouble("saturation", 5),
                 section.getString("game-mode"), section.getBoolean("allow-flight"), section.getBoolean("flying"),
-                effects, place));
+                effects, place, data(section)));
     }
 
     /**

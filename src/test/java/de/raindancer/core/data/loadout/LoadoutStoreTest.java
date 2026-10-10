@@ -86,4 +86,21 @@ class LoadoutStoreTest {
         assertThat(store.load(owner, "a.b")).contains(sample());
         assertThat(store.has(owner, "a")).isFalse();
     }
+
+    @Test
+    @DisplayName("side data comes back as saved; an empty side stays empty; one saved before side data has none at all")
+    void sideData(@TempDir Path folder) {
+        LoadoutStore store = new LoadoutStore(folder);
+        Loadout worn = sample();
+        Loadout withData = new Loadout(worn.inventory(), worn.enderChest(), worn.level(), worn.exp(), worn.health(),
+                worn.food(), worn.saturation(), worn.gameMode(), worn.allowFlight(), worn.flying(), worn.effects(),
+                worn.place(), java.util.Map.of("pdc:rainscosmetics", "particle s ZmxhbWU=", "cosmetics:name-style", "#ffaa00"));
+        store.save(owner, "survival", withData);
+        store.save(owner, "admin", Loadout.empty("CREATIVE"));
+        store.save(owner, "old", sample());
+        LoadoutStore back = new LoadoutStore(folder);
+        assertThat(back.load(owner, "survival").orElseThrow().data()).isEqualTo(withData.data());
+        assertThat(back.load(owner, "admin").orElseThrow().data()).as("an empty side").isEmpty();
+        assertThat(back.load(owner, "old").orElseThrow().data()).as("saved before side data").isNull();
+    }
 }

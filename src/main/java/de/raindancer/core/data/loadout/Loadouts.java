@@ -47,7 +47,7 @@ public final class Loadouts {
                 encode(player.getEnderChest().getContents()),
                 player.getLevel(), player.getExp(), player.getHealth(), player.getFoodLevel(),
                 player.getSaturation(), player.getGameMode().name(), player.getAllowFlight(), player.isFlying(),
-                effects, place);
+                effects, place, SideData.capture(player));
     }
 
     /** How many items in this loadout this server cannot make — each would be lost by applying it. */
@@ -105,6 +105,9 @@ public final class Loadouts {
                 player.addPotionEffect(new PotionEffect(type, effect.ticks(), effect.amplifier(), effect.ambient(),
                         effect.particles(), effect.icon()));
             }
+        }
+        if (loadout.data() != null) {
+            SideData.apply(player, loadout.data());
         }
         return true;
     }
